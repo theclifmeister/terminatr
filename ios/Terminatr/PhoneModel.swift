@@ -1035,7 +1035,7 @@ final class PhoneModel {
 
     /// The project's library, newest first (library.list).
     func library(_ project: String) async throws -> [AppAPI.LibraryFile] {
-        try await connected().call(AppAPI.Methods.libraryList, AppAPI.ProjectParams(project: project)).files
+        try await connected().call(AppAPI.Methods.libraryList, AppAPI.LibraryListParams(project: project)).files
     }
 
     /// A library file's bytes (library.read, a chunk at a time).
@@ -1132,7 +1132,7 @@ final class PhoneModel {
     /// The done tasks of project's board as task.done answers: newest
     /// first, or board order from an older tm.
     func doneTasks(_ project: String) async throws -> [AppAPI.Task] {
-        try await connected().call(AppAPI.Methods.taskDone, AppAPI.ProjectParams(project: project)).tasks
+        try await connected().call(AppAPI.Methods.taskDoneAll, AppAPI.ProjectParams(project: project)).tasks
     }
 
     /// Reads task of project whole, its notes and steps too (task.get).

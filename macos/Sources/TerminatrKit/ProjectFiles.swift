@@ -47,9 +47,33 @@ public enum MemoryPage {
 }
 
 /// The Library page's files grouped as the TUI's Library tab groups
-/// them: by thread, or by the linked project that sent them, the group
-/// with the newest file first and each group's files newest first.
+/// them: by thread, or by the linked project that sent them, the seat's own
+/// group first, then the group with the newest file first and each group's
+/// files newest first. A program's list keeps its projects in the order they
+/// came, each ordered so (sections).
 public enum LibraryPage {
+    /// The id of a coordinator's or director's own files, where a thread's
+    /// goes (thread.SeatID, app API 59).
+    public static let seatID = "seat"
+
+    /// Whether f is a coordinator's or director's own.
+    public static func isSeat(_ f: AppAPI.LibraryFile) -> Bool { f.thread == seatID }
+
+    /// A project's groups in a program's list: the director's own have no
+    /// title, each member's its name and its paired server's.
+    public struct Section: Identifiable, Sendable, Equatable {
+        public let id: String
+        public let project: String
+        public let server: String
+        public let groups: [Group]
+
+        /// The heading over a member's files, "" for the director's own or a
+        /// project's own list.
+        public var title: String {
+            server.isEmpty ? project : "\(project) on \(server)"
+        }
+    }
+
     public struct Group: Identifiable, Sendable, Equatable {
         /// The thread's id, or "@" and the linked project's.
         public let id: String
@@ -59,6 +83,7 @@ public enum LibraryPage {
         public var title: String {
             guard let f = files.first else { return id }
             if !f.peer.isEmpty { return "from \(f.peer)" }
+            if LibraryPage.isSeat(f) { return f.title }
             return [f.task, f.title].filter { !$0.isEmpty }.joined(separator: " · ")
         }
 
@@ -66,7 +91,7 @@ public enum LibraryPage {
         /// linked project sent.
         public var detail: String {
             guard let f = files.first else { return "" }
-            if !f.peer.isEmpty { return files.count == 1 ? "1 file" : "\(files.count) files" }
+            if !f.peer.isEmpty || LibraryPage.isSeat(f) { return files.count == 1 ? "1 file" : "\(files.count) files" }
             return f.state == "archived" ? "\(f.thread) · archived" : f.thread
         }
 
@@ -77,9 +102,9 @@ public enum LibraryPage {
         }
 
         /// Its thread and, in a project with several, the repository; a
-        /// linked project's group has neither.
+        /// linked project's group has neither, nor a seat's own.
         public var origin: [String] {
-            guard let f = files.first, f.peer.isEmpty else { return [] }
+            guard let f = files.first, f.peer.isEmpty, !LibraryPage.isSeat(f) else { return [] }
             return f.repo.isEmpty ? [f.thread] : [f.thread, f.repo]
         }
 
@@ -103,11 +128,49 @@ public enum LibraryPage {
             return (out + kinds + [Attachment.size(bytes)]).joined(separator: " · ")
         }
 
-        /// How it lists: its rows, and its fold's row if any.
-        public func listed(open: Bool, query: String) -> (files: [AppAPI.LibraryFile], more: Int, fewer: Bool) {
-            let f = LibraryPage.fold(files.count, open: open, query: query)
-            return (Array(files.prefix(f.rows)), f.more, f.fewer)
+        /// How it lists (T1055, T1059): the files tiles says draw as
+        /// thumbnails go in its strip, the rest stay rows. Folded, four of
+        /// the one and six of the other, and +N for what's left of both;
+        /// a group with no tiles folds as it always did. Words in the filter
+        /// open it, so what they find shows.
+        public func listed(open: Bool, query: String, tiles: (AppAPI.LibraryFile) -> Bool = { _ in false }) -> Listing {
+            let strip = files.filter(tiles), rows = files.filter { !tiles($0) }
+            if strip.isEmpty {
+                let f = LibraryPage.fold(files.count, open: open, query: query)
+                return Listing(strip: [], rows: Array(files.prefix(f.rows)), more: f.more, fewer: f.fewer)
+            }
+            let more = max(0, strip.count - LibraryPage.stripAt) + max(0, rows.count - LibraryPage.foldAt)
+            if !LibraryPage.words(query).isEmpty || more == 0 { return Listing(strip: strip, rows: rows, more: 0, fewer: false) }
+            if open { return Listing(strip: strip, rows: rows, more: 0, fewer: true) }
+            return Listing(strip: Array(strip.prefix(LibraryPage.stripAt)), rows: Array(rows.prefix(LibraryPage.foldAt)), more: more, fewer: false)
         }
+    }
+
+    /// A group as it lists: its strip, its rows, and its fold if any.
+    public struct Listing: Sendable, Equatable {
+        public let strip: [AppAPI.LibraryFile]
+        public let rows: [AppAPI.LibraryFile]
+        /// How many files its fold hides.
+        public let more: Int
+        /// Whether it offers to fold again.
+        public let fewer: Bool
+
+        /// The files it shows, top to bottom.
+        public var files: [AppAPI.LibraryFile] { strip + rows }
+        public var folds: Bool { more > 0 || fewer }
+    }
+
+    /// How many thumbnails a folded group shows.
+    public static let stripAt = 4
+
+    /// How many thumbnails go across a list this wide: four, or two where
+    /// four would be too small to tell apart.
+    public static func stripColumns(width: Double) -> Int { width < 480 ? 2 : 4 }
+
+    /// A list's rows of thumbnails: each its own row of a lazy list, so a
+    /// long group's tiles load only when they come into view.
+    public static func stripRows(_ strip: [AppAPI.LibraryFile], columns: Int) -> [[AppAPI.LibraryFile]] {
+        stride(from: 0, to: strip.count, by: max(1, columns)).map { Array(strip[$0..<min($0 + max(1, columns), strip.count)]) }
     }
 
     /// How many rows a folded group shows.
@@ -129,20 +192,47 @@ public enum LibraryPage {
         return d.formatted(style)
     }
 
-    /// A file's group: its thread, or "@" and the linked project.
+    /// A file's group: its thread, or "@" and the linked project, in its
+    /// project in a program's list.
     public static func key(_ f: AppAPI.LibraryFile) -> String {
-        f.peer.isEmpty ? f.thread : "@" + f.peer
+        place(f) + (f.peer.isEmpty ? f.thread : "@" + f.peer)
+    }
+
+    /// What tells a member's file from another member's in a program's list,
+    /// "" for the director's own or in a project's own list.
+    public static func place(_ f: AppAPI.LibraryFile) -> String {
+        f.project.isEmpty ? "" : f.server + "/" + f.project + "/"
     }
 
     public static func groups(_ files: [AppAPI.LibraryFile]) -> [Group] {
-        var order: [String] = []
-        var by: [String: [AppAPI.LibraryFile]] = [:]
-        for f in files.sorted(by: { $0.time > $1.time }) {
-            let k = key(f)
-            if by[k] == nil { order.append(k) }
-            by[k, default: []].append(f)
+        sections(files).flatMap(\.groups)
+    }
+
+    /// The files by project, in the order the projects came, each project's
+    /// groups as groups orders them.
+    public static func sections(_ files: [AppAPI.LibraryFile]) -> [Section] {
+        var places: [String] = []
+        var byPlace: [String: [AppAPI.LibraryFile]] = [:]
+        for f in files {
+            let p = place(f)
+            if byPlace[p] == nil { places.append(p) }
+            byPlace[p, default: []].append(f)
         }
-        return order.map { Group(id: $0, files: by[$0] ?? []) }
+        return places.map { p in
+            let inPlace = byPlace[p] ?? []
+            var order: [String] = []
+            var by: [String: [AppAPI.LibraryFile]] = [:]
+            for f in inPlace.sorted(by: { $0.time > $1.time }) {
+                let k = key(f)
+                if by[k] == nil { order.append(k) }
+                by[k, default: []].append(f)
+            }
+            let own = order.filter { by[$0]?.first.map(isSeat) == true }
+            let rest = order.filter { by[$0]?.first.map(isSeat) != true }
+            let first = inPlace.first
+            return Section(id: p, project: first?.project ?? "", server: first?.server ?? "",
+                           groups: (own + rest).map { Group(id: $0, files: by[$0] ?? []) })
+        }
     }
 
     /// A file's kind, from its name's extension (T1054). The TUI's
@@ -203,10 +293,10 @@ public enum LibraryPage {
     }
 
     /// Whether every word is in the file's name, task, title, thread,
-    /// repository or linked project.
+    /// repository or linked project, or a program's member and its server.
     private static func matches(_ f: AppAPI.LibraryFile, _ words: [String]) -> Bool {
         if words.isEmpty { return true }
-        let hay = [f.name, f.task, f.title, f.thread, f.repo, f.peer].joined(separator: "\n").lowercased()
+        let hay = [f.name, f.task, f.title, f.thread, f.repo, f.peer, f.project, f.server].joined(separator: "\n").lowercased()
         return words.allSatisfy(hay.contains)
     }
 
@@ -251,7 +341,8 @@ public enum LibraryPage {
 
     /// The filter field's words: the repository only where a file names one.
     public static func filterPrompt(_ files: [AppAPI.LibraryFile]) -> String {
-        files.contains { !$0.repo.isEmpty } ? "Filter by name, task, thread or repo" : "Filter by name, task or thread"
+        if files.contains(where: { !$0.project.isEmpty }) { return "Filter by name, task, thread or project" }
+        return files.contains { !$0.repo.isEmpty } ? "Filter by name, task, thread or repo" : "Filter by name, task or thread"
     }
 
     /// What library.read names a file by: its thread, else the message a
@@ -268,6 +359,13 @@ public enum LibraryPage {
         return [".png", ".jpg", ".jpeg", ".gif"].contains { name.hasSuffix($0) }
     }
 
+    /// A thumbnail decoded to draw: within FileImage's bounds, as what a
+    /// server sends is data. Nil for a plain row.
+    public static func drawn(_ t: AppAPI.LibraryThumbnail) async -> FileImage.Drawn? {
+        guard case .drawn(let d)? = await FileImageDecoder.shared.decode(t.data) else { return nil }
+        return d
+    }
+
     /// The file's thumbnail, or nil for a plain row: a file that isn't an
     /// image, without asking; one that makes none, a server too old, a
     /// link down, whatever the answer was.
@@ -282,8 +380,10 @@ public enum LibraryPage {
 
     /// The file's bytes, a chunk at a time; again from the start, once,
     /// when it changed between chunks.
-    public static func read(_ fetch: Fetch, project: String, file f: AppAPI.LibraryFile) async -> FileOutcome {
-        let params = { (off: Int) in AppAPI.LibraryReadParams(project: project, id: id(f), name: f.name, offset: off) }
+    /// With program, a director's own file of that program.
+    public static func read(_ fetch: Fetch, project: String, program: String? = nil, file f: AppAPI.LibraryFile) async -> FileOutcome {
+        let ref = program.map { AppAPI.LibraryProgram(slug: $0) }
+        let params = { (off: Int) in AppAPI.LibraryReadParams(project: project, program: ref, id: id(f), name: f.name, offset: off) }
         for _ in 0..<2 {
             var out = Data()
             var size = -1
@@ -309,6 +409,45 @@ public enum LibraryPage {
             }
         }
         return .unavailable("the file kept changing while it was read")
+    }
+}
+
+/// The thumbnails a Library holds on to, the latest used while they fit: a
+/// long scroll would otherwise keep every one it passed. Enough for what
+/// shows on any screen; one that went is asked for again, from the server's
+/// cache.
+public struct LibraryThumbs: Sendable {
+    /// About 400 KB each, drawn.
+    public static let budget = 120
+
+    private var images: [String: FileImage.Drawn] = [:]
+    private var order: [String] = []
+    private let budget: Int
+
+    public init(budget: Int = budget) {
+        self.budget = budget
+    }
+
+    /// The image of key.
+    public subscript(key: String) -> FileImage.Drawn? { images[key] }
+
+    /// Notes key was just shown, so it stays longest.
+    public mutating func touch(_ key: String) {
+        guard images[key] != nil else { return }
+        order.removeAll { $0 == key }
+        order.append(key)
+    }
+
+    public mutating func add(_ key: String, _ image: FileImage.Drawn) {
+        order.removeAll { $0 == key }
+        order.append(key)
+        images[key] = image
+        while order.count > budget { images[order.removeFirst()] = nil }
+    }
+
+    public mutating func removeAll() {
+        images = [:]
+        order = []
     }
 }
 

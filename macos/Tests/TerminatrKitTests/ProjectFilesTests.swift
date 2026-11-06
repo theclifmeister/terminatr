@@ -57,12 +57,14 @@ private struct LibraryFixture: Decodable {
         var state: String?
         var peer: String?
         var message: String?
+        var project: String?
+        var server: String?
         var name: String
         var size: Int?
 
         var file: AppAPI.LibraryFile {
             AppAPI.LibraryFile(thread: thread ?? "", task: task ?? "", taskStatus: task_status ?? "", title: title, repo: repo ?? "", state: state ?? "running", name: name, size: size ?? 0,
-                               time: Date(timeIntervalSince1970: 0), peer: peer ?? "", message: message ?? "")
+                               time: Date(timeIntervalSince1970: 0), peer: peer ?? "", message: message ?? "", project: project ?? "", server: server ?? "")
         }
     }
 
@@ -97,10 +99,16 @@ private struct LibraryFixture: Decodable {
         let shows: Bool
     }
 
+    struct Order: Decodable {
+        let library: String
+        let names: [String]
+    }
+
     let kinds: [String: String]
     let libraries: [String: [File]]
     let cases: [Case]
     let filter: [Filter]
+    let order: [Order]
     let heads: [Head]
     let fold: [Fold]
 
@@ -145,6 +153,10 @@ private struct LibraryFixture: Decodable {
         let chips = LibraryPage.chips(files, query: c.query, kind: kind(c.kind))
             .map { LibraryFixture.Chip(kind: $0.kind?.rawValue.lowercased() ?? "", count: $0.count) }
         #expect(chips == c.chips, "\(c.library), \(c.query), \(c.kind)")
+    }
+    for c in fx.order {
+        let names = LibraryPage.groups((fx.libraries[c.library] ?? []).map(\.file)).flatMap { $0.files.map(\.name) }
+        #expect(names == c.names, "order of \(c.library)")
     }
     #expect(fx.heads.count >= 6)
     for c in fx.heads {
@@ -347,4 +359,113 @@ private actor Thumbs {
     #expect(peer == nil)
     let names = await t.names
     #expect(names == ["corrupt.png", "corrupt.png"])
+}
+
+/// A Library group with images (T1059): a strip of four, the rest rows, one
+/// +N for what's left of both.
+@Test func aLibraryGroupListsItsImagesAsAStrip() {
+    let at = Date(timeIntervalSince1970: 1_780_000_000)
+    let files = { (names: [String]) -> LibraryPage.Group in
+        LibraryPage.Group(id: "t-1", files: names.map { AppAPI.LibraryFile(thread: "t-1", title: "x", state: "running", name: $0, size: 1, time: at) })
+    }
+    let images = { (f: AppAPI.LibraryFile) in LibraryPage.hasThumbnail(f) }
+    let names = { (fs: [AppAPI.LibraryFile]) in fs.map(\.name) }
+
+    // No images: as before.
+    let notes = files((0..<8).map { "\($0).md" })
+    let none = notes.listed(open: false, query: "", tiles: images)
+    #expect(none.strip.isEmpty && none.rows.count == 6 && none.more == 2 && !none.fewer)
+
+    // One image.
+    let one = files(["a.png"]).listed(open: false, query: "", tiles: images)
+    #expect(names(one.strip) == ["a.png"] && one.rows.isEmpty && !one.folds)
+
+    // Mixed: images strip, others rows, in their order, an SVG a row.
+    let mixed = files(["a.png", "b.md", "c.jpg", "d.svg"]).listed(open: false, query: "", tiles: images)
+    #expect(names(mixed.strip) == ["a.png", "c.jpg"] && names(mixed.rows) == ["b.md", "d.svg"] && !mixed.folds)
+    #expect(names(mixed.files) == ["a.png", "c.jpg", "b.md", "d.svg"])
+
+    // Four images and six rows stay unfolded; one over either folds.
+    let full = files((0..<4).map { "\($0).png" } + (0..<6).map { "\($0).md" })
+    #expect(!full.listed(open: false, query: "", tiles: images).folds)
+    let over = files((0..<5).map { "\($0).png" })
+    let folded = over.listed(open: false, query: "", tiles: images)
+    #expect(folded.strip.count == 4 && folded.more == 1 && !folded.fewer)
+    let big = files((0..<26).map { "\($0).png" } + (0..<9).map { "\($0).md" })
+    let bigFolded = big.listed(open: false, query: "", tiles: images)
+    #expect(bigFolded.strip.count == 4 && bigFolded.rows.count == 6 && bigFolded.more == 25)
+
+    // Opened: everything, and it can fold again. Words open it, with no way back.
+    let opened = big.listed(open: true, query: "", tiles: images)
+    #expect(opened.strip.count == 26 && opened.rows.count == 9 && opened.more == 0 && opened.fewer)
+    let found = big.listed(open: false, query: "png", tiles: images)
+    #expect(found.strip.count == 26 && found.more == 0 && !found.fewer)
+
+    // An image with no thumbnail becomes a row, and the next takes its place.
+    let failed = over.listed(open: false, query: "") { images($0) && $0.name != "0.png" }
+    #expect(names(failed.strip) == ["1.png", "2.png", "3.png", "4.png"] && names(failed.rows) == ["0.png"] && !failed.folds)
+
+    // No tiles at all (a server too old): today's rows.
+    let plain = over.listed(open: false, query: "")
+    #expect(plain.strip.isEmpty && plain.rows.count == 5 && !plain.folds)
+}
+
+@Test func aLibraryStripRowsByItsWidth() {
+    #expect(LibraryPage.stripColumns(width: 900) == 4)
+    #expect(LibraryPage.stripColumns(width: 300) == 2)
+    let at = Date(timeIntervalSince1970: 1_780_000_000)
+    let files = (0..<5).map { AppAPI.LibraryFile(thread: "t", title: "", state: "", name: "\($0).png", size: 1, time: at) }
+    #expect(LibraryPage.stripRows(files, columns: 4).map(\.count) == [4, 1])
+    #expect(LibraryPage.stripRows(files, columns: 2).map(\.count) == [2, 2, 1])
+    #expect(LibraryPage.stripRows([], columns: 4).isEmpty)
+}
+
+@Test func libraryThumbsKeepTheLatestUsed() throws {
+    let png = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAEBgIApD5fRAAAAABJRU5ErkJggg==")
+    guard case .drawn(let d) = FileImage.decode(try #require(png)) else {
+        Issue.record("the test image didn't decode")
+        return
+    }
+    var keep = LibraryThumbs(budget: 2)
+    keep.add("a", d)
+    keep.add("b", d)
+    keep.touch("a")
+    keep.add("c", d)
+    #expect(keep["a"] != nil && keep["b"] == nil && keep["c"] != nil)
+    keep.removeAll()
+    #expect(keep["a"] == nil)
+}
+
+/// What a server sends is data: damaged bytes make a plain row, not a crash.
+@Test func aDamagedThumbnailDrawsNothing() async {
+    let bad = AppAPI.LibraryThumbnail(name: "a.png", width: 1, height: 1, data: Data("not an image".utf8))
+    #expect(await LibraryPage.drawn(bad) == nil)
+}
+
+@Test func aSeatsOwnFilesHeadTheirGroup() {
+    func seat(_ name: String, _ title: String, project: String = "") -> AppAPI.LibraryFile {
+        AppAPI.LibraryFile(thread: LibraryPage.seatID, title: title, state: "kept", name: name, size: 1, time: Date(timeIntervalSince1970: 1), project: project)
+    }
+    let own = LibraryPage.groups([seat("a.md", "Coordinator's files"), seat("b.md", "Coordinator's files")])
+    #expect(own.first?.title == "Coordinator's files")
+    #expect(own.first?.detail == "2 files")
+    #expect(own.first?.origin == [])
+    let member = seat("c.md", "Coordinator's files", project: "web")
+    let sections = LibraryPage.sections([seat("p.md", "Director's files"), member])
+    #expect(sections.map(\.title) == ["", "web"])
+    #expect(sections[1].groups[0].id == "/web/seat")
+    #expect(OpenedFile(.attached(member)).id == "a:/web/seat/c.md")
+    #expect(OpenedFile(.attached(seat("c.md", "Director's files"))).id == "a:seat/c.md")
+}
+
+@Test func aProgramLooksInItsOwnFormOnly() async {
+    let c = Chunks(Data("hi".utf8), chunk: 10)
+    let f = AppAPI.LibraryFile(thread: LibraryPage.seatID, title: "Director's files", state: "kept", name: "p.md", size: 2, time: Date())
+    guard case .data(let d, _) = await LibraryPage.read({ p in await c.read(p) }, project: "", program: "acme", file: f) else {
+        Issue.record("no data")
+        return
+    }
+    #expect(String(decoding: d, as: UTF8.self) == "hi")
+    let p = await c.params.first
+    #expect(p?.program?.slug == "acme" && p?.project == "" && p?.id == LibraryPage.seatID)
 }

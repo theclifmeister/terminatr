@@ -78,6 +78,7 @@ struct TaskSheet: View {
                     .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 8)
                 PriorityTag(d.task.priority)
+                if d.task.archived { Chip("Archived") }
                 Chip(TaskDetail.words(d.task.status))
             }
             Text(d.facts)
@@ -128,7 +129,7 @@ struct TaskSheet: View {
             Spacer()
             Button("Close") { dismiss() }
                 .keyboardShortcut(.cancelAction)
-            if let d, TaskActs.acts(d.task.status) {
+            if let d, !d.task.archived, TaskActs.acts(d.task.status) {
                 TaskActs(project: d.project, task: d.task.ref, status: d.task.status)
             }
         }

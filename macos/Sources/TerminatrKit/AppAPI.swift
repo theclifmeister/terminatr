@@ -650,15 +650,60 @@ public enum AppAPI {
         }
     }
 
+    public struct DoneGroup: Codable, Sendable, Hashable {
+        public var kind: String
+        public var title: String
+        public var from: String
+        public var to: String
+        public var count: Int
+        public var archived: Int
+        public var open: Bool
+        public var tasks: [Task]
+        public var next: Int
+
+        public init(kind: String, title: String, from: String, to: String, count: Int, archived: Int = 0, open: Bool = false, tasks: [Task] = [], next: Int = 0) {
+            self.kind = kind
+            self.title = title
+            self.from = from
+            self.to = to
+            self.count = count
+            self.archived = archived
+            self.open = open
+            self.tasks = tasks
+            self.next = next
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case kind
+            case title
+            case from
+            case to
+            case count
+            case archived
+            case open
+            case tasks
+            case next
+        }
+    }
+
     public struct DoneTasks: Codable, Sendable, Hashable {
         public var tasks: [Task]
+        public var groups: [DoneGroup]
+        public var total: Int
+        public var next: Int
 
-        public init(tasks: [Task] = []) {
+        public init(tasks: [Task] = [], groups: [DoneGroup] = [], total: Int = 0, next: Int = 0) {
             self.tasks = tasks
+            self.groups = groups
+            self.total = total
+            self.next = next
         }
 
         enum CodingKeys: String, CodingKey {
             case tasks
+            case groups
+            case total
+            case next
         }
     }
 
@@ -1300,13 +1345,16 @@ public enum AppAPI {
 
     public struct Library: Codable, Sendable, Hashable {
         public var files: [LibraryFile]
+        public var note: String
 
-        public init(files: [LibraryFile] = []) {
+        public init(files: [LibraryFile] = [], note: String = "") {
             self.files = files
+            self.note = note
         }
 
         enum CodingKeys: String, CodingKey {
             case files
+            case note
         }
     }
 
@@ -1346,8 +1394,10 @@ public enum AppAPI {
         public var time: Date
         public var peer: String
         public var message: String
+        public var project: String
+        public var server: String
 
-        public init(thread: String = "", task: String = "", taskStatus: String = "", title: String, repo: String = "", state: String, name: String, size: Int, time: Date, peer: String = "", message: String = "") {
+        public init(thread: String = "", task: String = "", taskStatus: String = "", title: String, repo: String = "", state: String, name: String, size: Int, time: Date, peer: String = "", message: String = "", project: String = "", server: String = "") {
             self.thread = thread
             self.task = task
             self.taskStatus = taskStatus
@@ -1359,6 +1409,8 @@ public enum AppAPI {
             self.time = time
             self.peer = peer
             self.message = message
+            self.project = project
+            self.server = server
         }
 
         enum CodingKeys: String, CodingKey {
@@ -1373,17 +1425,48 @@ public enum AppAPI {
             case time
             case peer
             case message
+            case project
+            case server
+        }
+    }
+
+    public struct LibraryListParams: Codable, Sendable, Hashable {
+        public var project: String
+        public var program: LibraryProgram?
+
+        public init(project: String, program: LibraryProgram? = nil) {
+            self.project = project
+            self.program = program
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case project
+            case program
+        }
+    }
+
+    public struct LibraryProgram: Codable, Sendable, Hashable {
+        public var slug: String
+
+        public init(slug: String) {
+            self.slug = slug
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case slug
         }
     }
 
     public struct LibraryReadParams: Codable, Sendable, Hashable {
         public var project: String
+        public var program: LibraryProgram?
         public var id: String
         public var name: String
         public var offset: Int
 
-        public init(project: String, id: String, name: String, offset: Int = 0) {
+        public init(project: String, program: LibraryProgram? = nil, id: String, name: String, offset: Int = 0) {
             self.project = project
+            self.program = program
             self.id = id
             self.name = name
             self.offset = offset
@@ -1391,6 +1474,7 @@ public enum AppAPI {
 
         enum CodingKeys: String, CodingKey {
             case project
+            case program
             case id
             case name
             case offset
@@ -1420,17 +1504,20 @@ public enum AppAPI {
 
     public struct LibraryThumbnailParams: Codable, Sendable, Hashable {
         public var project: String
+        public var program: LibraryProgram?
         public var id: String
         public var name: String
 
-        public init(project: String, id: String, name: String) {
+        public init(project: String, program: LibraryProgram? = nil, id: String, name: String) {
             self.project = project
+            self.program = program
             self.id = id
             self.name = name
         }
 
         enum CodingKeys: String, CodingKey {
             case project
+            case program
             case id
             case name
         }
@@ -4296,11 +4383,12 @@ public enum AppAPI {
         public var created: String
         public var updated: String
         public var doneAt: String
+        public var archived: Bool
         public var after: [TaskDep]
         public var waitsFor: [String]
         public var waiters: Int
 
-        public init(id: Int, ref: String, title: String, status: String, priority: String = "", notes: String = "", steps: [Step] = [], thread: String = "", owner: String = "", created: String = "", updated: String = "", doneAt: String = "", after: [TaskDep] = [], waitsFor: [String] = [], waiters: Int = 0) {
+        public init(id: Int, ref: String, title: String, status: String, priority: String = "", notes: String = "", steps: [Step] = [], thread: String = "", owner: String = "", created: String = "", updated: String = "", doneAt: String = "", archived: Bool = false, after: [TaskDep] = [], waitsFor: [String] = [], waiters: Int = 0) {
             self.id = id
             self.ref = ref
             self.title = title
@@ -4313,6 +4401,7 @@ public enum AppAPI {
             self.created = created
             self.updated = updated
             self.doneAt = doneAt
+            self.archived = archived
             self.after = after
             self.waitsFor = waitsFor
             self.waiters = waiters
@@ -4331,6 +4420,7 @@ public enum AppAPI {
             case created
             case updated
             case doneAt = "done_at"
+            case archived
             case after
             case waitsFor = "waits_for"
             case waiters
@@ -4433,6 +4523,39 @@ public enum AppAPI {
             case title
             case merged
             case why
+        }
+    }
+
+    public struct TaskDoneParams: Codable, Sendable, Hashable {
+        public var project: String
+        public var groups: Bool
+        public var from: String
+        public var to: String
+        public var archived: Bool
+        public var offset: Int
+        public var limit: Int
+        public var tz: String
+
+        public init(project: String, groups: Bool = false, from: String = "", to: String = "", archived: Bool = false, offset: Int = 0, limit: Int = 0, tz: String = "") {
+            self.project = project
+            self.groups = groups
+            self.from = from
+            self.to = to
+            self.archived = archived
+            self.offset = offset
+            self.limit = limit
+            self.tz = tz
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case project
+            case groups
+            case from
+            case to
+            case archived
+            case offset
+            case limit
+            case tz
         }
     }
 
@@ -5135,7 +5258,7 @@ public enum AppAPI {
         public static let filesStamp = Call<FilesStampParams, FilesStamp>("files.stamp", write: false)
         public static let guardDecide = Call<GuardDecideParams, GuardDecided>("guard.decide", write: true)
         public static let guardRefusals = Call<NoParams, GuardRefusals>("guard.refusals", write: false)
-        public static let libraryList = Call<ProjectParams, Library>("library.list", write: false)
+        public static let libraryList = Call<LibraryListParams, Library>("library.list", write: false)
         public static let libraryRead = Call<LibraryReadParams, LibraryChunk>("library.read", write: false)
         public static let libraryThumbnail = Call<LibraryThumbnailParams, LibraryThumbnail>("library.thumbnail", write: false)
         public static let linkAct = Call<LinkActParams, LinkActResult>("link.act", write: true)
@@ -5201,7 +5324,7 @@ public enum AppAPI {
         public static let taskAdd = Call<TaskAddParams, TaskAdded>("task.add", write: true)
         public static let taskAsk = Call<TaskAskParams, TaskAskResult>("task.ask", write: true)
         public static let taskDelegate = Call<TaskParams, TaskAskResult>("task.delegate", write: true)
-        public static let taskDone = Call<ProjectParams, DoneTasks>("task.done", write: false)
+        public static let taskDone = Call<TaskDoneParams, DoneTasks>("task.done", write: false)
         public static let taskGet = Call<TaskGetParams, Task>("task.get", write: false)
         public static let taskPriority = Call<TaskPriorityParams, TaskPriorityResult>("task.priority", write: true)
         public static let taskSendBack = Call<SendBackParams, TaskAskResult>("task.send-back", write: true)
@@ -5524,10 +5647,28 @@ extension AppAPI.Devices {
     }
 }
 
+extension AppAPI.DoneGroup {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.kind = try c.decode(String.self, forKey: .kind)
+        self.title = try c.decode(String.self, forKey: .title)
+        self.from = try c.decode(String.self, forKey: .from)
+        self.to = try c.decode(String.self, forKey: .to)
+        self.count = try c.decode(Int.self, forKey: .count)
+        self.archived = try c.decodeIfPresent(Int.self, forKey: .archived) ?? 0
+        self.open = try c.decodeIfPresent(Bool.self, forKey: .open) ?? false
+        self.tasks = try c.decodeIfPresent([AppAPI.Task].self, forKey: .tasks) ?? []
+        self.next = try c.decodeIfPresent(Int.self, forKey: .next) ?? 0
+    }
+}
+
 extension AppAPI.DoneTasks {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.tasks = try c.decodeIfPresent([AppAPI.Task].self, forKey: .tasks) ?? []
+        self.groups = try c.decodeIfPresent([AppAPI.DoneGroup].self, forKey: .groups) ?? []
+        self.total = try c.decodeIfPresent(Int.self, forKey: .total) ?? 0
+        self.next = try c.decodeIfPresent(Int.self, forKey: .next) ?? 0
     }
 }
 
@@ -5826,6 +5967,7 @@ extension AppAPI.Library {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.files = try c.decodeIfPresent([AppAPI.LibraryFile].self, forKey: .files) ?? []
+        self.note = try c.decodeIfPresent(String.self, forKey: .note) ?? ""
     }
 }
 
@@ -5854,6 +5996,23 @@ extension AppAPI.LibraryFile {
         self.time = try c.decode(Date.self, forKey: .time)
         self.peer = try c.decodeIfPresent(String.self, forKey: .peer) ?? ""
         self.message = try c.decodeIfPresent(String.self, forKey: .message) ?? ""
+        self.project = try c.decodeIfPresent(String.self, forKey: .project) ?? ""
+        self.server = try c.decodeIfPresent(String.self, forKey: .server) ?? ""
+    }
+}
+
+extension AppAPI.LibraryListParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.program = try c.decodeIfPresent(AppAPI.LibraryProgram.self, forKey: .program)
+    }
+}
+
+extension AppAPI.LibraryProgram {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.slug = try c.decode(String.self, forKey: .slug)
     }
 }
 
@@ -5861,6 +6020,7 @@ extension AppAPI.LibraryReadParams {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.project = try c.decode(String.self, forKey: .project)
+        self.program = try c.decodeIfPresent(AppAPI.LibraryProgram.self, forKey: .program)
         self.id = try c.decode(String.self, forKey: .id)
         self.name = try c.decode(String.self, forKey: .name)
         self.offset = try c.decodeIfPresent(Int.self, forKey: .offset) ?? 0
@@ -5881,6 +6041,7 @@ extension AppAPI.LibraryThumbnailParams {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.project = try c.decode(String.self, forKey: .project)
+        self.program = try c.decodeIfPresent(AppAPI.LibraryProgram.self, forKey: .program)
         self.id = try c.decode(String.self, forKey: .id)
         self.name = try c.decode(String.self, forKey: .name)
     }
@@ -7201,6 +7362,7 @@ extension AppAPI.Task {
         self.created = try c.decodeIfPresent(String.self, forKey: .created) ?? ""
         self.updated = try c.decodeIfPresent(String.self, forKey: .updated) ?? ""
         self.doneAt = try c.decodeIfPresent(String.self, forKey: .doneAt) ?? ""
+        self.archived = try c.decodeIfPresent(Bool.self, forKey: .archived) ?? false
         self.after = try c.decodeIfPresent([AppAPI.TaskDep].self, forKey: .after) ?? []
         self.waitsFor = try c.decodeIfPresent([String].self, forKey: .waitsFor) ?? []
         self.waiters = try c.decodeIfPresent(Int.self, forKey: .waiters) ?? 0
@@ -7252,6 +7414,20 @@ extension AppAPI.TaskDep {
         self.title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
         self.merged = try c.decodeIfPresent(Bool.self, forKey: .merged) ?? false
         self.why = try c.decodeIfPresent(String.self, forKey: .why) ?? ""
+    }
+}
+
+extension AppAPI.TaskDoneParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.groups = try c.decodeIfPresent(Bool.self, forKey: .groups) ?? false
+        self.from = try c.decodeIfPresent(String.self, forKey: .from) ?? ""
+        self.to = try c.decodeIfPresent(String.self, forKey: .to) ?? ""
+        self.archived = try c.decodeIfPresent(Bool.self, forKey: .archived) ?? false
+        self.offset = try c.decodeIfPresent(Int.self, forKey: .offset) ?? 0
+        self.limit = try c.decodeIfPresent(Int.self, forKey: .limit) ?? 0
+        self.tz = try c.decodeIfPresent(String.self, forKey: .tz) ?? ""
     }
 }
 

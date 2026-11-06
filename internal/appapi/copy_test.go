@@ -229,9 +229,6 @@ func TestCopies(t *testing.T) {
 		// Settings and mods are never in the app API, but for the
 		// sidebar's three (settingsHome).
 		".Projects[].Own", ".Projects[].Badges",
-		// A task's archive flag: archived tasks aren't sent.
-		".Projects[].NeedsYou[].Archived", ".Projects[].Threads[].Task.Archived",
-		".Projects[].Board[].Archived",
 		// For resume, and resolved threads aren't sent.
 		".Projects[].Threads[].Record.AgentSID", ".Projects[].Threads[].Record.Prompted",
 		".Projects[].Threads[].Record.ResolvedAt",
@@ -327,14 +324,14 @@ func TestCopies(t *testing.T) {
 	// The request's other fields are peer.list's.
 	check("peer.share-answer", homeOf(shareAnswerOf), []string{".Out", ".Peer", ".For", ".Note", ".Created", ".Answered",
 		".Code", ".Summary"})
-	check("task.get", homeOf(taskOf), []string{".Archived"})
-	check("task.done", homeOf(doneTasksOf), []string{".Tasks[].Archived"})
+	check("task.get", homeOf(taskOf), nil)
+	check("task.done", homeOf(doneTasksOf), nil)
 	check("project.history", homeOf(historyOf), nil)
 	check("release.tags", homeOf(releaseTagsOf), nil)
 	// Programs (app API 44): the members' read splits them into
-	// (server, project); a task's archive flag and after refs, and the
+	// (server, project); a task's after refs, and the
 	// paths of a renamed or deleted program's folder, stay home.
-	check("program.get", homeOf(programDetailOf), []string{".Umbrellas[].Task.Archived", ".Tasks{}.Archived", ".SideProgram.Projects"})
+	check("program.get", homeOf(programDetailOf), []string{".SideProgram.Projects"})
 	// An escape's menu and dialog never cross (as on peer.list's needs,
 	// checked without Escape); a paired member's mirror time is the
 	// TUI's.
@@ -443,6 +440,27 @@ func TestParamsCopies(t *testing.T) {
 	if want := (proto.FilesListParams{Session: "s-1", Repo: "/r/two", Path: "d"}); err != nil || p != want {
 		t.Errorf("files.list params %+v %v", p, err)
 	}
+	// library.list and library.read's program form; an older app names none.
+	m, _ = Lookup(proto.MethodLibraryList)
+	p, err = m.toServer(json.RawMessage(`{"project":"","program":{"slug":"acme"}}`))
+	if want := (proto.ProjectFilesParams{Program: "acme"}); err != nil || p != want {
+		t.Errorf("library.list program params %+v %v", p, err)
+	}
+	p, err = m.toServer(json.RawMessage(`{"project":"web"}`))
+	if want := (proto.ProjectFilesParams{Project: "web"}); err != nil || p != want {
+		t.Errorf("library.list params %+v %v", p, err)
+	}
+	m, _ = Lookup(proto.MethodLibraryRead)
+	p, err = m.toServer(json.RawMessage(`{"project":"","program":{"slug":"acme"},"id":"seat","name":"a.md","offset":3}`))
+	if want := (proto.LibraryReadParams{Program: "acme", ID: "seat", Name: "a.md", Offset: 3}); err != nil || p != want {
+		t.Errorf("library.read program params %+v %v", p, err)
+	}
+	m, _ = Lookup(proto.MethodLibraryThumbnail)
+	p, err = m.toServer(json.RawMessage(`{"project":"","program":{"slug":"acme"},"id":"seat","name":"a.png"}`))
+	if want := (proto.LibraryThumbnailParams{Program: "acme", ID: "seat", Name: "a.png"}); err != nil || p != want {
+		t.Errorf("library.thumbnail program params %+v %v", p, err)
+	}
+	m, _ = Lookup(proto.MethodFilesList)
 	// An older app sends no repo: the first's.
 	p, err = m.toServer(json.RawMessage(`{"session":"s-1"}`))
 	if want := (proto.FilesListParams{Session: "s-1"}); err != nil || p != want {

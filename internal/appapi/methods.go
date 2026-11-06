@@ -180,7 +180,7 @@ func init() {
 		// The board's done tasks, which projects.watch leaves out, for
 		// the board's Show Done, and the task templates of the
 		// project's mods for New Task (app API 20).
-		unary(proto.MethodTaskDone, false, taskDoneParams, doneTasksOf),
+		unary(proto.MethodTaskDone, false, taskDoneListParams, doneTasksOf),
 		unary(proto.MethodTaskTemplates, false, taskDoneParams, templatesOf),
 		// What a project's link waits on the user for, answered in place
 		// (app API 16; the server's caps say link-act), with tm link's
@@ -558,6 +558,10 @@ func taskDoneParams(p ProjectParams) proto.TaskDoneParams {
 	return proto.TaskDoneParams{Project: p.Project}
 }
 
+func taskDoneListParams(p TaskDoneParams) proto.TaskDoneParams {
+	return proto.TaskDoneParams{Project: p.Project, Groups: p.Groups, From: p.From, To: p.To, Archived: p.Archived, Offset: p.Offset, Limit: p.Limit, TZ: p.TZ}
+}
+
 func projectActiveParams(p ProjectActiveParams) proto.ProjectActiveParams {
 	return proto.ProjectActiveParams{Project: p.Project, Active: p.Active}
 }
@@ -607,8 +611,8 @@ func memoryReadParams(p MemoryReadParams) proto.MemoryReadParams {
 	return proto.MemoryReadParams{Project: p.Project, Path: p.Path}
 }
 
-func libraryListParams(p ProjectParams) proto.ProjectFilesParams {
-	return proto.ProjectFilesParams{Project: p.Project}
+func libraryListParams(p LibraryListParams) proto.ProjectFilesParams {
+	return proto.ProjectFilesParams{Project: p.Project, Program: p.Program.slug()}
 }
 
 func designListParams(p ProjectParams) proto.DesignListParams {
@@ -649,9 +653,9 @@ func filesReposParams(p FilesReposParams) proto.FilesReposParams {
 }
 
 func libraryThumbnailParams(p LibraryThumbnailParams) proto.LibraryThumbnailParams {
-	return proto.LibraryThumbnailParams{Project: p.Project, ID: p.ID, Name: p.Name}
+	return proto.LibraryThumbnailParams{Project: p.Project, Program: p.Program.slug(), ID: p.ID, Name: p.Name}
 }
 
 func libraryReadParams(p LibraryReadParams) proto.LibraryReadParams {
-	return proto.LibraryReadParams{Project: p.Project, ID: p.ID, Name: p.Name, Offset: p.Offset}
+	return proto.LibraryReadParams{Project: p.Project, Program: p.Program.slug(), ID: p.ID, Name: p.Name, Offset: p.Offset}
 }
