@@ -1,5 +1,68 @@
 # Changelog
 
+## [0.84.0](https://github.com/theclifmeister/terminatr/compare/v0.83.0...v0.84.0) (2026-11-06)
+
+
+### Features
+
+* a coordinator can hand a thread a file ([#1191](https://github.com/theclifmeister/terminatr/issues/1191)) ([0b2b8ed](https://github.com/theclifmeister/terminatr/commit/0b2b8edb61df042739324c9e927fe9c979a9997b))
+* a line in Done at your last action ([#1179](https://github.com/theclifmeister/terminatr/issues/1179)) ([7981749](https://github.com/theclifmeister/terminatr/commit/7981749470f15ee52989ded263f8ff420949aa6a))
+* **app:** a Designs tab on the Mac's project pages, and a shorter Overview ([#1142](https://github.com/theclifmeister/terminatr/issues/1142)) ([8e482f0](https://github.com/theclifmeister/terminatr/commit/8e482f0590e974065eef2851816411a4a06ff808))
+* **app:** images show inline in the Files view's preview and pane on the Mac ([#1145](https://github.com/theclifmeister/terminatr/issues/1145)) ([452cf33](https://github.com/theclifmeister/terminatr/commit/452cf334c9c5c66ae1f5a34433e98ac664055473))
+* **app:** the Mac's command palette finds paired servers' thread titles and tasks ([#1171](https://github.com/theclifmeister/terminatr/issues/1171)) ([8d3a7d9](https://github.com/theclifmeister/terminatr/commit/8d3a7d99861e5f163a8cb616f5e1c982c42abdfd))
+* **app:** thumbnail strips in the Mac's Library ([#1173](https://github.com/theclifmeister/terminatr/issues/1173)) ([f736105](https://github.com/theclifmeister/terminatr/commit/f7361054049f6946f3d1823396bd3fa4d44156f6))
+* **app:** working thread rows in the Mac sidebar read a little brighter ([#1165](https://github.com/theclifmeister/terminatr/issues/1165)) ([a6a5843](https://github.com/theclifmeister/terminatr/commit/a6a5843baa2d4c0df4b4bb0d263fde398956ccf6))
+* attach files to a paired server's session ([#1168](https://github.com/theclifmeister/terminatr/issues/1168)) ([b8a26d2](https://github.com/theclifmeister/terminatr/commit/b8a26d23b57104dc4fce594f68e7b22bac24558e))
+* biggest-first sort in the Library ([#1176](https://github.com/theclifmeister/terminatr/issues/1176)) ([4d9b5ff](https://github.com/theclifmeister/terminatr/commit/4d9b5ff4e3cdd6ef2f71606a95f2a4977ed76303))
+* directors and coordinators get a library, shown in the Files view's Attached tab ([#1169](https://github.com/theclifmeister/terminatr/issues/1169)) ([7dc78dd](https://github.com/theclifmeister/terminatr/commit/7dc78dd5ef537f1263e1fccc629c7a38667f2a15))
+* Done grouped by day, with older work folded and archived tasks reachable ([#1170](https://github.com/theclifmeister/terminatr/issues/1170)) ([e1502bf](https://github.com/theclifmeister/terminatr/commit/e1502bfebca2a1c91ba51bfddad30965cf2b282e))
+* filter and kind chips in the Library ([#1147](https://github.com/theclifmeister/terminatr/issues/1147)) ([7ae6d3b](https://github.com/theclifmeister/terminatr/commit/7ae6d3b8c3843416a22471eb55bda37a49e44a57))
+* **ios:** the iPhone project screen shortens its designs list ([#1155](https://github.com/theclifmeister/terminatr/issues/1155)) ([ddfe505](https://github.com/theclifmeister/terminatr/commit/ddfe505ce294092291b53c1e7c8a355b75571ad4))
+* Library headings with status, kinds and size, long groups folded ([#1166](https://github.com/theclifmeister/terminatr/issues/1166)) ([28a5fb0](https://github.com/theclifmeister/terminatr/commit/28a5fb0f37cd3674f7ca777b359c76f16166b1fa))
+* Library pages and notes show their own title and published link ([#1177](https://github.com/theclifmeister/terminatr/issues/1177)) ([f74af51](https://github.com/theclifmeister/terminatr/commit/f74af510aff84e27351779b2736cdc2bcc3ce885))
+* library thumbnails from the server ([#1146](https://github.com/theclifmeister/terminatr/issues/1146)) ([96e8042](https://github.com/theclifmeister/terminatr/commit/96e8042249979d9a05d886b3a89a2d0f7fb114ac))
+* **peer:** the owning server answers peer.worktree.* ([#1152](https://github.com/theclifmeister/terminatr/issues/1152)) ([fbad0a5](https://github.com/theclifmeister/terminatr/commit/fbad0a5b7b52b614f8eb1859e23cef40df364ad2))
+* **peer:** the server keeps what the human gave each paired server ([#1196](https://github.com/theclifmeister/terminatr/issues/1196)) ([7c3d325](https://github.com/theclifmeister/terminatr/commit/7c3d3250b6b87571bbdbdb055bb8db5d34cace9b))
+* read a paired server's files, in the TUI and on the Mac ([#1174](https://github.com/theclifmeister/terminatr/issues/1174)) ([89cf9a1](https://github.com/theclifmeister/terminatr/commit/89cf9a15fc3e42057b6b4ced7ccdeaeb0d8ab58b))
+* release lines in the Done ledger, with a repo filter ([#1182](https://github.com/theclifmeister/terminatr/issues/1182)) ([cbcfc4d](https://github.com/theclifmeister/terminatr/commit/cbcfc4dcd40b67657e3abcc4f8fe70b97489eb7c))
+* **search:** tm search finds library files by name ([#1139](https://github.com/theclifmeister/terminatr/issues/1139)) ([aa50ee4](https://github.com/theclifmeister/terminatr/commit/aa50ee4314237326bd0b1557545e3799df634ac9))
+* **server:** this server reads a paired server's folder ([#1164](https://github.com/theclifmeister/terminatr/issues/1164)) ([a2316ac](https://github.com/theclifmeister/terminatr/commit/a2316acb4c7c8322eefa392468b8f773ca2c18e2))
+* stack light/dark and before/after files in the Library ([#1175](https://github.com/theclifmeister/terminatr/issues/1175)) ([b6d3480](https://github.com/theclifmeister/terminatr/commit/b6d34800ce1930208ce638bb1adbf849265543c1))
+* the History view ([#1197](https://github.com/theclifmeister/terminatr/issues/1197)) ([06a685c](https://github.com/theclifmeister/terminatr/commit/06a685cf390ecd596e5476b0050c21b5e67f159c))
+* the Pulse band on the Board ([#1188](https://github.com/theclifmeister/terminatr/issues/1188)) ([82d104a](https://github.com/theclifmeister/terminatr/commit/82d104a8dff68bba41561ff19530e6cc7dfc9a5b))
+* tm history and the project's daily numbers ([#1172](https://github.com/theclifmeister/terminatr/issues/1172)) ([14531e1](https://github.com/theclifmeister/terminatr/commit/14531e11c68ac5e386df101e4f20deba460aee1f))
+* tm week and a week-in-review template ([#1181](https://github.com/theclifmeister/terminatr/issues/1181)) ([1d5b92e](https://github.com/theclifmeister/terminatr/commit/1d5b92ebdc5b7bbe526b74c283b6e8166e1a015f))
+* **tui:** half-block image preview in the Library and Files viewer ([#1156](https://github.com/theclifmeister/terminatr/issues/1156)) ([debe176](https://github.com/theclifmeister/terminatr/commit/debe17671bbea283c84a21962a586dfc1b8a1954))
+* **tui:** the sidebar filter finds paired threads and tasks ([#1192](https://github.com/theclifmeister/terminatr/issues/1192)) ([f3c4c1d](https://github.com/theclifmeister/terminatr/commit/f3c4c1dcd7cc7d3b9add35a19f54b6fdd028a25b))
+* usage in the Mac and iPhone details ([#1148](https://github.com/theclifmeister/terminatr/issues/1148)) ([879830e](https://github.com/theclifmeister/terminatr/commit/879830eea3eeeb17b8a7d6a9844564cce9281047))
+* waits-for on a task's row ([#1143](https://github.com/theclifmeister/terminatr/issues/1143)) ([92b8c08](https://github.com/theclifmeister/terminatr/commit/92b8c08d906c366dee42171b44bfa25a14829c35))
+* which tags count as releases, with the release_tags setting ([#1178](https://github.com/theclifmeister/terminatr/issues/1178)) ([773de49](https://github.com/theclifmeister/terminatr/commit/773de495a9c4f9a334db66740ad0ef958d68350e))
+
+
+### Bug Fixes
+
+* **app:** a paired thread's header shows its own server's title ([#1154](https://github.com/theclifmeister/terminatr/issues/1154)) ([42286b4](https://github.com/theclifmeister/terminatr/commit/42286b43ba324a36def8255e56405f5139862909))
+* **app:** files over the read limit say so in plain words ([#1183](https://github.com/theclifmeister/terminatr/issues/1183)) ([6b33b1a](https://github.com/theclifmeister/terminatr/commit/6b33b1acf228086ff924f88c5055eba11ea53ae0))
+* **app:** the composer stops narrating routine sends ([#1140](https://github.com/theclifmeister/terminatr/issues/1140)) ([9da2ffc](https://github.com/theclifmeister/terminatr/commit/9da2ffc0f15f30350f95277c033f72d4d0d08148))
+* **app:** the Mac's command palette takes the keyboard wherever it was asked for ([#1167](https://github.com/theclifmeister/terminatr/issues/1167)) ([94f9d1a](https://github.com/theclifmeister/terminatr/commit/94f9d1a4b2620893e9d93bb314dfbb21d705734b))
+* **app:** the Mac's Option-Cmd-F takes the keyboard from a session window ([#1193](https://github.com/theclifmeister/terminatr/issues/1193)) ([caeb32d](https://github.com/theclifmeister/terminatr/commit/caeb32d69eeaef87aaf8b5d7968bb8164acdd225))
+* **app:** the Mac's panels have minimum widths only, no maximums ([#1141](https://github.com/theclifmeister/terminatr/issues/1141)) ([ebc59eb](https://github.com/theclifmeister/terminatr/commit/ebc59eb1d26588b6cee2bcbd0ffa75850252f601))
+* **app:** the Mac's Send back and Rename Device use flat sheets ([#1150](https://github.com/theclifmeister/terminatr/issues/1150)) ([d430857](https://github.com/theclifmeister/terminatr/commit/d430857c0ad753afba7be74bb85d382d0146a1df))
+* **cli:** asking the server who the caller is leaves a crash's leftovers ([#1189](https://github.com/theclifmeister/terminatr/issues/1189)) ([c908b07](https://github.com/theclifmeister/terminatr/commit/c908b07cff4e080f7993551eb6f5c34ab5f6819a))
+* **cli:** tm doctor --fix is the human's, and tm update's install is a coordinator's at most ([#1160](https://github.com/theclifmeister/terminatr/issues/1160)) ([4f5fc9f](https://github.com/theclifmeister/terminatr/commit/4f5fc9f4c707bdd94c035f78fede0f901b38030e))
+* **cli:** tm report, status and done refuse a director ([#1159](https://github.com/theclifmeister/terminatr/issues/1159)) ([158eb29](https://github.com/theclifmeister/terminatr/commit/158eb29299ec9fb6e408687a6f321c3836986d7c))
+* **cli:** tm server stop, restart and service are the human's ([#1162](https://github.com/theclifmeister/terminatr/issues/1162)) ([73fd91c](https://github.com/theclifmeister/terminatr/commit/73fd91ce0428fb6d6f1d52b2c2d438530de8fb27))
+* Done lists newest first on every surface ([#1149](https://github.com/theclifmeister/terminatr/issues/1149)) ([e50b284](https://github.com/theclifmeister/terminatr/commit/e50b284e76554be69f0caa9a7ac416e03ef37f98))
+* **guard:** a refusal without a verdict says what went wrong ([#1190](https://github.com/theclifmeister/terminatr/issues/1190)) ([8aa55a4](https://github.com/theclifmeister/terminatr/commit/8aa55a4d89ce78aa3bc153f2d349229378efbea5))
+* **guard:** stop refusing harmless commands after a cd or with a variable path ([#1194](https://github.com/theclifmeister/terminatr/issues/1194)) ([613edc7](https://github.com/theclifmeister/terminatr/commit/613edc75fb7fdf8e7d3fe6bf06863b3f7668e6b4))
+* **ios:** the rail stays on sessions, and every pushed screen has one Back ([#1161](https://github.com/theclifmeister/terminatr/issues/1161)) ([7374d58](https://github.com/theclifmeister/terminatr/commit/7374d5844675c6f42e673752ca155dadb5da0c78))
+* library thumbnails honour photo rotation and go when their project goes ([#1151](https://github.com/theclifmeister/terminatr/issues/1151)) ([3b45884](https://github.com/theclifmeister/terminatr/commit/3b45884b9a759b48df69681b7abe1c4955f46186))
+* **peer:** harden a paired server's file reads ([#1185](https://github.com/theclifmeister/terminatr/issues/1185)) ([5cb0cf8](https://github.com/theclifmeister/terminatr/commit/5cb0cf85298a5f400a2a1232baac817b76f255b6))
+* **tasks:** a done task doesn't reopen on a later status ([#1184](https://github.com/theclifmeister/terminatr/issues/1184)) ([d5d4933](https://github.com/theclifmeister/terminatr/commit/d5d4933035913b4d3bd79df142087ff6b1c36257))
+* **thread:** progress and idle stay right after a later prompt ([#1195](https://github.com/theclifmeister/terminatr/issues/1195)) ([081c577](https://github.com/theclifmeister/terminatr/commit/081c5779ae04074d884db85a107452b84d4b4b06))
+* **tui:** paired panes no longer take a same-named local project's current mark or mod commands ([#1158](https://github.com/theclifmeister/terminatr/issues/1158)) ([186d8dc](https://github.com/theclifmeister/terminatr/commit/186d8dc4c927ebfb9cc8b6104665b897c12376ee))
+* **tui:** the Tasks tab's filter reaches tasks in Done's closed folds ([#1180](https://github.com/theclifmeister/terminatr/issues/1180)) ([cd6f0f0](https://github.com/theclifmeister/terminatr/commit/cd6f0f05b4b64688c57da8f793bb61728e592545))
+
 ## [0.83.0](https://github.com/theclifmeister/terminatr/compare/v0.82.1...v0.83.0) (2026-11-06)
 
 
