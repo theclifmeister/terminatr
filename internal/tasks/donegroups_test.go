@@ -280,3 +280,65 @@ func TestStoreDone(t *testing.T) {
 		t.Errorf("with the archive: %v %v", all, err)
 	}
 }
+
+// TestPlaceReleases: a line goes at its time among its day's rows, whatever
+// a client has read; lines of one minute keep their order; a day with no
+// work has no heading, so its line tops the next older group and says its
+// day; older than all the work ends the oldest group.
+func TestPlaceReleases(t *testing.T) {
+	now := time.Date(2026, 11, 6, 12, 0, 0, 0, time.UTC)
+	at := func(s string) time.Time {
+		v, err := time.Parse(time.RFC3339, s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	done := NewestDoneFirst([]*Task{
+		{ID: 1, Status: Done, DoneAt: "2026-11-06T10:00:00Z"},
+		{ID: 2, Status: Done, DoneAt: "2026-11-06T08:00:00Z"},
+		{ID: 3, Status: Done, DoneAt: "2026-11-06"},
+		{ID: 4, Status: Done, DoneAt: "2026-11-04T09:00:00Z"},
+	})
+	lines := []ReleaseLine{
+		{Repo: "a", Version: "1.0", At: at("2026-10-01T09:00:00Z")}, // older than all the work
+		{Repo: "a", Version: "1.1", At: at("2026-11-05T09:00:00Z")}, // a day with no work
+		{Repo: "a", Version: "1.2", At: at("2026-11-06T09:00:00Z")},
+		{Repo: "b", Part: "api", Version: "2.0", At: at("2026-11-06T09:00:00Z")}, // the same minute
+		{Repo: "b", Version: "2.1", At: at("2026-11-06T11:00:00Z")},
+	}
+	groups := GroupDone(done, now, 0)
+	PlaceReleases(groups, done, lines, now)
+	type want struct {
+		label, time string
+		offset      int
+	}
+	check := func(g DoneGroup, ws ...want) {
+		t.Helper()
+		var got []want
+		for _, l := range g.Releases {
+			got = append(got, want{l.Label(), l.Time, l.Offset})
+		}
+		if !slices.Equal(got, ws) {
+			t.Errorf("%s: %+v, want %+v", g.Title, got, ws)
+		}
+	}
+	check(groups[0], want{"b 2.1", "11:00", 0}, want{"a 1.2", "09:00", 1}, want{"b api 2.0", "09:00", 1})
+	check(groups[1], want{"a 1.1", "5 Nov 09:00", 0}, want{"a 1.0", "1 Oct 09:00", 1})
+
+	// A release today with no work today says today.
+	yesterday := []*Task{{ID: 9, Status: Done, DoneAt: "2026-11-05T09:00:00Z"}}
+	g := GroupDone(yesterday, now, 0)
+	PlaceReleases(g, yesterday, []ReleaseLine{{Version: "3.0", At: at("2026-11-06T07:00:00Z")}}, now)
+	if l := g[0].Releases[0]; l.Offset != 0 || l.Time != "today 07:00" || l.Label() != "3.0" {
+		t.Errorf("a line of a day with no heading: %+v", l)
+	}
+	// Nothing to read a line against, and nothing dated: no lines.
+	PlaceReleases(nil, nil, lines, now)
+	undated := []*Task{{ID: 9, Status: Done}}
+	g = GroupDone(undated, now, 0)
+	PlaceReleases(g, undated, lines, now)
+	if len(g[0].Releases) != 0 {
+		t.Errorf("an undated group took lines: %+v", g[0])
+	}
+}

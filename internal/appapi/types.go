@@ -449,6 +449,9 @@ type Task struct {
 	// it. Both come from the after field.
 	WaitsFor []string `json:"waits_for,omitempty"`
 	Waiters  int      `json:"waiters,omitempty"`
+	// Repo is the repo a row of task.done names, with several repos and
+	// no filter (app API 68): none for a task with none.
+	Repo string `json:"repo,omitempty"`
 }
 
 // Step is one step of a task.
@@ -978,7 +981,7 @@ func projectOf(p server.SideProject) Project {
 
 func taskOf(t server.SideTask) Task {
 	out := Task{ID: t.ID, Ref: (&tasks.Task{ID: t.ID}).Ref(), Title: t.Title, Status: string(t.Status), Priority: string(t.Priority), Notes: t.Notes,
-		Thread: t.Thread, Owner: t.Owner, Created: t.Created, Updated: t.Updated, DoneAt: t.DoneAt, Archived: t.Archived, WaitsFor: t.WaitsFor, Waiters: t.Waiters}
+		Thread: t.Thread, Owner: t.Owner, Created: t.Created, Updated: t.Updated, DoneAt: t.DoneAt, Archived: t.Archived, WaitsFor: t.WaitsFor, Waiters: t.Waiters, Repo: t.Repo}
 	for _, s := range t.Steps {
 		out.Steps = append(out.Steps, Step{N: s.N, Text: s.Text, Done: s.Done})
 	}
@@ -1239,6 +1242,8 @@ type TaskDoneParams struct {
 	Offset   int    `json:"offset,omitempty"`
 	Limit    int    `json:"limit,omitempty"`
 	TZ       string `json:"tz,omitempty"`
+	// Repo narrows to one repo, by its name in Repos (app API 68).
+	Repo string `json:"repo,omitempty"`
 }
 
 // DoneTasks is task.done's result: done tasks, newest first since app API
@@ -1250,6 +1255,32 @@ type DoneTasks struct {
 	Groups []DoneGroup `json:"groups,omitempty"`
 	Total  int         `json:"total,omitempty"`
 	Next   int         `json:"next,omitempty"`
+	// Repos are what a filter offers, with several repos, on a groups read
+	// (app API 68).
+	Repos []DoneRepo `json:"repos,omitempty"`
+}
+
+// DoneRepo is one entry of a filter (app API 68): the repo's name, none
+// for the tasks with no repo, how many done tasks it has and how many
+// releases, which are never summed across repos.
+type DoneRepo struct {
+	Repo     string `json:"repo"`
+	Done     int    `json:"done,omitempty"`
+	Releases int    `json:"releases,omitempty"`
+}
+
+// DoneRelease is a release line among a group's rows (app API 68): when a
+// release happened, and nothing of which tasks went in. Label and Time are
+// tm's words; Offset is how many of the group's rows are newer, so it goes
+// before the row of that index.
+type DoneRelease struct {
+	Label  string `json:"label"`
+	Time   string `json:"time"`
+	Repo   string `json:"repo,omitempty"`
+	Part   string `json:"part,omitempty"`
+	Tag    string `json:"tag"`
+	At     string `json:"at"`
+	Offset int    `json:"offset,omitempty"`
 }
 
 // DoneGroup is one heading of Done (app API 57): kind day, week, month or
@@ -1266,6 +1297,8 @@ type DoneGroup struct {
 	Open     bool   `json:"open,omitempty"`
 	Tasks    []Task `json:"tasks,omitempty"`
 	Next     int    `json:"next,omitempty"`
+	// Releases are its release lines, newest first (app API 68).
+	Releases []DoneRelease `json:"releases,omitempty"`
 }
 
 func doneTasksOf(r server.TaskDone) DoneTasks {
@@ -1278,7 +1311,13 @@ func doneTasksOf(r server.TaskDone) DoneTasks {
 		for _, t := range g.Tasks {
 			d.Tasks = append(d.Tasks, taskOf(t))
 		}
+		for _, l := range g.Releases {
+			d.Releases = append(d.Releases, DoneRelease(l))
+		}
 		out.Groups = append(out.Groups, d)
+	}
+	for _, r := range r.Repos {
+		out.Repos = append(out.Repos, DoneRepo(r))
 	}
 	return out
 }

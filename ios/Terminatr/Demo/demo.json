@@ -2781,7 +2781,7 @@
   }
  },
  "hello": {
-  "app_api": 65,
+  "app_api": 68,
   "build": "demo",
   "capabilities": [
    "read",

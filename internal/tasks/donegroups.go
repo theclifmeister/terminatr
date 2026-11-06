@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -41,6 +42,101 @@ type DoneGroup struct {
 	Open     bool
 	Tasks    []*Task
 	Next     int
+	// Releases are the release lines among its rows, newest first
+	// (PlaceReleases).
+	Releases []ReleaseLine
+}
+
+// ReleaseLine is a release's line in Done (design board-library, B4): it
+// marks when, and says nothing of which tasks went in. Repo is "" where
+// the repo goes without saying. Time is At in words, as its group's
+// heading leaves it to say. Offset is how many of the group's rows are
+// newer: the line goes before the row of that index, whatever part of
+// them a client has read.
+type ReleaseLine struct {
+	Repo    string
+	Part    string
+	Version string
+	Tag     string
+	At      time.Time
+	Time    string
+	Offset  int
+}
+
+// Label is what the line calls the release: "site 2.4.0", "api 1.2", "0.82.1".
+func (l ReleaseLine) Label() string {
+	return strings.Join(slices.DeleteFunc([]string{l.Repo, l.Part, l.Version}, func(s string) bool { return s == "" }), " ")
+}
+
+// PlaceReleases puts lines into groups, Done's headings of done, at each
+// one's time as of now: among the rows of the group whose days hold it. A
+// day with no work has no heading, so a line of such a day goes at the top
+// of the next older group and says its day, and one older than all the work
+// ends the oldest group. What nothing dates has no time to put a line by,
+// and with no dated group there is nowhere to put one. Lines of one time
+// keep the order they came in.
+func PlaceReleases(groups []DoneGroup, done []*Task, lines []ReleaseLine, now time.Time) {
+	loc := now.Location()
+	dated := slices.IndexFunc(groups, func(g DoneGroup) bool { return g.Kind == DoneUndatedGroup })
+	if dated < 0 {
+		dated = len(groups)
+	}
+	if dated == 0 {
+		return
+	}
+	lines = slices.Clone(lines)
+	slices.SortStableFunc(lines, func(a, b ReleaseLine) int { return b.At.Compare(a.At) })
+	rows := make([][]*Task, dated)
+	for _, l := range lines {
+		day := l.At.In(loc).Format(time.DateOnly)
+		i := slices.IndexFunc(groups[:dated], func(g DoneGroup) bool { return g.From <= day })
+		g := dated - 1
+		if i >= 0 {
+			g = i
+		}
+		if rows[g] == nil {
+			rows[g], _, _ = PageDone(done, loc, groups[g].From, groups[g].To, 0, 0)
+		}
+		switch {
+		case day > groups[g].To:
+			l.Offset = 0
+		case day < groups[g].From:
+			l.Offset = len(rows[g])
+		default:
+			l.Offset = newerThan(rows[g], l.At)
+		}
+		l.Time = lineTime(l.At.In(loc), groups[g], now)
+		groups[g].Releases = append(groups[g].Releases, l)
+	}
+}
+
+// newerThan is how many of rows, newest first, finished after at, up to the
+// first that didn't. A row with only a day lists after that day's timed
+// rows (NewestDoneFirst), so a line goes before it.
+func newerThan(rows []*Task, at time.Time) int {
+	for i, t := range rows {
+		when, err := time.Parse(time.RFC3339, t.DoneKey())
+		if err != nil || !when.After(at) {
+			return i
+		}
+	}
+	return len(rows)
+}
+
+// lineTime is a line's time in words: the time alone under its own day's
+// heading, with its day anywhere else.
+func lineTime(at time.Time, g DoneGroup, now time.Time) string {
+	day := at.Format(time.DateOnly)
+	if g.Kind == DoneDayGroup && g.From == day {
+		return at.Format("15:04")
+	}
+	if day == now.Format(time.DateOnly) {
+		return "today " + at.Format("15:04")
+	}
+	if at.Year() != now.Year() {
+		return at.Format("2 Jan 2006 15:04")
+	}
+	return at.Format("2 Jan 15:04")
 }
 
 // Done are the store's done tasks, newest first (NewestDoneFirst): the

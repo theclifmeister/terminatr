@@ -16,7 +16,11 @@
 // its row is listed. Shown with b, Done is by day: the newest 7 days with
 // work open (at most 30 rows), older work folded by week, then by month
 // (tasks.done), and enter on a heading opens or folds it, on "… more" reads
-// on. The mod draws what tm groups, so an empty week has no heading.
+// on. The mod draws what tm groups, so an empty week has no heading. Among
+// Done's rows, a line at each release's time (mod API 1.22): when it
+// happened, and nothing of which tasks went in; none without tags, and
+// nothing says so. With several repos each row and line names its repo and
+// g narrows Done to one, the tasks with none too.
 import type { TM } from "./types/tm";
 declare const $: TM;
 
@@ -60,6 +64,9 @@ interface Tab {
   rows: Map<string, Fold>;
   toggled: Set<string>;
   reveal: string;
+  // What g steps through after all repos, and the repo it shows, "" for all.
+  repos: TM.DoneRepo[];
+  repo: string;
 }
 
 // Fold is the rows read of a group that opened.
@@ -159,9 +166,10 @@ function row(project: string, t: TM.Task, prio: boolean, timeOnly = false): TM.V
   if (waits) rest.push({ text: (rest.length > 0 ? "  " : "") + waits, role: "faint" });
   const more = [t.steps_total > 0 ? `${t.steps_done}/${t.steps_total}` : "", t.thread ?? ""].filter((s) => s !== "").join(" ");
   if (more) rest.push({ text: (rest.length > 0 ? "  " : "") + more, role: "faint" });
+  const title: TM.Span[] = t.repo ? [{ text: t.repo + " ", role: "faint" }, { text: t.title }] : [{ text: t.title }];
   const r: Record<string, TM.Value> = {
     id: t.id,
-    cells: [[{ text: t.id }], ...(prio ? [t.status === "done" ? [] : priority(t.priority)] : []), [{ text: t.title }], status(t.status, timeOnly ? timeOf(t.done_label) : t.done_label), rest] as TM.Value,
+    cells: [[{ text: t.id }], ...(prio ? [t.status === "done" ? [] : priority(t.priority)] : []), title, status(t.status, timeOnly ? timeOf(t.done_label) : t.done_label), rest] as TM.Value,
     actions: actions(project, t) as TM.Value,
   };
   // The selected task's steps, under it, unless it is done or dropped.
@@ -215,16 +223,39 @@ function foldRow(t: Tab, g: TM.DoneGroup): TM.Value {
   return { id: "f:" + key(g), spans: [{ text: g.title, role: isOpen(t, g) ? undefined : "faint" }, { text: ` · ${g.count}${mark}`, role: "faint" }] };
 }
 
-// doneRows are Done by day: each group's heading, an open one's rows and,
-// while it has more to read, a row that reads them.
+// lineRow is a release's line, a rule the cursor passes over.
+function lineRow(g: TM.DoneGroup, i: number): TM.Value {
+  const l = (g.releases ?? [])[i];
+  return { id: `r:${key(g)}:${i}`, head: true, tight: true, spans: [{ text: "── ", role: "faint" }, { text: l.label, role: "accent" }, { text: ` released ${l.time}`, role: "faint" }] };
+}
+
+// doneWords are what Done's heading says after its count: which repo shows
+// and g, while there is a repo to narrow to.
+function doneWords(t: Tab): string {
+  if (t.repos.length === 0) return "newest first   b hides   ⏎ opens";
+  if (t.repo === "") return "newest first   g all repos   b hides   ⏎ opens";
+  const n = t.repos.find((r) => r.repo === t.repo)?.releases ?? 0;
+  const only = t.repo === "none" ? "only tasks with no repo" : `only ${t.repo}`;
+  return `${only}${n > 0 ? `, ${n} release${n === 1 ? "" : "s"}` : ""}   g next repo   b hides   ⏎ opens`;
+}
+
+// doneRows are Done by day: each group's heading, an open one's rows with
+// the release lines at their times and, while it has more to read, a row
+// that reads them.
 function doneRows(project: string, t: Tab, prio: boolean): TM.Value[] {
-  const rows: TM.Value[] = [{ id: "g:done", head: true, spans: [{ text: `DONE · ${t.total}`, role: "head" }, { text: "  newest first   b hides   ⏎ opens", role: "faint" }] }];
+  const rows: TM.Value[] = [{ id: "g:done", head: true, spans: [{ text: `DONE · ${t.total}`, role: "head" }, { text: "  " + doneWords(t), role: "faint" }] }];
   for (const g of t.groups) {
     rows.push(foldRow(t, g));
     if (!isOpen(t, g)) continue;
     const f = t.rows.get(key(g));
     if (!f) continue;
-    for (const task of f.tasks) rows.push(row(project, task, prio, g.kind === "day"));
+    const lines = g.releases ?? [];
+    let l = 0;
+    f.tasks.forEach((task, i) => {
+      for (; l < lines.length && lines[l].offset <= i; l++) rows.push(lineRow(g, l));
+      rows.push(row(project, task, prio, g.kind === "day"));
+    });
+    for (; l < lines.length && lines[l].offset <= f.tasks.length; l++) rows.push(lineRow(g, l));
     if (f.next > 0) rows.push({ id: "m:" + key(g), spans: [{ text: `  … ${g.count - f.tasks.length} more`, role: "faint" }] });
   }
   return rows;
@@ -254,7 +285,8 @@ function tree(project: string, t: Tab): TM.Widget {
   const list = shown(t);
   // The priority column, only while a listed task shows one.
   const prio = list.some((x) => !!x.priority && x.status !== "done");
-  const days = byDay(t) && t.groups.length > 0;
+  // A repo with no done tasks keeps its heading, and g the way out of it.
+  const days = byDay(t) && (t.groups.length > 0 || t.repo !== "");
   for (const task of list) {
     const g = groupOf(task.status);
     if (g !== group) {
@@ -295,11 +327,27 @@ function tree(project: string, t: Tab): TM.Widget {
   const keys: { key: string; label: string }[] = t.doneAll || done + dropped > 0 ? [{ key: "b", label: t.doneAll ? "hide done" : "done" }] : [];
   // enter is the core's on a task's row; on a heading of Done it is this.
   if (days) keys.push({ key: "enter", label: "open or fold" });
+  // g's label says what the next press lists.
+  if (days && t.repos.length > 0) {
+    const after = nextRepo(t);
+    keys.push({ key: "g", label: after === "" ? "all repos" : after === "none" ? "no repo only" : `${after} only` });
+  }
   // p's label says what the next press lists.
   const next = PRIOS[(PRIOS.indexOf(t.prio) + 1) % PRIOS.length];
   keys.push({ key: "p", label: next === "" ? "all priorities" : next === "none" ? "no priority only" : `${next} only` });
   children.push({ kind: "keys", id: "keys", keys, actions: [{ id: "task.new", target: { project } }] });
   return { kind: "stack", children };
+}
+
+// nextRepo is the repo g shows next: all, then each in tm's order.
+function nextRepo(t: Tab): string {
+  const names = ["", ...t.repos.map((r) => r.repo)];
+  return names[(names.indexOf(t.repo) + 1) % names.length];
+}
+
+// repoOption is a read's repo, left out for all.
+function repoOption(t: Tab): { repo?: string } {
+  return t.repo ? { repo: t.repo } : {};
 }
 
 async function load(project: string, t: Tab): Promise<void> {
@@ -321,7 +369,13 @@ async function load(project: string, t: Tab): Promise<void> {
 // holds archived tasks. Nothing is read while Done is folded.
 async function loadDone(project: string, t: Tab): Promise<void> {
   if (!byDay(t)) return;
-  const res = await $.tasks.done(project, { groups: true, reveal: t.reveal });
+  const res = await $.tasks.done(project, { groups: true, reveal: t.reveal, ...repoOption(t) });
+  t.repos = res.repos ?? [];
+  // The repo it showed left the project: all of them again.
+  if (t.repo && !t.repos.some((r) => r.repo === t.repo)) {
+    t.repo = "";
+    return loadDone(project, t);
+  }
   t.groups = res.groups;
   t.total = res.total;
   const was = t.rows;
@@ -332,14 +386,14 @@ async function loadDone(project: string, t: Tab): Promise<void> {
     if (g.open && read <= (g.tasks ?? []).length) {
       t.rows.set(key(g), { tasks: g.tasks ?? [], next: g.next });
     } else {
-      t.rows.set(key(g), await readFold(project, g, 0, Math.max(read, PAGE)));
+      t.rows.set(key(g), await readFold(project, t, g, 0, Math.max(read, PAGE)));
     }
   }
 }
 
 // readFold reads limit of g's rows from offset.
-async function readFold(project: string, g: TM.DoneGroup, offset: number, limit: number): Promise<Fold> {
-  const res = await $.tasks.done(project, { from: g.from, to: g.to, archived: g.archived > 0, offset, limit });
+async function readFold(project: string, t: Tab, g: TM.DoneGroup, offset: number, limit: number): Promise<Fold> {
+  const res = await $.tasks.done(project, { from: g.from, to: g.to, archived: g.archived > 0, offset, limit, ...repoOption(t) });
   return { tasks: res.tasks, next: res.next };
 }
 
@@ -357,12 +411,12 @@ async function press(project: string, t: Tab, row: string): Promise<boolean> {
       if (t.toggled.has(k)) t.toggled.delete(k);
       else t.toggled.add(k);
       if (isOpen(t, g) && !t.rows.has(k)) {
-        t.rows.set(k, g.open ? { tasks: g.tasks ?? [], next: g.next } : await readFold(project, g, 0, PAGE));
+        t.rows.set(k, g.open ? { tasks: g.tasks ?? [], next: g.next } : await readFold(project, t, g, 0, PAGE));
       }
     } else {
       const f = t.rows.get(k);
       if (f && f.next > 0) {
-        const more = await readFold(project, g, f.next, PAGE);
+        const more = await readFold(project, t, g, f.next, PAGE);
         t.rows.set(k, { tasks: [...f.tasks, ...more.tasks], next: more.next });
       }
     }
@@ -394,12 +448,13 @@ async function refresh(project: string | undefined): Promise<void> {
 // done or dropped, those are listed, so its row is there for the cursor.
 $.on("view.opened", async (e) => {
   if (e.view !== VIEW || !e.project) return;
-  const t: Tab = tabs.get(e.project) ?? { tasks: [], doneAll: false, prio: "", error: "", groups: [], total: 0, rows: new Map(), toggled: new Set(), reveal: "" };
+  const t: Tab = tabs.get(e.project) ?? { tasks: [], doneAll: false, prio: "", error: "", groups: [], total: 0, rows: new Map(), toggled: new Set(), reveal: "", repos: [], repo: "" };
   tabs.set(e.project, t);
   await load(e.project, t);
   if (e.task && t.tasks.some((x) => x.id === e.task && closed(groupOf(x.status)))) {
     t.doneAll = true;
     t.reveal = e.task;
+    t.repo = "";
     await load(e.project, t);
   }
   await publish(e.project, t);
@@ -425,9 +480,13 @@ $.on("ui.key", async (e) => {
     if (await press(project, t, e.row ?? "")) await publish(project, t);
     return;
   }
-  if (e.key !== "b" && e.key !== "p") return;
+  if (e.key !== "b" && e.key !== "p" && e.key !== "g") return;
   if (e.key === "b") t.doneAll = !t.doneAll;
-  else t.prio = PRIOS[(PRIOS.indexOf(t.prio) + 1) % PRIOS.length];
+  else if (e.key === "g") {
+    // Rows read of one repo say nothing of another's.
+    t.repo = nextRepo(t);
+    t.rows = new Map();
+  } else t.prio = PRIOS[(PRIOS.indexOf(t.prio) + 1) % PRIOS.length];
   await load(project, t);
   await publish(project, t);
 });
