@@ -274,7 +274,7 @@ func TestCopies(t *testing.T) {
 		// user as what answers them (checked below); the clock's
 		// offset as the sessions' times.
 		".Peers[].Watch", ".Peers[].Popup",
-		".Peers[].Version", ".Peers[].RTT", ".Peers[].Listed", ".Peers[].Shares",
+		".Peers[].Listed", ".Peers[].Shares",
 		// Whether the paired server takes program messages: the TUI's
 		// program members popup's; program.get says a member there is
 		// dormant.
@@ -701,14 +701,14 @@ func TestSafe(t *testing.T) {
 // don't.
 func TestPeerListSessions(t *testing.T) {
 	created := time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)
-	l := peerListOf(proto.PeerList{Peers: []proto.PeerMirror{{Alias: "mini", Pane: true, Panes: proto.PanesView, Offset: 2000,
+	l := peerListOf(proto.PeerList{Peers: []proto.PeerMirror{{Alias: "mini", Pane: true, Panes: proto.PanesView, Offset: 2000, Version: "0.82.1", RTT: 38,
 		Projects: []proto.PeerMirrorProject{{PeerProject: proto.PeerProject{Project: "demo"}, Sessions: []proto.PeerSession{
-			{ID: "s-1", Role: proto.RoleCoordinator, Project: "demo", Created: created},
+			{ID: "s-1", Role: proto.RoleCoordinator, Project: "demo", Created: created, TurnSince: created},
 			{ID: "s-2", Role: proto.RoleThread, Project: "demo", Thread: "t-0001", Asking: true},
 			{ID: "s-3", Role: "shell", Project: "demo"},
 		}}}}}})
 	p := l.Peers[0]
-	if !p.Pane || p.Panes != proto.PanesView {
+	if !p.Pane || p.Panes != proto.PanesView || p.Version != "0.82.1" || p.RTT != 38 {
 		t.Fatalf("peer %+v", p)
 	}
 	ss := p.Projects[0].Sessions
@@ -717,6 +717,10 @@ func TestPeerListSessions(t *testing.T) {
 	}
 	if want := created.Add(-2 * time.Second); !ss[0].Created.Equal(want) {
 		t.Fatalf("created %v, want %v", ss[0].Created, want)
+	}
+	// A turn's start on this clock; none stays none, not the offset's.
+	if want := created.Add(-2 * time.Second); !ss[0].TurnSince.Equal(want) || !ss[1].TurnSince.IsZero() {
+		t.Fatalf("turn since %v and %v, want %v and none", ss[0].TurnSince, ss[1].TurnSince, want)
 	}
 	if w := p.Projects[0].Watched; w == nil || len(w) != 0 {
 		t.Fatalf("watched %+v before a watch", w)

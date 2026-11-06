@@ -35,6 +35,10 @@ final class AppModel {
     private(set) var sessions: [AppAPI.Session] = []
     private(set) var notices: [AppAPI.Notice] = []
     private(set) var peers: [AppAPI.Peer] = []
+    /// Each paired server's latest ping, on its own: a ping alone doesn't
+    /// change peer.list's gen, and only the status bar's menu reads it, so
+    /// the sidebar doesn't draw again for it.
+    private(set) var peerRTT: [String: Double] = [:]
     /// [ui] needs_first, as the last session list said: the sidebar
     /// lists the projects that need the user first, as the TUI's.
     private(set) var needsFirst = false
@@ -107,6 +111,12 @@ final class AppModel {
     private var projectTabsShown: [Selection: ProjectTab] = [:]
     /// The sidebar's Pair a server: its sheet, shown.
     var pairServer = false
+    /// The server the sidebar should scroll to, each time anew.
+    struct ServerReveal: Equatable {
+        var key = ""
+        var n = 0
+    }
+    var serverReveal = ServerReveal()
     /// Bumped by ⌘L: the shown composer takes the focus.
     private(set) var composerFocus = 0
     /// Text the coordinator's composer of a project takes as it shows,
@@ -420,6 +430,8 @@ final class AppModel {
                 changed()
                 return
             }
+            let rtt = Dictionary(l.peers.map { ($0.alias, $0.rttMs) }, uniquingKeysWith: { a, _ in a })
+            if rtt != peerRTT { peerRTT = rtt }
             if l.gen != gen || !loaded.peers {
                 gen = l.gen
                 peers = l.peers
@@ -715,6 +727,19 @@ final class AppModel {
         if let s = Selection.route(project: project, session: session, projects: projects, sessions: sessions, peers: peers, programs: programs) {
             nav.select(s)
         }
+        showWindow?()
+    }
+
+    /// The status bar's server: unfolds it in the sidebar, scrolled to,
+    /// and shows its first project unless it shows something of it already.
+    func go(toServer alias: String) {
+        nav.collapsed.remove(Navigation.sectionKey(server: alias))
+        filter = ""
+        sidebarShown = true
+        if let s = ServerList.landing(alias, shown: nav.selection, entries: entries, peers: peers) {
+            nav.select(s)
+        }
+        serverReveal = ServerReveal(key: Navigation.sectionKey(server: alias), n: serverReveal.n + 1)
         showWindow?()
     }
 
