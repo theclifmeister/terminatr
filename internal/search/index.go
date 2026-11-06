@@ -29,6 +29,7 @@ import (
 	"io/fs"
 	"math"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -941,6 +942,12 @@ func readText(dir string, c Chunk) (string, error) {
 	case c.Path == "TASKS.md" || c.Path == "tasks/ARCHIVE.md":
 		file = fileTasks // read up to MaxArchive, as the walk did
 	}
+	if c.Member == "" && c.Kind == KindLibrary {
+		// A library file found by its name: the name is the text.
+		if fi, err := os.Lstat(filepath.Join(dir, filepath.FromSlash(c.Path))); err == nil && (!libraryFile(c.Path) || fi.Size() > MaxFile) {
+			return path.Base(c.Path), nil
+		}
+	}
 	data, err := readSource(dir, source{Rel: c.Path, File: file})
 	if err != nil {
 		return "", err
@@ -951,6 +958,9 @@ func readText(dir string, c Chunk) (string, error) {
 	ms, err := untar(data)
 	for _, m := range ms {
 		if m.name == c.Member {
+			if m.big || c.Kind == KindLibrary && !libraryFile(m.name) {
+				return strings.TrimPrefix(strings.TrimPrefix(m.name[strings.IndexByte(m.name+"/", '/')+1:], "library/"), "/"), nil
+			}
 			return textOf(m.name, m.data), nil
 		}
 	}
