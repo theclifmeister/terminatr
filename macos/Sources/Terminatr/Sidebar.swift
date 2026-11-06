@@ -34,16 +34,14 @@ struct Sidebar: View {
     @State private var typing = TypeSelect()
     /// The rows have the keys from launch, not the filter field.
     @FocusState private var listFocused: Bool
-    /// ⌥⌘F opened the filter; it stays while it has words.
-    @State private var filterOpen = false
 
     var body: some View {
         GeometryReader { g in
             VStack(spacing: 0) {
                 head
-                if filterOpen || filtering {
+                if app.filterOpen || filtering {
                     FilterField {
-                        filterOpen = false
+                        app.filterOpen = false
                         listFocused = true
                     }
                     .padding(.horizontal, 8)
@@ -58,7 +56,7 @@ struct Sidebar: View {
                     .focusable()
                     .focusEffectDisabled()
                     .focused($listFocused)
-                    .onAppear { listFocused = true }
+                    .onAppear { if !app.filterOpen { listFocused = true } }
                     .onKeyPress(keys: [.upArrow, .downArrow]) { press in
                         step(press.key == .downArrow ? 1 : -1) ? .handled : .ignored
                     }
@@ -85,7 +83,8 @@ struct Sidebar: View {
             }
         }
         .background(theme.chrome)
-        .onChange(of: app.filterFocus) { filterOpen = true }
+        // Shut with the window or the hidden sidebar, as a new one starts.
+        .onDisappear { app.filterOpen = false }
         .onChange(of: sections.ask?.id) {
             if sections.ask?.section == .sidebar { listFocused = true }
         }
@@ -1007,8 +1006,15 @@ private struct FilterField: View {
         .background(theme.pane, in: RoundedRectangle(cornerRadius: 6))
         .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(focused ? theme.action.opacity(0.7) : theme.line, lineWidth: 1))
         .help("Filter the sidebar (⌥⌘F)")
-        .onChange(of: app.filterFocus) { focused = true }
-        .onAppear { focused = true }
+        .onChange(of: app.filterFocus) { take() }
+        .onAppear { take() }
+    }
+
+    /// A pass later, once what had the keys has gone.
+    private func take() {
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated { focused = true }
+        }
     }
 }
 
