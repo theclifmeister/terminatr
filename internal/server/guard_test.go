@@ -580,6 +580,38 @@ func TestGuardAllowsExact(t *testing.T) {
 
 // TestRealTarget: links are followed, a .. after one leaves its target,
 // and what doesn't exist is joined on.
+// TestSourceText: the guard reads a regular file a source may run, its
+// links followed, if it fits in a command line; nothing else.
+func TestSourceText(t *testing.T) {
+	dir := t.TempDir()
+	env := filepath.Join(dir, "env.sh")
+	if err := os.WriteFile(env, []byte("export A=1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "link.sh")
+	if err := os.Symlink(env, link); err != nil {
+		t.Skip(err)
+	}
+	for _, p := range []string{env, link} {
+		if got, ok := sourceText(p); !ok || got != "export A=1\n" {
+			t.Errorf("%s: got %q, %t", p, got, ok)
+		}
+	}
+	big := filepath.Join(dir, "big.sh")
+	if err := os.WriteFile(big, make([]byte, guard.MaxCommand+1), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	bin := filepath.Join(dir, "bin")
+	if err := os.WriteFile(bin, []byte{0xff, 0xfe}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{dir, big, bin, filepath.Join(dir, "none")} {
+		if got, ok := sourceText(p); ok {
+			t.Errorf("%s: read %d bytes", p, len(got))
+		}
+	}
+}
+
 func TestRealTarget(t *testing.T) {
 	dir, _ := filepath.EvalSymlinks(t.TempDir())
 	for _, d := range []string{"a/b", "c"} {

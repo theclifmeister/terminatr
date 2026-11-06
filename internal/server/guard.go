@@ -19,6 +19,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/caller"
@@ -577,6 +578,23 @@ func regularFile(p string) bool {
 	return err == nil && fi.Mode().IsRegular()
 }
 
+// sourceText is the text of the regular file p (absolute, not cleaned)
+// lands on, its links followed (realTarget), if it fits in a command line
+// the guard reads (guard.MaxCommand). A file it can't read is no text: a
+// source of it stays code the guard can't see.
+func sourceText(p string) (string, bool) {
+	real := realTarget(p)
+	fi, err := os.Stat(real)
+	if err != nil || !fi.Mode().IsRegular() || fi.Size() > guard.MaxCommand {
+		return "", false
+	}
+	b, err := os.ReadFile(real)
+	if err != nil || !utf8.Valid(b) {
+		return "", false
+	}
+	return string(b), true
+}
+
 // realTarget is where a write to p (absolute, not cleaned) lands: p with
 // the symlinks and junctions of its longest existing prefix followed, a
 // .. after one leaving the link's target as the file system does; what
@@ -660,7 +678,7 @@ func (s *Server) hookGuardOf(id string) func(string, map[string]any) *guard.Deni
 			go func() {
 				defer func() { <-busy }()
 				rules := s.hookRules(rec)
-				rules.Resolve, rules.File = realTarget, regularFile
+				rules.Resolve, rules.File, rules.Read = realTarget, regularFile, sourceText
 				rules.Deadline = deadline
 				done <- judge(rules, tool, input)
 			}()
