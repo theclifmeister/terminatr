@@ -55,11 +55,13 @@ private struct LibraryFixture: Decodable {
         var repo: String?
         var peer: String?
         var message: String?
+        var project: String?
+        var server: String?
         var name: String
 
         var file: AppAPI.LibraryFile {
             AppAPI.LibraryFile(thread: thread ?? "", task: task ?? "", title: title, repo: repo ?? "", state: "running", name: name, size: 1,
-                               time: Date(timeIntervalSince1970: 0), peer: peer ?? "", message: message ?? "")
+                               time: Date(timeIntervalSince1970: 0), peer: peer ?? "", message: message ?? "", project: project ?? "", server: server ?? "")
         }
     }
 
@@ -94,10 +96,16 @@ private struct LibraryFixture: Decodable {
         let shows: Bool
     }
 
+    struct Order: Decodable {
+        let library: String
+        let names: [String]
+    }
+
     let kinds: [String: String]
     let libraries: [String: [File]]
     let cases: [Case]
     let filter: [Filter]
+    let order: [Order]
 }
 
 /// The file the TUI's test reads too (internal/tui/libraryfilter_test.go):
@@ -121,6 +129,10 @@ private struct LibraryFixture: Decodable {
         let chips = LibraryPage.chips(files, query: c.query, kind: kind(c.kind))
             .map { LibraryFixture.Chip(kind: $0.kind?.rawValue.lowercased() ?? "", count: $0.count) }
         #expect(chips == c.chips, "\(c.library), \(c.query), \(c.kind)")
+    }
+    for c in fx.order {
+        let names = LibraryPage.groups((fx.libraries[c.library] ?? []).map(\.file)).flatMap { $0.files.map(\.name) }
+        #expect(names == c.names, "order of \(c.library)")
     }
     for c in fx.filter {
         let files = (0..<c.files).map { lib("t-0001", "\($0).md", 1) }
@@ -271,4 +283,31 @@ private actor Thumbs {
     #expect(peer == nil)
     let names = await t.names
     #expect(names == ["corrupt.png", "corrupt.png"])
+}
+
+@Test func aSeatsOwnFilesHeadTheirGroup() {
+    func seat(_ name: String, _ title: String, project: String = "") -> AppAPI.LibraryFile {
+        AppAPI.LibraryFile(thread: LibraryPage.seatID, title: title, state: "kept", name: name, size: 1, time: Date(timeIntervalSince1970: 1), project: project)
+    }
+    let own = LibraryPage.groups([seat("a.md", "Coordinator's files"), seat("b.md", "Coordinator's files")])
+    #expect(own.first?.title == "Coordinator's files")
+    #expect(own.first?.detail == "2 files")
+    let member = seat("c.md", "Coordinator's files", project: "web")
+    let sections = LibraryPage.sections([seat("p.md", "Director's files"), member])
+    #expect(sections.map(\.title) == ["", "web"])
+    #expect(sections[1].groups[0].id == "/web/seat")
+    #expect(OpenedFile(.attached(member)).id == "a:/web/seat/c.md")
+    #expect(OpenedFile(.attached(seat("c.md", "Director's files"))).id == "a:seat/c.md")
+}
+
+@Test func aProgramLooksInItsOwnFormOnly() async {
+    let c = Chunks(Data("hi".utf8), chunk: 10)
+    let f = AppAPI.LibraryFile(thread: LibraryPage.seatID, title: "Director's files", state: "kept", name: "p.md", size: 2, time: Date())
+    guard case .data(let d, _) = await LibraryPage.read({ p in await c.read(p) }, project: "", program: "acme", file: f) else {
+        Issue.record("no data")
+        return
+    }
+    #expect(String(decoding: d, as: UTF8.self) == "hi")
+    let p = await c.params.first
+    #expect(p?.program?.slug == "acme" && p?.project == "" && p?.id == LibraryPage.seatID)
 }

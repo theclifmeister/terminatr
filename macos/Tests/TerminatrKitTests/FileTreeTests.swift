@@ -463,3 +463,11 @@ private func diff(_ status: String, hunks: [AppAPI.FilesHunk] = []) -> AppAPI.Fi
     d.tooBig = true
     #expect(FileChange.deleted("f", d)?.contains("too big") == true)
 }
+
+@Test func aProgramsFilesAreItsLibraryOnly() throws {
+    for selection in [Selection.program("acme"), .session(SessionRef(project: "acme", director: true))] {
+        #expect(FilesPlace.of(selection, sessionID: "s-1", threadDone: false, readsWorktree: true, hasLibrary: true) == nil)
+        let p = try #require(FilesPlace.of(selection, sessionID: "s-1", threadDone: false, readsWorktree: true, hasLibrary: true, readsProgramLibrary: true))
+        #expect(p.isProgram && p.project == "acme" && p.session == nil && p.mentions == nil && p.why == nil)
+    }
+}

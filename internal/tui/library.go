@@ -29,17 +29,35 @@ import (
 // kinds (libraryfilter.go). A file shows by name and size, never a path.
 
 // libraryOrder are the library's files grouped by thread (or linked
-// project), the group with the newest file first and each group's files
-// newest first.
+// project), the seat's own group first, then the group with the newest
+// file first and each group's files newest first. A program's list keeps
+// its projects in the order they came, each ordered so.
 func libraryOrder(files []thread.LibFile) []thread.LibFile {
 	var ids []string
 	by := map[string][]thread.LibFile{}
+	places := map[string]int{}
 	for _, f := range files { // newest first already
 		if _, ok := by[f.Group()]; !ok {
 			ids = append(ids, f.Group())
 		}
 		by[f.Group()] = append(by[f.Group()], f)
+		if _, ok := places[libPlace(f)]; !ok {
+			places[libPlace(f)] = len(places)
+		}
 	}
+	slices.SortStableFunc(ids, func(a, b string) int {
+		fa, fb := by[a][0], by[b][0]
+		if d := places[libPlace(fa)] - places[libPlace(fb)]; d != 0 {
+			return d
+		}
+		switch {
+		case fa.IsSeat() && !fb.IsSeat():
+			return -1
+		case fb.IsSeat() && !fa.IsSeat():
+			return 1
+		}
+		return 0
+	})
 	out := make([]thread.LibFile, 0, len(files))
 	for _, id := range ids {
 		out = append(out, by[id]...)
@@ -107,11 +125,17 @@ type libChipSpan struct {
 // libChipLines are the chips laid out on lines of w cells, the picked one
 // marked: every kind stays in reach at any width.
 func (pv *projectView) libChipLines(w int) []libChipLine {
-	chips := libChips(pv.library, pv.libFilter, pv.libPick)
+	return libChipLinesOf(pv.library, pv.libFilter, pv.libPick, w)
+}
+
+// libChipLinesOf are files' chips under the filter and the kind, laid out
+// on lines of w cells.
+func libChipLinesOf(files []thread.LibFile, query, kind string, w int) []libChipLine {
+	chips := libChips(files, query, kind)
 	if chips == nil {
 		return nil
 	}
-	pick := libPicked(pv.library, pv.libPick)
+	pick := libPicked(files, kind)
 	var out []libChipLine
 	cur := libChipLine{}
 	x := 0
@@ -200,14 +224,18 @@ func (pv *projectView) selLib() (thread.LibFile, bool) {
 
 // libGroup is the title line of a thread's files: task, title, thread
 // and the date of its newest file; of a linked project's, the project
-// and how many (n).
+// and how many (n); of a seat's own, whose they are and how many.
 func libGroup(f thread.LibFile, n, w int) string {
-	if f.Peer != "" {
+	if f.Peer != "" || f.IsSeat() {
 		rest := fmt.Sprintf(" · %d files", n)
 		if n == 1 {
 			rest = " · 1 file"
 		}
-		return th().Head.Render(ansi.Truncate("from "+f.Peer, max(w-ansi.StringWidth(rest), 8), "…")) + th().Faint.Render(rest)
+		head := "from " + f.Peer
+		if f.IsSeat() {
+			head = oneLine(f.Title)
+		}
+		return th().Head.Render(ansi.Truncate(head, max(w-ansi.StringWidth(rest), 8), "…")) + th().Faint.Render(rest)
 	}
 	rest := " · " + f.Thread + " · " + f.Time.Local().Format("2006-01-02")
 	if f.State == "archived" {
@@ -237,7 +265,7 @@ func (pv *projectView) libraryLines(w int) ([]string, int, []int) {
 		return []string{th().Faint.Render("loading…")}, -1, nil
 	}
 	if len(pv.library) == 0 {
-		return []string{th().Faint.Render("no files: a thread's report attaches them (tm report --attach)")}, -1, nil
+		return []string{th().Faint.Render("no files: a thread's report attaches them (tm report --attach), the coordinator keeps its own (tm library add)")}, -1, nil
 	}
 	files := pv.libFiles()
 	if len(files) == 0 {
@@ -301,7 +329,11 @@ func (pv *projectView) libraryKey(m *dash, k tea.KeyPressMsg) tea.Cmd {
 			})
 			break
 		}
-		m.confirm("Delete a library file", "Delete "+oneLine(f.Name)+" ("+sizeWords(f.Size)+") of thread "+f.Thread+"? It can't be brought back.", func() tea.Cmd {
+		whose := "thread " + f.Thread
+		if f.IsSeat() {
+			whose = "the coordinator's files"
+		}
+		m.confirm("Delete a library file", "Delete "+oneLine(f.Name)+" ("+sizeWords(f.Size)+") of "+whose+"? It can't be brought back.", func() tea.Cmd {
 			return m.libRemove(pv.slug, f.Thread, f.Name, "deleted "+oneLine(f.Name))
 		})
 	case "D":
@@ -315,8 +347,12 @@ func (pv *projectView) libraryKey(m *dash, k tea.KeyPressMsg) tea.Cmd {
 				n++
 			}
 		}
-		m.confirm("Delete a thread's library", fmt.Sprintf("Delete all %d library files of thread %s? They can't be brought back.", n, f.Thread), func() tea.Cmd {
-			return m.libRemove(pv.slug, f.Thread, "", fmt.Sprintf("deleted %d files of %s", n, f.Thread))
+		whose, short := "thread "+f.Thread, f.Thread
+		if f.IsSeat() {
+			whose, short = "the coordinator's files", "the coordinator's"
+		}
+		m.confirm("Delete a thread's library", fmt.Sprintf("Delete all %d library files of %s? They can't be brought back.", n, whose), func() tea.Cmd {
+			return m.libRemove(pv.slug, f.Thread, "", fmt.Sprintf("deleted %d files of %s", n, short))
 		})
 	}
 	return nil

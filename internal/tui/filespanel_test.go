@@ -82,6 +82,8 @@ func (f *fakeFiles) install(t *testing.T) {
 		case proto.FilesDiffParams:
 			f.diffed = append(f.diffed, p)
 			*res.(*proto.FilesDiffResult) = f.diffs[p.Path]
+		case proto.ProjectFilesParams:
+			res.(*proto.LibraryListResult).Files = nil
 		default:
 			t.Fatalf("method %s", method)
 		}
@@ -492,12 +494,12 @@ func TestFilesChangedClick(t *testing.T) {
 		return slices.IndexFunc(fv.rows(), func(r fileRow) bool { return r.id() == id })
 	}
 	c.mu.Lock()
-	c.filesClick(infoHit{kind: hitFileRow, task: at("internal")})
+	c.filesClick(infoHit{kind: hitFileRow, task: at("internal")}, 0)
 	if strings.Contains(infoText(c), "a.go") || !fv.shut["internal"] {
 		t.Fatalf("a click folded nothing:\n%s", infoText(c))
 	}
 	c.mu.Lock()
-	c.filesClick(infoHit{kind: hitFileRow, task: at("old/only.go")})
+	c.filesClick(infoHit{kind: hitFileRow, task: at("old/only.go")}, 0)
 	if fv.selPath != "old/only.go" {
 		t.Fatalf("a click selects: %q", fv.selPath)
 	}
@@ -557,10 +559,16 @@ func TestFilesNoFolder(t *testing.T) {
 	if c.info.files != nil || !strings.Contains(c.flash, "can't be browsed from here") || strings.Contains(c.flash, "\x1b") {
 		t.Fatalf("paired: %v %q", c.info.files, c.flash)
 	}
+	// A director has no folder, but has its Attached.
+	c.flash = ""
 	c.info.data = &infoData{slug: "prog", session: proto.SessionInfo{ID: "s-9"}, prog: &programInfo{}}
 	filesPress(c, "F")
-	if c.info.files != nil || !strings.Contains(c.flash, "director") {
-		t.Fatalf("director: %v %q", c.info.files, c.flash)
+	if fv := c.info.files; fv == nil || fv.program != "prog" || !fv.attached {
+		t.Fatalf("director: %+v %q", fv, c.flash)
+	}
+	filesPress(c, "a")
+	if !c.info.files.attached || !strings.Contains(c.flash, "no worktree") {
+		t.Fatalf("a on a director's: %+v %q", c.info.files, c.flash)
 	}
 }
 
@@ -1000,5 +1008,126 @@ func TestFilesRepoListMoves(t *testing.T) {
 	c.filesPoll()
 	if f.lists.Load() != lists {
 		t.Error("a poll with nothing changed listed the folder again")
+	}
+}
+
+// programFilesFake answers a program's library: the director's own, a
+// member here and one on a paired server, and reads each by the form it
+// is named by; calls says what was asked.
+func programFilesFake(t *testing.T) *[]any {
+	t.Helper()
+	at := time.Date(2026, 11, 5, 9, 0, 0, 0, time.UTC)
+	files := []proto.LibraryFile{
+		{Thread: "seat", Title: "Director's files", State: "kept", Name: "plan.md", Size: 5, Time: at},
+		{Thread: "seat", Title: "Coordinator's files", State: "kept", Name: "site.html", Size: 6, Time: at, Project: "web"},
+		{Thread: "t-0002", Task: "T5", Title: "Fix it", State: "running", Name: "shot.png", Size: 7, Time: at, Project: "web"},
+		{Thread: "t-0003", Task: "T6", Title: "Far work", State: "running", Name: "far.md", Size: 8, Time: at, Project: "far", Server: "mini"},
+	}
+	var calls []any
+	old, oldGo := filesCall, filesGo
+	filesGo = func(g func()) { g() }
+	filesCall = func(_ tmclient.Paths, method string, params, res any) error {
+		calls = append(calls, params)
+		switch p := params.(type) {
+		case proto.ProjectFilesParams:
+			if p.Program != "acme" || p.Project != "" {
+				t.Errorf("listed %+v", p)
+			}
+			*res.(*proto.LibraryListResult) = proto.LibraryListResult{Files: files, Note: "gone on away can't be read now"}
+		case proto.LibraryReadParams:
+			*res.(*proto.LibraryReadResult) = proto.LibraryReadResult{Name: p.Name, Size: 4, Data: []byte("text")}
+		case proto.PeerLibraryReadReadParams:
+			*res.(*proto.LibraryReadResult) = proto.LibraryReadResult{Name: p.Name, Size: 4, Data: []byte("text")}
+		case proto.LibraryThumbnailParams, proto.PeerLibraryThumbnailReadParams:
+			return proto.Errorf(proto.ErrNoThumbnail, "none")
+		default:
+			t.Fatalf("method %s: a director's view has no folder to list", method)
+		}
+		return nil
+	}
+	t.Cleanup(func() {
+		filesCall, filesGo = old, oldGo
+		filesKept.Store(nil)
+	})
+	return &calls
+}
+
+// TestProgramFilesView: beside a director F opens on Attached with no
+// Worktree tab and no folder asked for: its own files first, then each
+// member's under its project, with the note, the filter across all of them,
+// the kind chips by t and by a click, and esc letting both go. A file is read
+// by the form it is named by: the director's by program, a member's by
+// project, a paired member's over the link.
+func TestProgramFilesView(t *testing.T) {
+	calls := programFilesFake(t)
+	fv := &filesView{session: "s-1", slug: "acme", program: "acme", attached: true, open: map[string]bool{}, dirs: map[string][]proto.FileEntry{}}
+	fv.take(fetchFiles(tmclient.Paths{}, *fv, nil))
+	text := func() string {
+		lines, _ := filesLay(fv, 60, true)
+		return ansi.Strip(strings.Join(lines, "\n"))
+	}
+	got := text()
+	if strings.Contains(got, "Worktree") || !strings.Contains(got, "Attached") {
+		t.Fatalf("tabs:\n%s", got)
+	}
+	last := -1
+	for _, w := range []string{"gone on away", "Director's files", "plan.md", "\nweb ", "Coordinator's files", "site.html", "shot.png", "far on mini", "far.md"} {
+		i := strings.Index(got, w)
+		if i <= last {
+			t.Fatalf("%q out of order:\n%s", w, got)
+		}
+		last = i
+	}
+	if !strings.Contains(got, " all 4 ") || !strings.Contains(got, " images 1 ") {
+		t.Fatalf("no chips:\n%s", got)
+	}
+
+	fv.filter = "mini"
+	if rows := fv.rows(); len(rows) != 1 || rows[0].lib.Name != "far.md" {
+		t.Fatalf("filter by server: %+v", rows)
+	}
+	fv.filter = ""
+	fv.pick = "images"
+	if rows := fv.rows(); len(rows) != 1 || rows[0].lib.Name != "shot.png" {
+		t.Fatalf("by kind: %+v", rows)
+	}
+	fv.pick = ""
+
+	if tv := programFileViewer(tmclient.Paths{}, "acme", *fv.rows()[0].lib); tv.body != "text" {
+		t.Fatalf("the director's: %+v", tv)
+	}
+	if tv := programFileViewer(tmclient.Paths{}, "acme", *fv.rows()[3].lib); tv.body != "text" {
+		t.Fatalf("the paired member's: %+v", tv)
+	}
+	var sawProgram, sawPeer bool
+	for _, c := range *calls {
+		switch p := c.(type) {
+		case proto.LibraryReadParams:
+			sawProgram = sawProgram || p.Program == "acme" && p.ID == "seat" && p.Project == ""
+		case proto.PeerLibraryReadReadParams:
+			sawPeer = p.Alias == "mini" && p.Project == "far" && p.Thread == "t-0003"
+		}
+	}
+	if !sawProgram || !sawPeer {
+		t.Fatalf("read forms: %+v", *calls)
+	}
+}
+
+// TestCoordinatorAttachedOwnFirst: a coordinator's Attached lists its own
+// files above its threads', whichever is newer.
+func TestCoordinatorAttachedOwnFirst(t *testing.T) {
+	at := time.Date(2026, 11, 5, 9, 0, 0, 0, time.UTC)
+	fv := &filesView{attached: true, lib: []thread.LibFile{
+		{Thread: "t-0002", Task: "T5", Title: "Fix it", Name: "notes.md", Size: 3, Time: at},
+		{Thread: "seat", Title: "Coordinator's files", Name: "site.html", Size: 6, Time: at.Add(-time.Hour)},
+	}}
+	rows := fv.rows()
+	if len(rows) != 2 || rows[0].lib.Name != "site.html" {
+		t.Fatalf("rows %+v", rows)
+	}
+	lines, _ := filesLay(fv, 60, false)
+	got := ansi.Strip(strings.Join(lines, "\n"))
+	if !strings.Contains(got, "Coordinator's files · 1 file") || strings.Contains(got, "· seat") {
+		t.Fatalf("heading:\n%s", got)
 	}
 }

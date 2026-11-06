@@ -25,6 +25,17 @@
       {"thread": "t-0001", "task": "T1", "title": "Mine", "name": "mine.md"},
       {"title": "from studio/acme", "peer": "studio/acme", "message": "M-1", "name": "brief.pdf"}
     ],
+    "seated": [
+      {"thread": "t-0001", "task": "T1", "title": "New", "name": "new.md"},
+      {"thread": "seat", "title": "Coordinator's files", "name": "site.html"},
+      {"thread": "t-0002", "task": "T2", "title": "Old", "name": "old.md"}
+    ],
+    "program": [
+      {"thread": "seat", "title": "Director's files", "name": "plan.md"},
+      {"thread": "t-0001", "task": "T1", "title": "Web work", "name": "web.png", "project": "web"},
+      {"thread": "seat", "title": "Coordinator's files", "name": "web-site.html", "project": "web"},
+      {"thread": "t-0001", "task": "T1", "title": "Far work", "name": "far.pdf", "project": "far", "server": "mini"}
+    ],
     "none": [],
     "one": [{"thread": "t-0001", "task": "T1", "title": "Only", "name": "one.png"}],
     "notes": [
@@ -58,7 +69,16 @@
     {"library": "one", "query": "", "kind": "images", "names": ["one.png"], "chips": []},
     {"library": "notes", "query": "", "kind": "", "names": ["plan.md", "review.md", "more.txt"], "chips": []},
     {"library": "notes", "query": "", "kind": "notes", "names": ["plan.md", "review.md", "more.txt"], "chips": []},
-    {"library": "notes", "query": "", "kind": "images", "names": ["plan.md", "review.md", "more.txt"], "chips": []}
+    {"library": "notes", "query": "", "kind": "images", "names": ["plan.md", "review.md", "more.txt"], "chips": []},
+    {"library": "program", "query": "web", "kind": "", "names": ["web.png", "web-site.html"],
+     "chips": [["", 2], ["images", 1], ["pages", 1]]},
+    {"library": "program", "query": "mini", "kind": "", "names": ["far.pdf"], "chips": []},
+    {"library": "program", "query": "", "kind": "pages", "names": ["web-site.html", "far.pdf"],
+     "chips": [["", 4], ["images", 1], ["pages", 2], ["notes", 1]]}
+  ],
+  "order": [
+    {"library": "seated", "names": ["site.html", "new.md", "old.md"]},
+    {"library": "program", "names": ["plan.md", "web-site.html", "web.png", "far.pdf"]}
   ],
   "filter": [
     {"files": 0, "query": "", "shows": false},

@@ -135,6 +135,14 @@ public enum Compatibility: Equatable, Sendable {
             && hello.methods.contains(AppAPI.Methods.libraryRead.name) && (hello.server?.caps ?? []).contains("project-files")
     }
 
+    /// The app API with library.list's program form and "seat" files.
+    public static let programLibraryAPI = 55
+
+    /// Whether hello's tm lists a program's library: a director's Files view.
+    public static func readsProgramLibrary(_ hello: AppAPI.Hello) -> Bool {
+        hello.appApi >= programLibraryAPI && readsProjectFiles(hello)
+    }
+
     /// The app API that has library.thumbnail and peer.library-thumbnail:
     /// a Library's thumbnails need it.
     public static let thumbnailsAPI = 53
