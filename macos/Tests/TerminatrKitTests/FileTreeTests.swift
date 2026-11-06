@@ -297,3 +297,45 @@ private final class Chunks: @unchecked Sendable {
     let f = AppAPI.LibraryFile(thread: "t-1", title: "x", state: "open", name: "n.md", size: 1, time: Date())
     #expect(FileMention.text(.attached(f), root: "", relative: false) == "n.md (attached by t-1)")
 }
+
+/// A coordinator's file names its repo in every read, and is its own tab:
+/// two repos can hold the same path.
+@Test func anOpenedFileStaysOnItsRepo() async throws {
+    let e = AppAPI.FileEntry(name: "a.txt", path: "d/a.txt", kind: "file")
+    let first = OpenedFile(.worktree(e, ignored: false))
+    let second = OpenedFile(.worktree(e, ignored: false), repo: AppAPI.FilesRepoRef(path: "/r/two"))
+    #expect(first.id == "w:d/a.txt")
+    #expect(second.id != first.id)
+    var pane = PaneFiles()
+    pane.open(first)
+    pane.open(second)
+    #expect(pane.tabs.count == 2)
+}
+
+/// No repo chosen leaves the field out, so a bridge before app API 51,
+/// which decodes strictly, still answers; one chosen goes as its path.
+@Test func noRepoChosenIsLeftOutOfTheParams() throws {
+    let plain = try AppAPI.encoder().encode(AppAPI.FilesListParams(session: "s-1"))
+    #expect(!String(decoding: plain, as: UTF8.self).contains("repo"))
+    let read = try AppAPI.encoder().encode(AppAPI.FilesReadParams(session: "s-1", path: "a"))
+    #expect(!String(decoding: read, as: UTF8.self).contains("repo"))
+    let stamp = try AppAPI.encoder().encode(AppAPI.FilesStampParams(session: "s-1"))
+    #expect(!String(decoding: stamp, as: UTF8.self).contains("repo"))
+    let chosen = try AppAPI.encoder().encode(AppAPI.FilesListParams(session: "s-1", repo: AppAPI.FilesRepoRef(path: "/r/two")))
+    #expect(String(decoding: chosen, as: UTF8.self).contains(#""repo":{"path":"/r/two"}"#))
+}
+
+/// Every read of a chosen repo's file names that repo: the text, the bytes
+/// and the refresh's look at it.
+@Test func aReadNamesItsRepo() async {
+    let repo = AppAPI.FilesRepoRef(path: "/r/two")
+    let c = Chunks(Data("text".utf8))
+    _ = await WorktreeRead.body(c.fetch, session: "s", repo: repo, path: "f", ignored: false)
+    _ = await WorktreeRead.bytes(c.fetch, session: "s", repo: repo, path: "f", ignored: false)
+    _ = await WorktreeRead.stat(c.fetch, session: "s", repo: repo, path: "f", ignored: false)
+    #expect(!c.asked.isEmpty)
+    #expect(c.asked.allSatisfy { $0.repo == repo })
+    let plain = Chunks(Data("text".utf8))
+    _ = await WorktreeRead.body(plain.fetch, session: "s", path: "f", ignored: false)
+    #expect(plain.asked.allSatisfy { $0.repo == nil })
+}

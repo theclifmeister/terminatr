@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 50
+    public static let version = 51
 
     public struct AdoptRequestParams: Codable, Sendable, Hashable {
         public var id: String
@@ -790,13 +790,15 @@ public enum AppAPI {
 
     public struct FilesListParams: Codable, Sendable, Hashable {
         public var session: String
+        public var repo: FilesRepoRef?
         public var path: String
         public var ignored: Bool
         public var query: String
         public var changed: Bool
 
-        public init(session: String, path: String = "", ignored: Bool = false, query: String = "", changed: Bool = false) {
+        public init(session: String, repo: FilesRepoRef? = nil, path: String = "", ignored: Bool = false, query: String = "", changed: Bool = false) {
             self.session = session
+            self.repo = repo
             self.path = path
             self.ignored = ignored
             self.query = query
@@ -805,6 +807,7 @@ public enum AppAPI {
 
         enum CodingKeys: String, CodingKey {
             case session
+            case repo
             case path
             case ignored
             case query
@@ -814,13 +817,15 @@ public enum AppAPI {
 
     public struct FilesReadParams: Codable, Sendable, Hashable {
         public var session: String
+        public var repo: FilesRepoRef?
         public var path: String
         public var offset: Int
         public var ignored: Bool
         public var binary: Bool
 
-        public init(session: String, path: String, offset: Int = 0, ignored: Bool = false, binary: Bool = false) {
+        public init(session: String, repo: FilesRepoRef? = nil, path: String, offset: Int = 0, ignored: Bool = false, binary: Bool = false) {
             self.session = session
+            self.repo = repo
             self.path = path
             self.offset = offset
             self.ignored = ignored
@@ -829,10 +834,62 @@ public enum AppAPI {
 
         enum CodingKeys: String, CodingKey {
             case session
+            case repo
             case path
             case offset
             case ignored
             case binary
+        }
+    }
+
+    public struct FilesRepo: Codable, Sendable, Hashable {
+        public var name: String
+        public var path: String
+
+        public init(name: String, path: String) {
+            self.name = name
+            self.path = path
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case name
+            case path
+        }
+    }
+
+    public struct FilesRepoRef: Codable, Sendable, Hashable {
+        public var path: String
+
+        public init(path: String) {
+            self.path = path
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case path
+        }
+    }
+
+    public struct FilesRepos: Codable, Sendable, Hashable {
+        public var repos: [FilesRepo]
+
+        public init(repos: [FilesRepo] = []) {
+            self.repos = repos
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case repos
+        }
+    }
+
+    public struct FilesReposParams: Codable, Sendable, Hashable {
+        public var session: String
+
+        public init(session: String) {
+            self.session = session
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case session
         }
     }
 
@@ -850,15 +907,18 @@ public enum AppAPI {
 
     public struct FilesStampParams: Codable, Sendable, Hashable {
         public var session: String
+        public var repo: FilesRepoRef?
         public var folders: [String]
 
-        public init(session: String, folders: [String] = []) {
+        public init(session: String, repo: FilesRepoRef? = nil, folders: [String] = []) {
             self.session = session
+            self.repo = repo
             self.folders = folders
         }
 
         enum CodingKeys: String, CodingKey {
             case session
+            case repo
             case folders
         }
     }
@@ -4731,6 +4791,7 @@ public enum AppAPI {
         public static let deviceRemove = Call<DeviceParams, Empty>("device.remove", write: true)
         public static let filesList = Call<FilesListParams, FilesList>("files.list", write: false)
         public static let filesRead = Call<FilesReadParams, FilesChunk>("files.read", write: false)
+        public static let filesRepos = Call<FilesReposParams, FilesRepos>("files.repos", write: false)
         public static let filesStamp = Call<FilesStampParams, FilesStamp>("files.stamp", write: false)
         public static let guardDecide = Call<GuardDecideParams, GuardDecided>("guard.decide", write: true)
         public static let guardRefusals = Call<NoParams, GuardRefusals>("guard.refusals", write: false)
@@ -5180,6 +5241,7 @@ extension AppAPI.FilesListParams {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.session = try c.decode(String.self, forKey: .session)
+        self.repo = try c.decodeIfPresent(AppAPI.FilesRepoRef.self, forKey: .repo)
         self.path = try c.decodeIfPresent(String.self, forKey: .path) ?? ""
         self.ignored = try c.decodeIfPresent(Bool.self, forKey: .ignored) ?? false
         self.query = try c.decodeIfPresent(String.self, forKey: .query) ?? ""
@@ -5191,10 +5253,40 @@ extension AppAPI.FilesReadParams {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.session = try c.decode(String.self, forKey: .session)
+        self.repo = try c.decodeIfPresent(AppAPI.FilesRepoRef.self, forKey: .repo)
         self.path = try c.decode(String.self, forKey: .path)
         self.offset = try c.decodeIfPresent(Int.self, forKey: .offset) ?? 0
         self.ignored = try c.decodeIfPresent(Bool.self, forKey: .ignored) ?? false
         self.binary = try c.decodeIfPresent(Bool.self, forKey: .binary) ?? false
+    }
+}
+
+extension AppAPI.FilesRepo {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.name = try c.decode(String.self, forKey: .name)
+        self.path = try c.decode(String.self, forKey: .path)
+    }
+}
+
+extension AppAPI.FilesRepoRef {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.path = try c.decode(String.self, forKey: .path)
+    }
+}
+
+extension AppAPI.FilesRepos {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.repos = try c.decodeIfPresent([AppAPI.FilesRepo].self, forKey: .repos) ?? []
+    }
+}
+
+extension AppAPI.FilesReposParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.session = try c.decode(String.self, forKey: .session)
     }
 }
 
@@ -5209,6 +5301,7 @@ extension AppAPI.FilesStampParams {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.session = try c.decode(String.self, forKey: .session)
+        self.repo = try c.decodeIfPresent(AppAPI.FilesRepoRef.self, forKey: .repo)
         self.folders = try c.decodeIfPresent([String].self, forKey: .folders) ?? []
     }
 }

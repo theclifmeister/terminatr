@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -89,7 +90,7 @@ func TestFilesScope(t *testing.T) {
 		{"pal/s-1", proto.ErrNoFiles},
 		{"s-none", proto.ErrUnknownSession},
 	} {
-		if _, perr := s.filesScope(context.Background(), c.id); code(perr) != c.want {
+		if _, perr := s.filesScope(context.Background(), c.id, ""); code(perr) != c.want {
 			t.Errorf("%s: %v, want %q", c.id, perr, c.want)
 		}
 	}
@@ -211,5 +212,151 @@ func TestFilesRepoListed(t *testing.T) {
 	}
 	if !p.ListsRepo(alias) {
 		t.Error("a link to a listed repo")
+	}
+}
+
+// TestFilesRepoChoice: a coordinator's Files view lists the project's
+// repos and reads the one chosen, the first with no choice; the list is
+// the whole of what can be chosen; a thread has no choice; counts are the
+// chosen repo's alone.
+func TestFilesRepoChoice(t *testing.T) {
+	testPaths(t)
+	repoAt := func(dir, name, file string) string {
+		t.Helper()
+		repo := filepath.Join(dir, name)
+		gittest.Run(t, dir, "init", "-q", "-b", "main", repo)
+		if err := os.WriteFile(filepath.Join(repo, file), []byte("x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		gittest.Run(t, repo, "add", ".")
+		gittest.Run(t, repo, "commit", "-q", "-m", "c")
+		return repo
+	}
+	one := repoAt(t.TempDir(), "one", "one.txt")
+	two := repoAt(t.TempDir(), "two", "two.txt")
+	off := repoAt(t.TempDir(), "off", "off.txt")
+	if err := os.WriteFile(filepath.Join(two, "new.txt"), []byte("y\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(t.TempDir(), "alias")
+	if err := os.Symlink(two, alias); err != nil {
+		t.Fatal(err)
+	}
+	p, err := project.New(project.Options{Slug: "demo", Repos: []string{one, two}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	wt := filepath.Join(t.TempDir(), "wt")
+	gittest.Run(t, one, "worktree", "add", "-q", "-b", "tm/x", wt)
+	r, err := thread.Create(p, thread.Record{Title: "x", Agent: "claude", Repo: one, Base: "main", Branch: "tm/x", Worktree: wt, State: thread.Running})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{log: log.New(os.Stderr, "", 0), sessions: map[string]*session.Session{}, records: map[string]SessionRecord{}}
+	start := func(id, role, th string) {
+		t.Helper()
+		sess, err := session.Start(session.Config{ID: id, Role: role, Project: "demo", Thread: th, Argv: []string{testSh(t), "-c", "exec cat"},
+			Cwd: t.TempDir(), Env: []string{"PATH=/usr/bin:/bin"}, Cols: 80, Rows: 24, Logf: t.Logf})
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { sess.Stop(time.Second) })
+		s.mu.Lock()
+		s.sessions[id] = sess
+		s.mu.Unlock()
+	}
+	start("s-c", proto.RoleCoordinator, "")
+	start("s-t", proto.RoleThread, r.ID)
+
+	got, perr := s.filesRepos(proto.FilesReposParams{Session: "s-c"})
+	if perr != nil {
+		t.Fatal(perr)
+	}
+	if rs := got.(proto.FilesReposResult).Repos; !slices.Equal(rs, []proto.FileRepo{{Name: "one", Path: one}, {Name: "two", Path: two}}) {
+		t.Errorf("the choices: %+v", rs)
+	}
+	for _, id := range []string{"s-t", "pal/s-1"} {
+		got, perr := s.filesRepos(proto.FilesReposParams{Session: id})
+		if perr != nil || len(got.(proto.FilesReposResult).Repos) != 0 {
+			t.Errorf("%s has a choice: %+v %v", id, got, perr)
+		}
+	}
+	if _, perr := s.filesRepos(proto.FilesReposParams{Session: "s-none"}); perr == nil || perr.Code != proto.ErrUnknownSession {
+		t.Errorf("no such session: %v", perr)
+	}
+
+	real := func(path string) string {
+		t.Helper()
+		r, err := filepath.EvalSymlinks(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	list := func(choice string) proto.FilesListResult {
+		t.Helper()
+		got, perr := s.filesList(proto.FilesListParams{Session: "s-c", Repo: choice})
+		if perr != nil {
+			t.Fatal(perr)
+		}
+		return got.(proto.FilesListResult)
+	}
+	if res := list(""); res.Root != real(one) || res.Files != 0 {
+		t.Errorf("no choice is the first repo: %+v", res)
+	}
+	if res := list(two); res.Root != real(two) || res.Files != 1 {
+		t.Errorf("the second repo's own counts: %+v", res)
+	}
+	if res := list(alias); res.Root != real(two) {
+		t.Errorf("a link to a listed repo opens the list's entry: %+v", res)
+	}
+	chunk, perr := s.filesRead(proto.FilesReadParams{Session: "s-c", Repo: two, Path: "two.txt"})
+	if perr != nil || string(chunk.(proto.FilesReadResult).Data) != "x\n" {
+		t.Errorf("read from the second repo: %+v %v", chunk, perr)
+	}
+	a, perr := s.filesStamp(proto.FilesStampParams{Session: "s-c", Folders: []string{""}})
+	if perr != nil {
+		t.Fatal(perr)
+	}
+	b, perr := s.filesStamp(proto.FilesStampParams{Session: "s-c", Repo: two, Folders: []string{""}})
+	if perr != nil || a.(proto.FilesStampResult).Stamp == b.(proto.FilesStampResult).Stamp {
+		t.Errorf("a stamp is the chosen repo's: %v %v %v", a, b, perr)
+	}
+
+	// Off the list, whatever the method: never an arbitrary folder.
+	for _, bad := range []string{off, filepath.Dir(two), filepath.Join(two, ".git"), wt, "/", "..", "two"} {
+		if _, perr := s.filesList(proto.FilesListParams{Session: "s-c", Repo: bad}); perr == nil || perr.Code != proto.ErrNoFiles {
+			t.Errorf("list %q: %v", bad, perr)
+		}
+		if _, perr := s.filesRead(proto.FilesReadParams{Session: "s-c", Repo: bad, Path: "off.txt"}); perr == nil || perr.Code != proto.ErrNoFiles {
+			t.Errorf("read %q: %v", bad, perr)
+		}
+		if _, perr := s.filesStamp(proto.FilesStampParams{Session: "s-c", Repo: bad}); perr == nil || perr.Code != proto.ErrNoFiles {
+			t.Errorf("stamp %q: %v", bad, perr)
+		}
+	}
+	// A thread keeps its one worktree, even naming a repo on the list.
+	if _, perr := s.filesList(proto.FilesListParams{Session: "s-t", Repo: two}); perr == nil || perr.Code != proto.ErrBadParams {
+		t.Errorf("a thread chose a repo: %v", perr)
+	}
+	// A repo gone from disk stays a choice, and says why it can't open.
+	if err := os.RemoveAll(two); err != nil {
+		t.Fatal(err)
+	}
+	if _, perr := s.filesList(proto.FilesListParams{Session: "s-c", Repo: two}); perr == nil || perr.Code != proto.ErrNoFiles {
+		t.Errorf("a repo gone: %v", perr)
+	}
+	got, perr = s.filesRepos(proto.FilesReposParams{Session: "s-c"})
+	if perr != nil || len(got.(proto.FilesReposResult).Repos) != 2 {
+		t.Errorf("the choices with a repo gone: %+v %v", got, perr)
+	}
+}
+
+// TestFileRepos: two repos of one name say their parent folder too.
+func TestFileRepos(t *testing.T) {
+	got := fileRepos([]string{"/a/app", "/b/app", "/c/site"})
+	want := []proto.FileRepo{{Name: "a/app", Path: "/a/app"}, {Name: "b/app", Path: "/b/app"}, {Name: "site", Path: "/c/site"}}
+	if !slices.Equal(got, want) {
+		t.Errorf("%+v, want %+v", got, want)
 	}
 }

@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"slices"
 
 	"github.com/theclifmeister/terminatr/internal/changes"
@@ -10,16 +11,20 @@ import (
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
 // files.list, files.read and files.stamp (proto.CapWorktreeFiles): a
 // session's folder, read only. A session names its folder here, the
-// caller never does: a thread's worktree, a coordinator's project's first
-// repo at its main checkout. Package filetree holds the rules on paths.
+// caller never does: a thread's worktree, a coordinator's project's repo
+// at its main checkout. The caller's one say is which repo of that
+// project's list, so never a folder off it. Package filetree holds the
+// rules on paths.
 
-// filesScope is session id's folder.
-func (s *Server) filesScope(ctx context.Context, id string) (*filetree.Scope, *proto.Error) {
+// filesScope is session id's folder; choice picks a coordinator's repo,
+// "" the first.
+func (s *Server) filesScope(ctx context.Context, id, choice string) (*filetree.Scope, *proto.Error) {
 	if alias, _, ok := remoteID(id); ok {
 		// No method of the peer link reads a worktree: a paired server's
 		// files stay on it.
@@ -33,6 +38,9 @@ func (s *Server) filesScope(ctx context.Context, id string) (*filetree.Scope, *p
 	root, repo, base := "", "", ""
 	switch info.Role {
 	case proto.RoleThread:
+		if choice != "" {
+			return nil, proto.Errorf(proto.ErrBadParams, "a thread has its one worktree: no repo to choose")
+		}
 		p, err := project.Open(info.Project)
 		if err != nil {
 			return nil, proto.Errorf(proto.ErrNoFiles, "%v", err)
@@ -60,7 +68,15 @@ func (s *Server) filesScope(ctx context.Context, id string) (*filetree.Scope, *p
 		if len(p.Repos) == 0 {
 			return nil, proto.Errorf(proto.ErrNoFiles, "%s has no repo", p.Slug)
 		}
-		root, repo = p.Repos[0], p.Repos[0]
+		root = p.Repos[0]
+		if choice != "" {
+			listed, ok := p.ListedRepo(choice)
+			if !ok {
+				return nil, proto.Errorf(proto.ErrNoFiles, "%s isn't on %s's list", choice, p.Slug)
+			}
+			root = listed
+		}
+		repo = root
 	case proto.RoleDirector:
 		return nil, proto.Errorf(proto.ErrNoFiles, "a director has no repo")
 	default:
@@ -71,6 +87,48 @@ func (s *Server) filesScope(ctx context.Context, id string) (*filetree.Scope, *p
 		return nil, proto.Errorf(proto.ErrNoFiles, "%v", err)
 	}
 	return sc, nil
+}
+
+// filesRepos lists what session p.Session may choose: a coordinator's
+// project's repos. It answers even when a repo's folder is gone, so the
+// choice outlives a repo that can't open.
+func (s *Server) filesRepos(p proto.FilesReposParams) (any, *proto.Error) {
+	res := proto.FilesReposResult{Repos: []proto.FileRepo{}}
+	if _, _, ok := remoteID(p.Session); ok {
+		return res, nil
+	}
+	sess, perr := s.session(p.Session)
+	if perr != nil {
+		return nil, perr
+	}
+	info := sess.Info()
+	if info.Role != proto.RoleCoordinator {
+		return res, nil
+	}
+	pr, err := project.Open(info.Project)
+	if err != nil {
+		return nil, proto.Errorf(proto.ErrNoFiles, "%v", err)
+	}
+	res.Repos = fileRepos(pr.Repos)
+	return res, nil
+}
+
+// fileRepos names the repos of a list, each by its folder's name, with
+// its parent folder too when two share that.
+func fileRepos(list []string) []proto.FileRepo {
+	named := map[string]int{}
+	for _, r := range list {
+		named[tasks.RepoName(r)]++
+	}
+	out := make([]proto.FileRepo, 0, len(list))
+	for _, r := range list {
+		name := tasks.RepoName(r)
+		if named[name] > 1 {
+			name = filepath.ToSlash(filepath.Join(filepath.Base(filepath.Dir(r)), name))
+		}
+		out = append(out, proto.FileRepo{Name: name, Path: r})
+	}
+	return out
 }
 
 // repoVouched says something other than thread record r vouches for the
@@ -116,7 +174,7 @@ func filesError(err error) *proto.Error {
 func (s *Server) filesList(p proto.FilesListParams) (any, *proto.Error) {
 	ctx, cancel := context.WithTimeout(context.Background(), changes.Timeout)
 	defer cancel()
-	sc, perr := s.filesScope(ctx, p.Session)
+	sc, perr := s.filesScope(ctx, p.Session, p.Repo)
 	if perr != nil {
 		return nil, perr
 	}
@@ -134,7 +192,7 @@ func (s *Server) filesList(p proto.FilesListParams) (any, *proto.Error) {
 func (s *Server) filesRead(p proto.FilesReadParams) (any, *proto.Error) {
 	ctx, cancel := context.WithTimeout(context.Background(), changes.Timeout)
 	defer cancel()
-	sc, perr := s.filesScope(ctx, p.Session)
+	sc, perr := s.filesScope(ctx, p.Session, p.Repo)
 	if perr != nil {
 		return nil, perr
 	}
@@ -155,7 +213,7 @@ func (s *Server) filesStamp(p proto.FilesStampParams) (any, *proto.Error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), changes.Timeout)
 	defer cancel()
-	sc, perr := s.filesScope(ctx, p.Session)
+	sc, perr := s.filesScope(ctx, p.Session, p.Repo)
 	if perr != nil {
 		return nil, perr
 	}

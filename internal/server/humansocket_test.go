@@ -31,7 +31,7 @@ var humanOnlyMethods = []string{
 	proto.MethodSessionStart, proto.MethodSessionStop, proto.MethodSessionKeys, proto.MethodSessionPrompt, proto.MethodSessionUpload, proto.MethodSessionApprove, proto.MethodTaskAsk,
 	proto.MethodTaskAccept, proto.MethodTaskSendBack, proto.MethodTaskDelegate, proto.MethodTaskAdd, proto.MethodTaskPriority, proto.MethodTaskGet, proto.MethodTaskDone, proto.MethodTaskTemplates, proto.MethodDesignList, proto.MethodProjectOpen,
 	proto.MethodMemoryList, proto.MethodMemoryRead, proto.MethodLibraryList, proto.MethodLibraryRead,
-	proto.MethodFilesList, proto.MethodFilesRead, proto.MethodFilesStamp,
+	proto.MethodFilesList, proto.MethodFilesRead, proto.MethodFilesStamp, proto.MethodFilesRepos,
 	proto.MethodSessionAdopt, proto.MethodSessionAdoptAsk, proto.MethodSessionRemote, proto.MethodSessionModel, proto.MethodQuestionsOpen, proto.MethodCoordinatorClear,
 	proto.MethodServerStop, proto.MethodAgentReload, proto.MethodPeerReload, proto.MethodDeviceReload, proto.MethodAppReportAdd, proto.MethodPeerList, proto.MethodPeerPopupRead, proto.MethodPeerPagesRead, proto.MethodPeerLibraryList, proto.MethodPeerLibraryRead, proto.MethodPeerDesignList, proto.MethodPeerNeedAct, proto.MethodPeerShareAsk, proto.MethodPeerShareAnswer, proto.MethodLinkAct, proto.MethodProjectsWatch, proto.MethodSessionsWatch,
 	proto.MethodProjectPin, proto.MethodProjectNew, proto.MethodSessionAdoptRequest, proto.MethodLinkSend,

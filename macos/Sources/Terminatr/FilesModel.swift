@@ -38,6 +38,11 @@ final class FilesModel {
     private(set) var problem: String?
     private(set) var loaded = false
     private(set) var library: [AppAPI.LibraryFile]?
+    /// A coordinator's repos, the first the default; none for a thread, or
+    /// a tm without the list.
+    private(set) var repos: [AppAPI.FilesRepo] = []
+    /// The repo chosen, nil for the first: what the server is told.
+    private(set) var chosen: AppAPI.FilesRepoRef?
     private(set) var libraryProblem: String?
     /// The row the arrows are on: a worktree path, or an attached file's id.
     private(set) var cursor: String?
@@ -65,6 +70,11 @@ final class FilesModel {
     private static let every = Duration.seconds(2)
 
     var searching: Bool { !filter.isEmpty || changedOnly }
+
+    /// The repo the Worktree tab shows, to name it.
+    var repo: AppAPI.FilesRepo? {
+        repos.first { $0.path == chosen?.path } ?? repos.first
+    }
 
     var rows: [FileRow] {
         searching ? found.map { FileRow(entry: $0, depth: 0) } : FileTree.rows(dirs: dirs, open: open)
@@ -94,6 +104,28 @@ final class FilesModel {
         cursor = nil
         picked = nil
         Task { await refresh(app) }
+    }
+
+    /// Shows another of the coordinator's repos: nothing of the last tree
+    /// stays. A tab open in the pane stays on its own repo.
+    func choose(repo r: AppAPI.FilesRepo, _ app: AppModel) {
+        guard r.path != repo?.path else { return }
+        chosen = r.path == repos.first?.path ? nil : AppAPI.FilesRepoRef(path: r.path)
+        resetTree()
+        Task { await refresh(app) }
+    }
+
+    private func resetTree() {
+        stamp = ""
+        open = []
+        dirs = [:]
+        found = []
+        summary = nil
+        cut = false
+        problem = nil
+        loaded = false
+        cursor = nil
+        picked = nil
     }
 
     func setChangedOnly(_ on: Bool, _ app: AppModel) {
@@ -128,7 +160,7 @@ final class FilesModel {
     }
 
     func file(_ e: AppAPI.FileEntry) -> OpenedFile {
-        OpenedFile(.worktree(e, ignored: showIgnored || e.ignored))
+        OpenedFile(.worktree(e, ignored: showIgnored || e.ignored), repo: chosen)
     }
 
     /// ← and →.
@@ -156,7 +188,7 @@ final class FilesModel {
                 if beats % 5 == 0 { await loadLibrary(app) }
             } else if let session = place?.session, let b = app.bridge {
                 let folders = searching ? [""] : FileTree.folders(dirs: dirs, open: open)
-                let now = try? await b.call(AppAPI.Methods.filesStamp, AppAPI.FilesStampParams(session: session, folders: folders))
+                let now = try? await b.call(AppAPI.Methods.filesStamp, AppAPI.FilesStampParams(session: session, repo: chosen, folders: folders))
                 if now?.stamp != stamp { await refresh(app) }
             }
             if let picked { await reread(picked, app) }
@@ -177,13 +209,15 @@ final class FilesModel {
             fellBack = false
             scope = .worktree
         }
+        await loadRepos(session, b)
+        guard g == generation else { return }
         let wanted = searching ? [""] : FileTree.folders(dirs: dirs, open: open)
-        let stamped = try? await b.call(AppAPI.Methods.filesStamp, AppAPI.FilesStampParams(session: session, folders: wanted))
+        let stamped = try? await b.call(AppAPI.Methods.filesStamp, AppAPI.FilesStampParams(session: session, repo: chosen, folders: wanted))
         stamp = stamped?.stamp ?? stamp
         guard g == generation else { return }
         do {
             if searching {
-                let r = try await b.call(AppAPI.Methods.filesList, AppAPI.FilesListParams(session: session, ignored: showIgnored, query: filter, changed: changedOnly))
+                let r = try await b.call(AppAPI.Methods.filesList, AppAPI.FilesListParams(session: session, repo: chosen, ignored: showIgnored, query: filter, changed: changedOnly))
                 guard g == generation else { return }
                 summary = r
                 found = r.entries
@@ -194,7 +228,7 @@ final class FilesModel {
                 var over = false
                 for (i, d) in wanted.enumerated() {
                     do {
-                        let r = try await b.call(AppAPI.Methods.filesList, AppAPI.FilesListParams(session: session, path: d, ignored: showIgnored))
+                        let r = try await b.call(AppAPI.Methods.filesList, AppAPI.FilesListParams(session: session, repo: chosen, path: d, ignored: showIgnored))
                         if i == 0 { top = r }
                         out[d] = r.entries
                         over = over || r.truncated
@@ -228,6 +262,19 @@ final class FilesModel {
         }
     }
 
+    /// The coordinator's repos. A tm without the list leaves none, and the
+    /// first repo unnamed. A repo chosen that left the project's list goes
+    /// back to the first.
+    private func loadRepos(_ session: String, _ b: Bridge) async {
+        guard place?.thread == nil,
+              let r = try? await b.call(AppAPI.Methods.filesRepos, AppAPI.FilesReposParams(session: session)) else { return }
+        repos = r.repos
+        if let c = chosen, !r.repos.contains(where: { $0.path == c.path }) {
+            chosen = nil
+            resetTree()
+        }
+    }
+
     /// With no folder at all the panel opens on Attached, and Worktree
     /// says why.
     private func noFolder(_ why: String) {
@@ -237,7 +284,7 @@ final class FilesModel {
         summary = nil
         cut = false
         loaded = true
-        if !opened {
+        if !opened, chosen == nil {
             opened = true
             fellBack = true
             scope = .attached
@@ -273,7 +320,7 @@ final class FilesModel {
             } else if e.status == "D" {
                 body = .unavailable("\(e.name) is deleted in this worktree.")
             } else if let session = place?.session, let b = app.bridge {
-                body = await WorktreeRead.body({ p in try await b.call(AppAPI.Methods.filesRead, p) }, session: session, path: e.path, ignored: ignored)
+                body = await WorktreeRead.body({ p in try await b.call(AppAPI.Methods.filesRead, p) }, session: session, repo: f.repo, path: e.path, ignored: ignored)
             } else {
                 body = .unavailable(place?.why ?? "Not connected to terminatr.")
             }
@@ -288,7 +335,7 @@ final class FilesModel {
     func reread(_ f: OpenedFile, _ app: AppModel) async {
         guard case .worktree(let e, let ignored) = f.source, let session = place?.session, let b = app.bridge,
               let old = shown[f.id]?.body else { return }
-        let stat = await WorktreeRead.stat({ p in try await b.call(AppAPI.Methods.filesRead, p) }, session: session, path: e.path, ignored: ignored)
+        let stat = await WorktreeRead.stat({ p in try await b.call(AppAPI.Methods.filesRead, p) }, session: session, repo: f.repo, path: e.path, ignored: ignored)
         switch stat {
         case .gone:
             if case .text = old { shown[f.id]?.deleted = true }
@@ -317,7 +364,7 @@ final class FilesModel {
                 actionProblem = place?.why ?? "Not connected to terminatr."
                 return nil
             }
-            outcome = await WorktreeRead.bytes({ p in try await b.call(AppAPI.Methods.filesRead, p) }, session: session, path: e.path, ignored: ignored)
+            outcome = await WorktreeRead.bytes({ p in try await b.call(AppAPI.Methods.filesRead, p) }, session: session, repo: f.repo, path: e.path, ignored: ignored)
         case .attached(let a):
             outcome = await attachedBytes(a, app)
         }

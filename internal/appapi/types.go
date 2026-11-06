@@ -1686,27 +1686,49 @@ type (
 	// with Query or Changed the files under it whose path holds Query, or
 	// that git marks, flat. Ignored lists git-ignored ones too.
 	FilesListParams struct {
-		Session string `json:"session"`
-		Path    string `json:"path,omitempty"`
-		Ignored bool   `json:"ignored,omitempty"`
-		Query   string `json:"query,omitempty"`
-		Changed bool   `json:"changed,omitempty"`
+		Session string        `json:"session"`
+		Repo    *FilesRepoRef `json:"repo,omitempty"`
+		Path    string        `json:"path,omitempty"`
+		Ignored bool          `json:"ignored,omitempty"`
+		Query   string        `json:"query,omitempty"`
+		Changed bool          `json:"changed,omitempty"`
 	}
 	// FilesReadParams are files.read's: the chunk of file Path from Offset.
 	// Binary asks for the bytes of a file that isn't text too (app API 50).
 	FilesReadParams struct {
-		Session string `json:"session"`
-		Path    string `json:"path"`
-		Offset  int64  `json:"offset,omitempty"`
-		Ignored bool   `json:"ignored,omitempty"`
-		Binary  bool   `json:"binary,omitempty"`
+		Session string        `json:"session"`
+		Repo    *FilesRepoRef `json:"repo,omitempty"`
+		Path    string        `json:"path"`
+		Offset  int64         `json:"offset,omitempty"`
+		Ignored bool          `json:"ignored,omitempty"`
+		Binary  bool          `json:"binary,omitempty"`
 	}
 	// FilesStampParams are files.stamp's: the folders shown.
 	FilesStampParams struct {
-		Session string   `json:"session"`
-		Folders []string `json:"folders,omitempty"`
+		Session string        `json:"session"`
+		Repo    *FilesRepoRef `json:"repo,omitempty"`
+		Folders []string      `json:"folders,omitempty"`
+	}
+	// FilesRepoRef is a coordinator's choice among files.repos, on the
+	// methods above (app API 51): a FilesRepo's Path. A struct behind a
+	// pointer because the app then leaves it out when there's none, which
+	// an older bridge, decoding strictly, needs; none is the first repo.
+	FilesRepoRef struct {
+		Path string `json:"path"`
+	}
+	// FilesReposParams are files.repos's.
+	FilesReposParams struct {
+		Session string `json:"session"`
 	}
 )
+
+// path is the choice's path, "" for none.
+func (r *FilesRepoRef) path() string {
+	if r == nil {
+		return ""
+	}
+	return r.Path
+}
 
 // FileEntry is a file or folder of a session's folder: Kind file, dir or
 // other; Status its mark, M, A or D; Changed: a folder holds marked files.
@@ -1757,6 +1779,27 @@ type FilesChunk struct {
 // status and the folders named did.
 type FilesStamp struct {
 	Stamp string `json:"stamp"`
+}
+
+// FilesRepos is files.repos's result (app API 51): what a coordinator's
+// Files view chooses from, the first the default; none for anything else.
+type FilesRepos struct {
+	Repos []FilesRepo `json:"repos"`
+}
+
+// FilesRepo is a repo of a project's list: its name, and the path that
+// names it to the files methods.
+type FilesRepo struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
+}
+
+func filesReposOf(r proto.FilesReposResult) FilesRepos {
+	out := FilesRepos{Repos: make([]FilesRepo, 0, len(r.Repos))}
+	for _, e := range r.Repos {
+		out.Repos = append(out.Repos, FilesRepo{Name: e.Name, Path: e.Path})
+	}
+	return out
 }
 
 func filesListOf(r proto.FilesListResult) FilesList {

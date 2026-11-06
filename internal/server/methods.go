@@ -327,6 +327,9 @@ func init() {
 		proto.MethodFilesStamp: {gate: gateHuman, call: typed(func(s *Server, p proto.FilesStampParams, _ callCtx) (any, *proto.Error) {
 			return s.filesStamp(p)
 		})},
+		proto.MethodFilesRepos: {gate: gateHuman, call: typed(func(s *Server, p proto.FilesReposParams, _ callCtx) (any, *proto.Error) {
+			return s.filesRepos(p)
+		})},
 		proto.MethodTaskAdd: {gate: gateHuman, call: typed(func(s *Server, p proto.TaskAddParams, c callCtx) (any, *proto.Error) {
 			return s.taskAdd(p, c)
 		})},

@@ -4,9 +4,10 @@ import "time"
 
 // A session's folder, read only (docs/SPEC.md §3.3): what the Files view
 // of the thread's info panel browses, and the Mac's panel after it. The
-// human's. A thread's folder is its worktree, a coordinator's the
-// project's first repo at its main checkout; a director, a shell and a
-// paired server's session have none ("no-files"). A path is relative to
+// human's. A thread's folder is its worktree, a coordinator's a repo of
+// the project's list at its main checkout, the first unless Repo names
+// another (MethodFilesRepos lists them); a director, a shell and a paired
+// server's session have none ("no-files"). A path is relative to
 // that folder, with slashes: no parent, never .git, no link leading out,
 // and a git-ignored file or folder only when asked (package filetree).
 // The server's hello lists CapWorktreeFiles.
@@ -20,10 +21,14 @@ const (
 	// MethodFilesStamp says whether what files.list answered may have
 	// changed (FilesStampParams): a FilesStampResult.
 	MethodFilesStamp = "files.stamp"
+	// MethodFilesRepos lists the repos a session's Repo may name
+	// (FilesReposParams): a FilesReposResult.
+	MethodFilesRepos = "files.repos"
 )
 
 // CapWorktreeFiles says the server answers files.list, files.read and
-// files.stamp.
+// files.stamp. A server without files.repos answers unknown method: its
+// coordinator shows the first repo, with no choice.
 const CapWorktreeFiles = "worktree-files"
 
 // Refusals of the files methods, besides ErrFileGone for what isn't
@@ -66,9 +71,13 @@ const (
 // FilesListParams name a folder of the session's: Path, "" for its top.
 // Ignored lists git-ignored entries too, marked. Query or Changed list
 // the matching files under Path instead, whole paths, flat: those whose
-// path holds Query, ignoring case; those git marks.
+// path holds Query, ignoring case; those git marks. Repo, on this and the
+// other files methods, is a FileRepo's Path: a coordinator's choice, the
+// server checks it against the project's list; "" is the first repo. A
+// thread has its one worktree, and is refused one.
 type FilesListParams struct {
 	Session string `json:"session"`
+	Repo    string `json:"repo,omitempty"`
 	Path    string `json:"path,omitempty"`
 	Ignored bool   `json:"ignored,omitempty"`
 	Query   string `json:"query,omitempty"`
@@ -114,6 +123,7 @@ type FilesListResult struct {
 // file that isn't text too: the Mac's Quick Look, Open and Save As.
 type FilesReadParams struct {
 	Session string `json:"session"`
+	Repo    string `json:"repo,omitempty"`
 	Path    string `json:"path"`
 	Offset  int64  `json:"offset,omitempty"`
 	Ignored bool   `json:"ignored,omitempty"`
@@ -139,6 +149,7 @@ type FilesReadResult struct {
 // MaxFilesStamped; "" is the top.
 type FilesStampParams struct {
 	Session string   `json:"session"`
+	Repo    string   `json:"repo,omitempty"`
 	Folders []string `json:"folders,omitempty"`
 }
 
@@ -147,4 +158,23 @@ type FilesStampParams struct {
 // inside a folder not named, and git-ignored, goes unseen.
 type FilesStampResult struct {
 	Stamp string `json:"stamp"`
+}
+
+// FilesReposParams name a session.
+type FilesReposParams struct {
+	Session string `json:"session"`
+}
+
+// FilesReposResult is what a coordinator's Files view can show, in the
+// project's order, the first being the default. Any other session has no
+// choice, and none listed.
+type FilesReposResult struct {
+	Repos []FileRepo `json:"repos"`
+}
+
+// FileRepo is a repo of a project's list: Name is what it's called, its
+// parent folder too when two share a name; Path is what Repo names.
+type FileRepo struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
 }

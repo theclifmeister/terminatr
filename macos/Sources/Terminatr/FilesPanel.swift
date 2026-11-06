@@ -78,6 +78,7 @@ struct FilesPanel: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
+        if model.scope == .worktree, let r = model.repo { repoLabel(r) }
         Spacer(minLength: 0)
         if model.scope == .worktree, let s = model.summary, s.git {
             HStack(spacing: 6) {
@@ -97,6 +98,52 @@ struct FilesPanel: View {
                 .foregroundStyle(theme.muted)
                 .fixedSize()
         }
+    }
+
+    /// Beside a coordinator: which repo this is, and that it's the main
+    /// checkout rather than the coordinator's own work; a picker when the
+    /// project has more than one. Each repo's counts are its own.
+    @ViewBuilder
+    private func repoLabel(_ r: AppAPI.FilesRepo) -> some View {
+        if model.repos.count > 1 {
+            Menu {
+                ForEach(model.repos, id: \.path) { o in
+                    Button {
+                        model.choose(repo: o, app)
+                        treeFocused = true
+                    } label: {
+                        if o.path == r.path { Label(o.name, systemImage: "checkmark") } else { Text(o.name) }
+                    }
+                }
+            } label: {
+                HStack(spacing: 3) {
+                    repoName(r)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9 * theme.scale, weight: .semibold))
+                        .foregroundStyle(theme.muted)
+                }
+                .contentShape(Rectangle())
+            }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .menuIndicator(.hidden)
+            .help("Chooses which of the project's repos shows")
+            .accessibilityLabel("Repo, \(r.name), main checkout")
+        } else {
+            repoName(r)
+        }
+        Text("main checkout")
+            .font(theme.sized(12.5))
+            .foregroundStyle(theme.muted)
+            .lineLimit(1)
+            .fixedSize()
+    }
+
+    private func repoName(_ r: AppAPI.FilesRepo) -> some View {
+        Text(r.name)
+            .font(.system(size: 13 * theme.scale, design: .monospaced))
+            .lineLimit(1)
+            .truncationMode(.middle)
     }
 
     // MARK: the tabs, the filter and the toggles

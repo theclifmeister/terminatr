@@ -104,6 +104,8 @@ func init() {
 		unary(proto.MethodFilesList, false, filesListParams, filesListOf),
 		unary(proto.MethodFilesRead, false, filesReadParams, filesChunkOf),
 		unary(proto.MethodFilesStamp, false, filesStampParams, filesStampOf),
+		// The repos a coordinator's Files view chooses from (app API 51).
+		unary(proto.MethodFilesRepos, false, filesReposParams, filesReposOf),
 
 		// A project's designs, read only (app API 31; the server's caps
 		// say designs): designs.list's records of the mod API, each with
@@ -595,15 +597,19 @@ func searchShowParams(p SearchShowParams) proto.SearchShowParams {
 }
 
 func filesListParams(p FilesListParams) proto.FilesListParams {
-	return proto.FilesListParams{Session: p.Session, Path: p.Path, Ignored: p.Ignored, Query: p.Query, Changed: p.Changed}
+	return proto.FilesListParams{Session: p.Session, Repo: p.Repo.path(), Path: p.Path, Ignored: p.Ignored, Query: p.Query, Changed: p.Changed}
 }
 
 func filesReadParams(p FilesReadParams) proto.FilesReadParams {
-	return proto.FilesReadParams{Session: p.Session, Path: p.Path, Offset: p.Offset, Ignored: p.Ignored, Binary: p.Binary}
+	return proto.FilesReadParams{Session: p.Session, Repo: p.Repo.path(), Path: p.Path, Offset: p.Offset, Ignored: p.Ignored, Binary: p.Binary}
 }
 
 func filesStampParams(p FilesStampParams) proto.FilesStampParams {
-	return proto.FilesStampParams{Session: p.Session, Folders: append([]string(nil), p.Folders...)}
+	return proto.FilesStampParams{Session: p.Session, Repo: p.Repo.path(), Folders: append([]string(nil), p.Folders...)}
+}
+
+func filesReposParams(p FilesReposParams) proto.FilesReposParams {
+	return proto.FilesReposParams{Session: p.Session}
 }
 
 func libraryReadParams(p LibraryReadParams) proto.LibraryReadParams {
