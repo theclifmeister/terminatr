@@ -31,6 +31,14 @@ struct FilesPanel: View {
             filterField
             if model.scope == .worktree, place.session != nil { toggles }
             if let why = model.problem { note(why) }
+            if let asOf = model.offlineAsOf {
+                TimelineView(.periodic(from: .now, by: 30)) { _ in
+                    note("\(place.far) is offline: as of \(asOf.formatted(.relative(presentation: .numeric, unitsStyle: .abbreviated)))", colour: theme.approval)
+                }
+            } else if model.slow {
+                note("\(place.far) is slow to answer.")
+            }
+            if let why = model.withheldNote { note(why) }
             if model.scope == .attached, let why = model.libraryProblem { note(why, colour: theme.attention) }
             list
                 .frame(maxHeight: .infinity)
@@ -79,6 +87,13 @@ struct FilesPanel: View {
         if !place.label.isEmpty {
             Text(place.label)
                 .font(theme.monoSized(13))
+                .foregroundStyle(theme.muted)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        if !place.far.isEmpty {
+            Text("on \(place.far) · read only")
+                .font(theme.sized(12.5))
                 .foregroundStyle(theme.muted)
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -213,11 +228,14 @@ struct FilesPanel: View {
             }
                 .disabled(model.summary?.git != true)
                 .help(model.summary?.git == true ? "Only the files git marks" : "No repo here: no marks")
-            FilesChip(title: "Show ignored", on: model.showIgnored) {
-                model.setShowIgnored(!model.showIgnored, app)
-                treeFocused = true
+            // A paired server's ignored files stay there: no caller can ask.
+            if place.far.isEmpty {
+                FilesChip(title: "Show ignored", on: model.showIgnored) {
+                    model.setShowIgnored(!model.showIgnored, app)
+                    treeFocused = true
+                }
+                    .help("Git-ignored files such as node_modules and build. They may hold secrets.")
             }
-                .help("Git-ignored files such as node_modules and build. They may hold secrets.")
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 12)
@@ -275,6 +293,7 @@ struct FilesPanel: View {
             }
         case .space:
             guard let f = model.picked else { return .ignored }
+            if farFile(f) { return .handled }
             look(f)
         default:
             return .ignored
@@ -293,10 +312,11 @@ struct FilesPanel: View {
                 .padding(8)
         }
         ForEach(rows) { r in
-            FileNode(row: r, flat: model.flat, unfolded: unfolded.contains(r.id), on: model.cursor == r.id) {
+            FileNode(row: r, flat: model.flat, unfolded: unfolded.contains(r.id), on: model.cursor == r.id,
+                     far: place.far, notText: model.notText.contains(r.id) || (!place.far.isEmpty && !r.isFolder && FileImage.named(r.entry.name)), stale: model.offlineAsOf != nil) {
                 click(r)
             } twice: {
-                if !r.isFolder { openInPane(model.file(r.entry)) }
+                if !r.isFolder, !r.entry.withheld { openInPane(model.file(r.entry)) }
             }
             .contextMenu { rowMenu(r) }
             .id(r.id)
@@ -312,12 +332,23 @@ struct FilesPanel: View {
     private func click(_ r: FileRow) {
         treeFocused = true
         model.moveCursor(to: r.id)
-        if r.isFolder, !model.flat { model.toggle(folder: r.id, app) }
+        if r.isFolder, !r.entry.withheld, !model.flat { model.toggle(folder: r.id, app) }
+    }
+
+    /// A paired server's worktree file: it reads here, and nothing else does.
+    /// Quick Look, Open and Save As would write it to this Mac.
+    private func farFile(_ f: OpenedFile) -> Bool {
+        if !place.far.isEmpty, case .worktree = f.source { return true }
+        return false
     }
 
     @ViewBuilder
     private func rowMenu(_ r: FileRow) -> some View {
-        if r.isFolder {
+        if !place.far.isEmpty {
+            if !r.isFolder, !r.entry.withheld {
+                Button("Open in Pane") { openInPane(model.file(r.entry)) }
+            }
+        } else if r.isFolder {
             pathActions(r.entry)
             mentionButton(.worktree(r.entry, ignored: false))
         } else {
@@ -380,7 +411,22 @@ struct FilesPanel: View {
 
     // MARK: the footer and the actions
 
+    @ViewBuilder
     private func footer(_ f: OpenedFile) -> some View {
+        if farFile(f) {
+            HStack(spacing: 8) {
+                Button("Open in Pane") { openInPane(f) }
+                    .help("Adds it as a tab in the main pane (return)")
+                Spacer(minLength: 0)
+            }
+            .buttonStyle(FlatTextButtonStyle(points: 12.5))
+            .modifier(PanelFootBar())
+        } else {
+            localFooter(f)
+        }
+    }
+
+    private func localFooter(_ f: OpenedFile) -> some View {
         HStack(spacing: 8) {
             Button("Quick Look") { look(f) }
                 .help("Quick Look (space)")
@@ -424,8 +470,7 @@ struct FilesPanel: View {
     }
 
     /// Worktree files alone have a path here: a Library file's stays with
-    /// the server. Everything the Mac's panel lists from a worktree is on
-    /// this Mac: a paired server's lists Attached alone.
+    /// the server, and a paired server's worktree answers with no root at all.
     @ViewBuilder
     private func pathActions(_ e: AppAPI.FileEntry) -> some View {
         if let path = model.absolute(e.path) {
@@ -539,6 +584,12 @@ private struct FileNode: View {
     let flat: Bool
     let unfolded: Bool
     let on: Bool
+    /// The paired server its rows are on, "" for this one.
+    var far = ""
+    /// A read found it isn't text, or its name says so.
+    var notText = false
+    /// The link is down: what shows is old.
+    var stale = false
     let click: () -> Void
     let twice: () -> Void
 
@@ -547,7 +598,7 @@ private struct FileNode: View {
         let shape = RoundedRectangle(cornerRadius: 5)
         Button(action: click) {
             HStack(spacing: 6) {
-                if row.isFolder, !flat {
+                if row.isFolder, !flat, !e.withheld {
                     Image(systemName: unfolded ? "chevron.down" : "chevron.right")
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(theme.muted)
@@ -581,7 +632,7 @@ private struct FileNode: View {
         .simultaneousGesture(TapGesture(count: 2).onEnded { twice() })
         .accessibilityLabel(spoken)
         .accessibilityAddTraits(on ? .isSelected : [])
-        .help(e.linkOut ? "A link that doesn't open: it leads out of the worktree, or nowhere" : e.path)
+        .help(e.withheld ? "It stays on \(far)" : e.linkOut ? "A link that doesn't open: it leads out of the worktree, or nowhere" : e.path)
     }
 
     private var name: String {
@@ -592,11 +643,12 @@ private struct FileNode: View {
 
     private var dim: Bool {
         let e = row.entry
-        return e.ignored || e.status == "D" || e.linkOut
+        return e.ignored || e.status == "D" || e.linkOut || e.withheld || notText || stale
     }
 
     private var mark: (word: String, colour: Color)? {
         let e = row.entry
+        if e.withheld { return ("stays on \(far)", theme.muted) }
         switch e.status {
         case "M": return ("M", theme.approval)
         case "A": return ("A", theme.good)
@@ -604,6 +656,7 @@ private struct FileNode: View {
         default: break
         }
         if e.changed { return ("•", theme.approval) }
+        if notText { return ("not text", theme.muted) }
         return e.ignored ? ("ignored", theme.muted) : nil
     }
 
@@ -618,6 +671,8 @@ private struct FileNode: View {
         default: if e.changed { parts.append("holds changes") }
         }
         if e.ignored { parts.append("git-ignored") }
+        if e.withheld { parts.append("stays on \(far)") }
+        if notText { parts.append("not text") }
         return parts.joined(separator: ", ")
     }
 }
@@ -883,7 +938,7 @@ struct FilePane: View {
             .task(id: file.id) {
                 await model.load(file, app)
                 while !Task.isCancelled {
-                    try? await Task.sleep(for: .seconds(2))
+                    try? await Task.sleep(for: model.every)
                     if Task.isCancelled { return }
                     await model.reread(file, app)
                 }

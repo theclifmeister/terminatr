@@ -61,6 +61,11 @@ func (p *Project) SetFlag(c caller.Caller, key string, on bool) (changed bool, e
 	if err := config.SetProject(p.Slug, key, on); err != nil {
 		return false, err
 	}
+	if key == "archived" && on {
+		if err := ForgetPeerFiles(c, p, p.Slug, "the project was archived"); err != nil {
+			return true, err
+		}
+	}
 	return true, p.Journal(c, action, p.Slug, "")
 }
 
@@ -92,6 +97,10 @@ func (p *Project) Trash(c caller.Caller, now time.Time) (string, error) {
 		detail += "; its repos were " + strings.Join(p.Repos, " ")
 	}
 	if err := p.Journal(c, "project.delete", p.Slug, detail); err != nil {
+		return "", err
+	}
+	// Before anything moves: a new project of the slug must start without it.
+	if err := ForgetPeerFiles(c, p, p.Slug, "the project was deleted"); err != nil {
 		return "", err
 	}
 	if err := os.Rename(p.Dir, dst); err != nil {

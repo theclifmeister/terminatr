@@ -338,3 +338,27 @@ func TestRemoteFilesNoServerLinks(t *testing.T) {
 	_, perr = s.filesRepos(proto.FilesReposParams{Session: "mini/s-1"})
 	wantCode(t, "repos", perr, proto.ErrUnknownSession)
 }
+
+// TestRemoteBear: over its rate the owning server is asked again for a moment,
+// and any other answer stands at once.
+func TestRemoteBear(t *testing.T) {
+	n := 0
+	got, err := remoteBear(func() (int, error) {
+		n++
+		if n < 3 {
+			return 0, proto.PeerWorktreeRefusal(proto.ErrRateLimited)
+		}
+		return 7, nil
+	})
+	if got != 7 || err != nil || n != 3 {
+		t.Fatalf("%d %v after %d asks", got, err, n)
+	}
+	n = 0
+	if _, err = remoteBear(func() (int, error) { n++; return 0, proto.PeerWorktreeRefusal(proto.ErrFilesOff) }); n != 1 || err == nil {
+		t.Fatalf("off was asked %d times: %v", n, err)
+	}
+	n = 0
+	if _, err = remoteBear(func() (int, error) { n++; return 0, proto.PeerWorktreeRefusal(proto.ErrRateLimited) }); n != remoteFilesTries || !overRate(err) {
+		t.Fatalf("over the rate for good: %d asks, %v", n, err)
+	}
+}

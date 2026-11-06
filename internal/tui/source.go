@@ -439,6 +439,10 @@ type PeerSource interface {
 	// on or off for project (§16.17), as tm peer pages does, and has the
 	// server read the peers again.
 	SetPeerPages(alias, project string, on bool) error
+	// SetPeerFiles turns the paired server alias's files switch on or off
+	// for project (§16.18), as tm peer files does, journals it and has the
+	// server read the peers again.
+	SetPeerFiles(alias, project string, on bool) error
 	// ActOnNeed acts on a need of a paired server's shared project as
 	// this server's user (peer.need-act, §16.16): that server checks it
 	// again and refuses it when the need changed.

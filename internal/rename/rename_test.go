@@ -1,6 +1,7 @@
 package rename
 
 import (
+	"crypto/ed25519"
 	"errors"
 	"os"
 	"os/exec"
@@ -14,6 +15,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/home/hometest"
+	"github.com/theclifmeister/terminatr/internal/peer"
 	"github.com/theclifmeister/terminatr/internal/program"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/tasks"
@@ -422,5 +424,33 @@ func TestProjectForgetsThumbs(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(d, "other", "t-0001", "x.jpg")); err != nil {
 		t.Errorf("another project's: %v", err)
+	}
+}
+
+// A renamed project's files switch goes: a new project under the old name
+// must not be readable, and the new name asks again.
+func TestProjectClearsFilesSwitch(t *testing.T) {
+	setup(t)
+	dir, err := peer.Dir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, _, _ := ed25519.GenerateKey(nil)
+	if err := peer.SavePeers(dir, []peer.Peer{{Alias: "mini", Key: key, Relay: "wss://relay.example", Files: []string{"demo"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Project(Options{From: "demo", To: "demo2", Caller: human}); err != nil {
+		t.Fatal(err)
+	}
+	peers, err := peer.LoadPeers(dir)
+	if err != nil || peers[0].FilesOn("demo") || peers[0].FilesOn("demo2") {
+		t.Fatalf("after the rename: %+v %v", peers, err)
+	}
+	p, err := project.Open("demo2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if j, _ := os.ReadFile(filepath.Join(p.Dir, "JOURNAL.md")); !strings.Contains(string(j), "off: the project was renamed") {
+		t.Errorf("journal:\n%s", j)
 	}
 }

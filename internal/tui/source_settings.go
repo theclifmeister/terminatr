@@ -59,6 +59,11 @@ func (s *ServerSource) SetSetting(table, key string, value any) error {
 	// The project's journal records the change, as every tm action.
 	if p, err := project.Open(slug); err == nil {
 		p.Journal(s.Caller, "settings."+key, slug, detail)
+		if key == "share" && value != true {
+			if err := project.ForgetPeerFiles(s.Caller, p, slug, "sharing went off"); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }

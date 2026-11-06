@@ -103,10 +103,10 @@
 │      └─ ⇄ terminatr      both · ask · ask me     paused ⚑ │ A shared project shows, read-only, in the    │
 │         ⚑ paused: too many messages without you           │ sidebar of every paired server: what waits   │
 │                                                           │ for you, the inbox, threads, tasks on deck   │
-│ ▾ ◉ mini · connected 38 ms                      panes off │ and its sessions' states; never its files.   │
-│    ■ acme-api          ⇄ terminatr              ● working │ Sharing asks first; it is the project's own  │
-│    ■ infra             shared with you · + link (L)       │ Shared with paired servers setting.          │
-│                                                        …↓ │                                              │
+│ ▾ ◉ mini · connected 38 ms                      panes off │ and its sessions' states. Its files stay     │
+│    ■ acme-api          ⇄ terminatr              ● working │ here unless you turn on files for a server,  │
+│    ■ infra             shared with you · + link (L)       │ in its details. Sharing asks first; it is    │
+│                                                        …↓ │ the project's own Shared with paired servers │
 │                                                                                                          │
 │ space share · L link · tab details · ? keys · esc close                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────╯

@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 56
+    public static let version = 60
 
     public struct AdoptRequestParams: Codable, Sendable, Hashable {
         public var id: String
@@ -694,8 +694,9 @@ public enum AppAPI {
         public var ignored: Bool
         public var link: Bool
         public var linkOut: Bool
+        public var withheld: Bool
 
-        public init(name: String, path: String, kind: String, size: Int = 0, mtime: Date? = nil, status: String = "", changed: Bool = false, ignored: Bool = false, link: Bool = false, linkOut: Bool = false) {
+        public init(name: String, path: String, kind: String, size: Int = 0, mtime: Date? = nil, status: String = "", changed: Bool = false, ignored: Bool = false, link: Bool = false, linkOut: Bool = false, withheld: Bool = false) {
             self.name = name
             self.path = path
             self.kind = kind
@@ -706,6 +707,7 @@ public enum AppAPI {
             self.ignored = ignored
             self.link = link
             self.linkOut = linkOut
+            self.withheld = withheld
         }
 
         enum CodingKeys: String, CodingKey {
@@ -719,6 +721,7 @@ public enum AppAPI {
             case ignored
             case link
             case linkOut = "link_out"
+            case withheld
         }
     }
 
@@ -1903,8 +1906,9 @@ public enum AppAPI {
         public var version: String
         public var rttMs: Double
         public var worktree: Bool
+        public var filesHere: [String]
 
-        public init(alias: String, name: String = "", id: String = "", state: String, reason: String = "", since: Date? = nil, projects: [PeerProject] = [], shareWaits: Int = 0, shareRequests: [ShareRequest] = [], pane: Bool = false, panes: String = "", transcript: Bool = false, conversations: String = "", needs: String = "", picks: Bool = false, uploads: Bool = false, version: String = "", rttMs: Double = 0, worktree: Bool = false) {
+        public init(alias: String, name: String = "", id: String = "", state: String, reason: String = "", since: Date? = nil, projects: [PeerProject] = [], shareWaits: Int = 0, shareRequests: [ShareRequest] = [], pane: Bool = false, panes: String = "", transcript: Bool = false, conversations: String = "", needs: String = "", picks: Bool = false, uploads: Bool = false, version: String = "", rttMs: Double = 0, worktree: Bool = false, filesHere: [String] = []) {
             self.alias = alias
             self.name = name
             self.id = id
@@ -1924,6 +1928,7 @@ public enum AppAPI {
             self.version = version
             self.rttMs = rttMs
             self.worktree = worktree
+            self.filesHere = filesHere
         }
 
         enum CodingKeys: String, CodingKey {
@@ -1946,6 +1951,7 @@ public enum AppAPI {
             case version
             case rttMs = "rtt_ms"
             case worktree
+            case filesHere = "files_here"
         }
     }
 
@@ -5389,6 +5395,7 @@ extension AppAPI.FileEntry {
         self.ignored = try c.decodeIfPresent(Bool.self, forKey: .ignored) ?? false
         self.link = try c.decodeIfPresent(Bool.self, forKey: .link) ?? false
         self.linkOut = try c.decodeIfPresent(Bool.self, forKey: .linkOut) ?? false
+        self.withheld = try c.decodeIfPresent(Bool.self, forKey: .withheld) ?? false
     }
 }
 
@@ -5957,6 +5964,7 @@ extension AppAPI.Peer {
         self.version = try c.decodeIfPresent(String.self, forKey: .version) ?? ""
         self.rttMs = try c.decodeIfPresent(Double.self, forKey: .rttMs) ?? 0
         self.worktree = try c.decodeIfPresent(Bool.self, forKey: .worktree) ?? false
+        self.filesHere = try c.decodeIfPresent([String].self, forKey: .filesHere) ?? []
     }
 }
 

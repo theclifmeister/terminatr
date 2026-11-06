@@ -35,6 +35,7 @@ const peerUsage = `usage: tm peer pair [--relay URL] [--as ALIAS]
        tm peer conversations ALIAS on|off
        tm peer needs ALIAS off|view|answer
        tm peer pages ALIAS PROJECT on|off
+       tm peer files ALIAS PROJECT on|off
        tm peer relay ALIAS ADDRESS
        tm peer relay-update ALIAS
        tm peer ask-share ALIAS [--for PROJECT] [--note TEXT]
@@ -82,7 +83,7 @@ func runPeer(e *Env, args []string) error {
 			return usagef("tm peer %s takes no --%s\n%s", args[0], name, peerUsage)
 		}
 	}
-	npos := map[string]int{"pair": 0, "join": 1, "list": 0, "remove": 1, "rotate": 0, "panes": 2, "conversations": 2, "needs": 2, "pages": 3, "relay": 2, "relay-update": 1, "name": 2,
+	npos := map[string]int{"pair": 0, "join": 1, "list": 0, "remove": 1, "rotate": 0, "panes": 2, "conversations": 2, "needs": 2, "pages": 3, "files": 3, "relay": 2, "relay-update": 1, "name": 2,
 		"ask-share": 1, "requests": 0, "decline": 1}
 	if n, ok := npos[args[0]]; !ok || len(pos) != n {
 		return usagef("%s", peerUsage)
@@ -120,6 +121,8 @@ func runPeer(e *Env, args []string) error {
 		return e.peerNeeds(dir, pos[0], pos[1])
 	case "pages":
 		return e.peerPages(dir, pos[0], pos[1], pos[2])
+	case "files":
+		return e.peerFiles(dir, pos[0], pos[1], pos[2])
 	case "relay":
 		return e.peerRelay(dir, pos[0], pos[1])
 	case "relay-update":
@@ -420,6 +423,9 @@ type peerEntry struct {
 	// Pages are the projects whose pages it may read, the project pages
 	// switch (§16.17): on for these, off for every other.
 	Pages []string `json:"pages"`
+	// Files are the projects whose folders it may read, the files switch
+	// (§16.18): on for these, off for every other.
+	Files []string `json:"files"`
 }
 
 func (e *Env) peerList(dir string, asJSON bool) error {
@@ -441,7 +447,7 @@ func (e *Env) peerList(dir string, asJSON bool) error {
 	entries := []peerEntry{}
 	for _, p := range peers {
 		pe := peerEntry{Alias: p.Alias, Name: p.Name, Told: p.Told, ID: p.ID().String(), Short: p.ID().Short(), Relay: p.Relay, Panes: proto.PanesWord(p.PanesLevel()),
-			Conversations: convWord(p.ConversationsOn()), Needs: p.NeedsLevel(), Pages: append([]string{}, p.Pages...)}
+			Conversations: convWord(p.ConversationsOn()), Needs: p.NeedsLevel(), Pages: append([]string{}, p.Pages...), Files: append([]string{}, p.Files...)}
 		if l, ok := links[pe.ID]; ok {
 			pe.Link = &l
 		}
@@ -486,6 +492,9 @@ func (e *Env) peerList(dir string, asJSON bool) error {
 		}
 		if len(pe.Pages) > 0 {
 			state += "; pages: " + strings.Join(pe.Pages, ", ")
+		}
+		if len(pe.Files) > 0 {
+			state += "; files: " + strings.Join(pe.Files, ", ")
 		}
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", peer.Both(cmp.Or(pe.Name, pe.Told), pe.Alias), pe.Short, relayHost(pe.Relay), state)
 	}
@@ -594,6 +603,61 @@ func (e *Env) peerPages(dir, alias, slug, word string) error {
 		fmt.Fprintf(e.Stdout, "Pages on for %s on %s; the project isn't shared, so it reads nothing until share is on in the project's Settings tab.\n", alias, slug)
 	default:
 		fmt.Fprintf(e.Stdout, "Pages on for %s on %s: it reads the board (titles, statuses, steps; no notes), the overview (goal and PROJECT.md; no repository paths), the threads' library files and the designs (no page links, no open questions). Never the memory; nothing it does writes here.\n", alias, slug)
+	}
+	e.reload()
+	return nil
+}
+
+// peerFiles turns the files switch for the paired server alias on or off for
+// project (docs/SPEC.md §16.18): on, it reads the project's threads' worktrees
+// and its listed repos at their main checkouts, read-only, uncommitted work
+// included. Never git-ignored files or the contents of those named like
+// secrets. It needs the project shared, and sharing going off clears it.
+func (e *Env) peerFiles(dir, alias, slug, word string) error {
+	if word != "on" && word != "off" {
+		return usagef("tm peer files ALIAS PROJECT on|off: %q isn't one", word)
+	}
+	if !project.ValidSlug(slug) {
+		return usagef("tm peer files ALIAS PROJECT on|off: %q isn't a project", slug)
+	}
+	on := word == "on"
+	if on {
+		shared := false
+		if cfg, err := config.Load(); err == nil {
+			if s, err := cfg.Safety(slug); err == nil {
+				shared = s.Share && s.Active && !s.Archived
+			}
+		}
+		if !shared {
+			return &project.Error{Code: "not-shared", Msg: fmt.Sprintf("%s isn't shared: turn on Shared with paired servers in its Settings tab first", slug)}
+		}
+	}
+	p, err := project.Open(slug)
+	if err != nil {
+		if on {
+			return err
+		}
+		// Off holds for a project that is gone too.
+		found, err := peer.SetFiles(dir, alias, slug, false)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return &project.Error{Code: "unknown-peer", Msg: fmt.Sprintf("no peer %q (tm peer list)", alias)}
+		}
+	} else {
+		found, err := p.SetPeerFiles(e.Caller, dir, alias, on)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return &project.Error{Code: "unknown-peer", Msg: fmt.Sprintf("no peer %q (tm peer list)", alias)}
+		}
+	}
+	if on {
+		fmt.Fprintf(e.Stdout, "Files on for %s on %s: it reads the project's worktrees and repos, read-only, not git-ignored files or files named like secrets.\n", alias, slug)
+	} else {
+		fmt.Fprintf(e.Stdout, "Files off for %s on %s: its next read is refused, and what shows there leaves.\n", alias, slug)
 	}
 	e.reload()
 	return nil

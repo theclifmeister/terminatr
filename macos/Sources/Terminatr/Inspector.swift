@@ -492,12 +492,20 @@ struct Inspector: View {
                     FactRow("Project", ref.project)
                     FactRow("Link", peer?.state ?? "not paired")
                     FactRow("Panes", panes(app.remotePane(ref)))
+                    if let far = FarFiles.of(peer, project: ref.project, caps: app.caps) { FactRow("Files", far.fact) }
+                    if let peer, app.caps.contains("peer-worktrees") { FactRow("Yours", FarFiles.yours(peer)) }
                     if project?.stale == true { FactRow("Read", "stale") }
                 }
                 Text("Its conversation stays there: only the pane crosses the link.")
                     .font(theme.sized(12))
                     .foregroundStyle(theme.muted)
                     .fixedSize(horizontal: false, vertical: true)
+                if app.caps.contains("peer-worktrees") {
+                    Text("A server's own user turns its files on or off, in the Network popup or with tm peer files.")
+                        .font(theme.sized(12))
+                        .foregroundStyle(theme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
             if let s {
                 InspectorFold("Agent", summary: InspectorSummary.agent(s.agent, model: s.model, queued: s.queuedPrompts)) {
@@ -628,6 +636,7 @@ struct ProjectFold: View {
 /// A paired server's project in the panel: what that server lists of it,
 /// its needs answered there where it lets this one.
 struct RemoteProjectInspector: View {
+    @Environment(\.theme) private var theme
     @Environment(AppModel.self) private var app
     let peer: AppAPI.Peer
     let project: AppAPI.PeerProject
@@ -648,6 +657,14 @@ struct RemoteProjectInspector: View {
                     FactList {
                         FactRow("Server", server)
                         FactRow("Link", peer.state)
+                        if let far = FarFiles.of(peer, project: project.project, caps: app.caps) { FactRow("Files", far.fact) }
+                        if app.caps.contains("peer-worktrees") { FactRow("Yours", FarFiles.yours(peer)) }
+                    }
+                    if app.caps.contains("peer-worktrees") {
+                        Text("A server's own user turns its files on or off, in the Network popup or with tm peer files.")
+                            .font(theme.sized(12))
+                            .foregroundStyle(theme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }

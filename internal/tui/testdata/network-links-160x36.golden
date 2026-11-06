@@ -117,10 +117,10 @@
 │    ■ web               [ ] not shared                                1 link ⚑ │                                                              │
 │      └─ ⇄ terminatr      both · ask first · files: ask me            paused ⚑ │ A shared project shows, read-only, in the sidebar of every   │
 │         ⚑ paused: too many messages without you                               │ paired server: what waits for you, the inbox, threads, tasks │
-│                                                                               │ on deck and its sessions' states; never its files. Sharing   │
-│ ▾ ◉ mini · connected 38 ms · tm 0.27.0                              panes off │ asks first; it is the project's own Shared with paired       │
-│    ■ acme-api          ⇄ terminatr                                  ● working │ servers setting.                                             │
-│    ■ infra             shared with you · + link (L)             · not running │                                                              │
+│                                                                               │ on deck and its sessions' states. Its files stay here unless │
+│ ▾ ◉ mini · connected 38 ms · tm 0.27.0                              panes off │ you turn on files for a server, in its details. Sharing asks │
+│    ■ acme-api          ⇄ terminatr                                  ● working │ first; it is the project's own Shared with paired servers    │
+│    ■ infra             shared with you · + link (L)             · not running │ setting.                                                     │
 │                                                                               │                                                              │
 │ ▾ ○ nas · offline 4m · relay                                        panes off │                                                              │
 │    ■ media · stale     shared with you · + link (L)                 ● working │                                                              │

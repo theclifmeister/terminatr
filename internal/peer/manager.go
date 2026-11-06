@@ -79,6 +79,8 @@ type Manager struct {
 	// stamps are the paired servers' folders' stamps this server's
 	// consoles share (WorktreeStamp).
 	stamps stampShare
+	// filesRead is when each peer last read a folder here (noteFilesRead).
+	filesRead map[ID]time.Time
 }
 
 type running struct {
@@ -205,6 +207,7 @@ func (m *Manager) add(id *Identity, cert tls.Certificate, p Peer) {
 	}
 	if _, ok := m.opts.Export.(WorktreeExporter); ok {
 		d.worktrees = func(project string) bool { return m.filesOn(p.ID(), project) }
+		d.worktreeRead = func() { m.noteFilesRead(p.ID()) }
 	}
 	if _, ok := m.opts.Export.(UploadExporter); ok && m.opts.Panes != nil {
 		d.uploads = func() bool { return m.panesWrite(p.ID()) }
@@ -456,8 +459,10 @@ func (m *Manager) Status() *proto.LinkStatus {
 	if m.err != nil {
 		st.Error = m.err.Error()
 	}
-	for _, r := range m.links {
-		st.Peers = append(st.Peers, r.l.status())
+	for k, r := range m.links {
+		l := r.l.status()
+		l.FilesRead = m.filesRead[k]
+		st.Peers = append(st.Peers, l)
 	}
 	slices.SortFunc(st.Peers, func(a, b proto.PeerLink) int { return strings.Compare(a.Alias, b.Alias) })
 	return st
