@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.82.1](https://github.com/theclifmeister/terminatr/compare/v0.82.0...v0.82.1) (2026-11-06)
+
+
+### Bug Fixes
+
+* **app:** Open turns off for files that would run, in the Library tab and the Attached card ([#1125](https://github.com/theclifmeister/terminatr/issues/1125)) ([40d0d97](https://github.com/theclifmeister/terminatr/commit/40d0d970272cd5e4af36080b88223ca3fd0ad806))
+* **ios:** the composer no longer sizes itself from its own safe area ([#1127](https://github.com/theclifmeister/terminatr/issues/1127)) ([5582d81](https://github.com/theclifmeister/terminatr/commit/5582d81e2a54a7a2119e07d83953a283a3e2a745))
+
 ## [0.82.0](https://github.com/theclifmeister/terminatr/compare/v0.81.1...v0.82.0) (2026-11-05)
 
 
