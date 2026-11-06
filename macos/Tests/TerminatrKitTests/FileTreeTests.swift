@@ -164,7 +164,11 @@ private let tree: [String: [AppAPI.FileEntry]] = [
     for name in ["run.command", "A.APP", "x.sh", "evil.terminal", "go.webloc", "tool.pkg"] {
         #expect(FileCaution.launches(name), "\(name)")
     }
-    for name in ["a.png", "b.pdf", "c.md", "Makefile", ".env"] {
+    // The Library tab and the Attached card ask the same rule as the Files panel.
+    for name in ["dir/run.COMMAND", "a.tar.sh", "Mail.webloc"] {
+        #expect(FileCaution.launches(name), "\(name)")
+    }
+    for name in ["a.png", "b.pdf", "c.md", "Makefile", ".env", "shell", "notes.sh.txt"] {
         #expect(!FileCaution.launches(name), "\(name)")
     }
 }
