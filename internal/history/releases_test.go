@@ -32,10 +32,11 @@ func releaseProject(t *testing.T, repos ...string) *project.Project {
 // tagAt makes a commit on the repo, dated, with these lightweight tags.
 func tagAt(t *testing.T, repo, when string, tags ...string) {
 	t.Helper()
-	env := []string{"GIT_COMMITTER_DATE=" + when, "GIT_AUTHOR_DATE=" + when}
+	env := []string{"GIT_COMMITTER_DATE=" + when, "GIT_AUTHOR_DATE=" + when,
+		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.com", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.com"}
 	run := func(args ...string) {
 		t.Helper()
-		cmd := exec.Command("git", args...)
+		cmd := exec.Command("git", append([]string{"-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false"}, args...)...)
 		cmd.Dir, cmd.Env = repo, append(os.Environ(), env...)
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v %s", args, err, out)
