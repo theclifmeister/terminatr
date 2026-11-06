@@ -34,6 +34,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"github.com/theclifmeister/terminatr/internal/thread"
+	"github.com/theclifmeister/terminatr/internal/widget"
 )
 
 // modRegistryAge is how long the broker trusts the registry without
@@ -615,13 +616,20 @@ func modDone(p *project.Project, o modapi.DoneOptions, now time.Time) (modapi.Do
 		return out
 	}
 	if !o.Groups {
+		if o.Query != "" {
+			done = slices.DeleteFunc(done, func(t *tasks.Task) bool { return !widget.Matches(t.Ref()+" "+t.Title+" "+string(t.Status), o.Query) })
+		}
 		page, total, next := tasks.PageDone(done, now.Location(), o.From, o.To, o.Offset, o.Limit)
 		out.Tasks, out.Total, out.Next = rows(page), total, next
 		return out, nil
 	}
 	out.Total = len(done)
 	reveal, _ := tasks.ParseRef(o.Reveal)
-	for _, g := range led.groups(p, now, reveal) {
+	groups := led.groups(p, now, reveal)
+	if m := markDone(p, groups, done, now); m != nil {
+		out.Mark = &modapi.DoneMark{At: m.At.UTC().Format(time.RFC3339), Title: m.Title, Group: m.Group, Rows: m.Rows, Between: m.Between}
+	}
+	for _, g := range groups {
 		lines := make([]modapi.DoneRelease, 0, len(g.Releases))
 		for _, l := range g.Releases {
 			lines = append(lines, modapi.DoneRelease{Label: l.Label(), Time: l.Time, Repo: l.Repo, Part: l.Part, Tag: l.Tag,

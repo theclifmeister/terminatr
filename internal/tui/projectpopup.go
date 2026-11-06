@@ -93,6 +93,8 @@ type projectView struct {
 	libOpen   map[string]bool
 	libPick   string
 	libTyping bool
+	// libBiggest lists the tab flat, biggest first (librarysort.go).
+	libBiggest bool
 	// msgs are the Messages tab's messages, newest first.
 	msgs msgList
 	// designs are the Designs tab's designs, by name, desOK once
@@ -559,6 +561,9 @@ func (pv *projectView) box(m *dash) box {
 			keys = "enter open or fold the group · " + keys
 		case len(pv.libFiles()) > 0:
 			keys = libTabKeys
+			if f, ok := pv.selLib(); ok && f.Published != "" {
+				keys = "p published · " + keys
+			}
 			if r, ok := pv.libStackRow(); ok {
 				keys = "v " + r.otherWord() + " · " + keys
 			}
@@ -665,9 +670,14 @@ const tabHit = -2
 // click picks a tab on the tab bar, else the clicked line's repository,
 // inbox item, task or setting (which it changes, as enter does).
 func (pv *projectView) click(m *dash, item, col int, double bool) tea.Cmd {
+	typing := pv.libTyping
 	pv.libTyping = false
 	if item == libFilterHit {
-		pv.libTyping = true
+		if _, at := pv.libFilterLine(m.inner(viewWidth)); !typing && at >= 0 && col >= at {
+			pv.sortLib(!pv.libFlat())
+			return nil
+		}
+		pv.libTyping = libShowsFilter(pv.library, pv.libFilter)
 		return nil
 	}
 	if item <= libChipHit {

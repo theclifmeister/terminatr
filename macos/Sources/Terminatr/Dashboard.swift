@@ -263,6 +263,7 @@ struct ProjectDashboard: View {
         VStack(alignment: .leading, spacing: 9) {
             if !ledger.repos.isEmpty { doneRepoMenu }
             ForEach(groups, id: \.key) { group in
+                if let mark = ledger.markAbove(group) { DoneMarkLine(mark: mark) }
                 VStack(alignment: .leading, spacing: 5) {
                     Button {
                         if ledger.press(group) { read(group) }
@@ -284,15 +285,14 @@ struct ProjectDashboard: View {
                     .accessibilityValue(ledger.isOpen(group) ? "open" : "folded")
                     if ledger.isOpen(group) {
                         let rows = ledger.entries(in: group)
-                        if !rows.isEmpty {
-                            HairlineList {
-                                ForEach(rows) { entry in
-                                    switch entry {
-                                    case .task(let t): BoardRow(project: project.slug, task: t, timeOnly: group.kind == "day")
-                                    case .release(let r): ReleaseLine(release: r)
-                                    }
-                                }
-                            }
+                        // The line at the user's last action parts the rows.
+                        let at = ledger.markEntry(in: group)
+                        let newer = at.map { Array(rows.prefix($0)) } ?? rows
+                        let older = at.map { Array(rows.dropFirst($0)) } ?? []
+                        if !newer.isEmpty { doneEntries(newer, in: group) }
+                        if at != nil, let mark = ledger.mark { DoneMarkLine(mark: mark) }
+                        if !older.isEmpty {
+                            doneEntries(older, in: group)
                         }
                         if reading.contains(group.key) {
                             ProgressView().controlSize(.small)
@@ -303,6 +303,19 @@ struct ProjectDashboard: View {
                                 .font(theme.sized(Flat.label))
                         }
                     }
+                }
+            }
+            if let mark = ledger.markBelow { DoneMarkLine(mark: mark) }
+        }
+    }
+
+    /// A run of an open group's rows and release lines.
+    private func doneEntries(_ rows: [DoneLedger.Entry], in group: AppAPI.DoneGroup) -> some View {
+        HairlineList {
+            ForEach(rows) { entry in
+                switch entry {
+                case .task(let t): BoardRow(project: project.slug, task: t, timeOnly: group.kind == "day")
+                case .release(let r): ReleaseLine(release: r)
                 }
             }
         }
@@ -710,6 +723,26 @@ private struct BoardRow: View {
                 }
                 TaskOutcome(project: project, task: task.ref)
             }
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// The line in Done at the user's last action, tm's words between two
+/// rules in the action colour.
+private struct DoneMarkLine: View {
+    @Environment(\.theme) private var theme
+    let mark: AppAPI.DoneMark
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Rectangle().fill(theme.action).frame(width: 12, height: 1)
+            Text(mark.title)
+                .font(theme.sized(Flat.label))
+                .foregroundStyle(theme.action)
+                .lineLimit(1)
+                .layoutPriority(1)
+            Rectangle().fill(theme.action).frame(height: 1)
         }
         .accessibilityElement(children: .combine)
     }

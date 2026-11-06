@@ -82,11 +82,39 @@ public struct DoneLedger: Equatable, Sendable {
     public private(set) var total = 0
     /// What a filter offers, with several repos (app API 68).
     public private(set) var repos: [AppAPI.DoneRepo] = []
+    /// The line at the user's last action (app API 67), when work has
+    /// finished since.
+    public private(set) var mark: AppAPI.DoneMark?
     private var rows: [String: Fold] = [:]
     /// The groups the user opened or folded from how they came.
     private var toggled: Set<String> = []
 
     public init() {}
+
+    /// The line to draw above group's heading, for an action on a day no
+    /// group holds.
+    public func markAbove(_ group: AppAPI.DoneGroup) -> AppAPI.DoneMark? {
+        guard let mark, mark.between, markGroup?.key == group.key else { return nil }
+        return mark
+    }
+
+    /// The line to draw below every group: an action older than all the work.
+    public var markBelow: AppAPI.DoneMark? {
+        guard let mark, mark.between, markGroup == nil else { return nil }
+        return mark
+    }
+
+    /// How many of group's rows, as read, stand above the line, nil when
+    /// the line isn't among its rows or the user folded it.
+    public func markRows(in group: AppAPI.DoneGroup) -> Int? {
+        guard let mark, !mark.between, markGroup?.key == group.key, isOpen(group) else { return nil }
+        return min(mark.rows, tasks(in: group).count)
+    }
+
+    private var markGroup: AppAPI.DoneGroup? {
+        guard let mark, let groups, groups.indices.contains(mark.group) else { return nil }
+        return groups[mark.group]
+    }
 
     /// Whether group shows its rows: as it came, unless the user pressed it.
     public func isOpen(_ group: AppAPI.DoneGroup) -> Bool {
@@ -133,6 +161,22 @@ public struct DoneLedger: Equatable, Sendable {
         return out
     }
 
+    /// Which of group's entries the line at the user's last action stands
+    /// above: below its rows (markRows), and among the release lines of that
+    /// gap by time. Nil when it stands elsewhere.
+    public func markEntry(in group: AppAPI.DoneGroup) -> Int? {
+        guard let above = markRows(in: group), let mark else { return nil }
+        let all = entries(in: group)
+        var at = 0
+        var seen = 0
+        while at < all.count, seen < above {
+            if case .task = all[at] { seen += 1 }
+            at += 1
+        }
+        while at < all.count, case .release(let r) = all[at], r.at >= mark.at { at += 1 }
+        return at
+    }
+
     /// Forgets what was read of another repo, keeping which folds are open.
     public mutating func refilter() {
         groups = nil
@@ -157,6 +201,7 @@ public struct DoneLedger: Equatable, Sendable {
         groups = done.groups
         total = done.total
         repos = done.repos
+        mark = done.mark
         rows = [:]
         var again: [(group: AppAPI.DoneGroup, limit: Int)] = []
         for g in done.groups where isOpen(g) {

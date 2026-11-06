@@ -748,7 +748,7 @@ func attachedFar(paths tmclient.Paths, alias, slug, id string) ([]thread.LibFile
 	var out []thread.LibFile
 	for _, f := range res.Files {
 		if id == "" || f.Thread == id {
-			out = append(out, thread.LibFile{Thread: f.Thread, Task: f.Task, Title: f.Title, State: f.State, Name: f.Name, Size: f.Size, Time: f.Time})
+			out = append(out, thread.LibFile{Thread: f.Thread, Task: f.Task, Title: f.Title, State: f.State, Name: f.Name, DocTitle: f.DocTitle, Size: f.Size, Time: f.Time})
 		}
 	}
 	return out, ""
@@ -780,7 +780,7 @@ func programFiles(paths tmclient.Paths, slug string) ([]thread.LibFile, string, 
 	out := make([]thread.LibFile, 0, len(res.Files))
 	for _, f := range res.Files {
 		out = append(out, thread.LibFile{Thread: f.Thread, Task: f.Task, TaskStatus: f.TaskStatus, Title: f.Title, Repo: f.Repo, State: f.State,
-			Name: f.Name, Size: f.Size, Time: f.Time, Peer: f.Peer, Message: f.Message, Project: f.Project, Server: f.Server})
+			Name: f.Name, DocTitle: f.DocTitle, Published: f.Published, Size: f.Size, Time: f.Time, Peer: f.Peer, Message: f.Message, Project: f.Project, Server: f.Server})
 	}
 	return out, res.Note, nil
 }

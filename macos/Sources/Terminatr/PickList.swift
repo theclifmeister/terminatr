@@ -11,6 +11,8 @@ struct PickList<ID: Hashable, Content: View>: View {
     /// The rows' ids, top to bottom: what ↑ and ↓ walk.
     let order: [ID]
     var name: String
+    /// Scrolls to the pick when the list appears: the Library's new order.
+    var reveal = false
     /// Whether ← and → move the pick too: rows of tiles, in the Library.
     var across = false
     @ViewBuilder var content: Content
@@ -31,6 +33,9 @@ struct PickList<ID: Hashable, Content: View>: View {
             .focusEffectDisabled()
             .focused($focused)
             .onChange(of: selection) { focused = true }
+            .onAppear {
+                if reveal, let selection { proxy.scrollTo(selection) }
+            }
             .onMoveCommand { direction in
                 let back = direction == .up || (across && direction == .left)
                 let on = direction == .down || (across && direction == .right)

@@ -1249,12 +1249,15 @@ type TaskDoneParams struct {
 // DoneTasks is task.done's result: done tasks, newest first since app API
 // 54 (board order before), without their notes and steps. Since app API
 // 57: Groups are Done's headings when asked for, Total how many tasks they
-// or the range hold, Next the offset to read on from (0 at the end).
+// or the range hold, Next the offset to read on from (0 at the end). Since
+// app API 67: Mark, with Groups, the line at the human's last action in the
+// journal, when work has finished since.
 type DoneTasks struct {
 	Tasks  []Task      `json:"tasks"`
 	Groups []DoneGroup `json:"groups,omitempty"`
 	Total  int         `json:"total,omitempty"`
 	Next   int         `json:"next,omitempty"`
+	Mark   *DoneMark   `json:"mark,omitempty"`
 	// Repos are what a filter offers, with several repos, on a groups read
 	// (app API 68).
 	Repos []DoneRepo `json:"repos,omitempty"`
@@ -1281,6 +1284,19 @@ type DoneRelease struct {
 	Tag    string `json:"tag"`
 	At     string `json:"at"`
 	Offset int    `json:"offset,omitempty"`
+}
+
+// DoneMark is the line in Done at the human's last action (app API 67): At
+// its time, Title its words. It stands in Groups[Group], below Rows of its
+// tasks; or, with Between, above that group's heading (Group is the number
+// of groups when that is below them all). The group holding the line comes
+// open.
+type DoneMark struct {
+	At      string `json:"at"`
+	Title   string `json:"title"`
+	Group   int    `json:"group"`
+	Rows    int    `json:"rows,omitempty"`
+	Between bool   `json:"between,omitempty"`
 }
 
 // DoneGroup is one heading of Done (app API 57): kind day, week, month or
@@ -1318,6 +1334,9 @@ func doneTasksOf(r server.TaskDone) DoneTasks {
 	}
 	for _, r := range r.Repos {
 		out.Repos = append(out.Repos, DoneRepo(r))
+	}
+	if m := r.Mark; m != nil {
+		out.Mark = &DoneMark{At: m.At, Title: m.Title, Group: m.Group, Rows: m.Rows, Between: m.Between}
 	}
 	return out
 }
@@ -1889,10 +1908,14 @@ type Library struct {
 // the status of the thread's task, "" for none (app API 55; the Library's
 // heading says it). Repo is the folder name of the thread's repository in
 // a project with several (app API 53; the Library's filter finds by it and
-// its heading names it). A coordinator's or director's own file has "seat"
-// for its Thread (app API 59). In a program's listing Project is the member
-// it is in and Server that member's paired server, both empty for the
-// director's own. library.read names it by Thread, else Message, and Name.
+// its heading names it). DocTitle is a page's title or a note's first
+// heading, "" for none (app API 64; the row shows it with the name, and the
+// filter finds by it). Published is the https page the designs list has for
+// a page of its design task, "" for none, and always on a paired server's
+// (app API 64). A coordinator's or director's own file has "seat" for its
+// Thread (app API 59). In a program's listing Project is the member it is in
+// and Server that member's paired server, both empty for the director's own.
+// library.read names it by Thread, else Message, and Name.
 type LibraryFile struct {
 	Thread     string    `json:"thread,omitempty"`
 	Task       string    `json:"task,omitempty"`
@@ -1901,6 +1924,8 @@ type LibraryFile struct {
 	Repo       string    `json:"repo,omitempty"`
 	State      string    `json:"state"`
 	Name       string    `json:"name"`
+	DocTitle   string    `json:"doc_title,omitempty"`
+	Published  string    `json:"published,omitempty"`
 	Size       int64     `json:"size"`
 	Time       time.Time `json:"time"`
 	Peer       string    `json:"peer,omitempty"`
@@ -1936,7 +1961,7 @@ func libraryOf(r proto.LibraryListResult) Library {
 	out := Library{Files: []LibraryFile{}, Note: r.Note}
 	for _, f := range r.Files {
 		out.Files = append(out.Files, LibraryFile{Thread: f.Thread, Task: f.Task, TaskStatus: f.TaskStatus, Title: f.Title, Repo: f.Repo, State: f.State,
-			Name: f.Name, Size: f.Size, Time: f.Time, Peer: f.Peer, Message: f.Message, Project: f.Project, Server: f.Server})
+			Name: f.Name, DocTitle: f.DocTitle, Published: f.Published, Size: f.Size, Time: f.Time, Peer: f.Peer, Message: f.Message, Project: f.Project, Server: f.Server})
 	}
 	return out
 }

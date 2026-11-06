@@ -92,6 +92,7 @@ var commands = map[string]command{
 	"mcp":     runMCPCmd,
 	"search":  runSearch,
 	"history": runHistory,
+	"week":    runWeek,
 	"program": runProgram,
 }
 
@@ -174,6 +175,8 @@ func commandUsage(name string) string {
 		return doctorUsage
 	case "history":
 		return historyUsage
+	case "week":
+		return weekUsage
 	case "inbox":
 		return inboxUsage
 	case "library":

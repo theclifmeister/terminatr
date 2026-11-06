@@ -135,8 +135,9 @@ struct MemoryPane: View {
 /// when it comes into view; other files stay rows, and so does an image with
 /// no thumbnail (T1059). Two images that are one picture twice are one tile
 /// or row with a switch, v too, and before and after open side by side
-/// (T1057). A file opens in Quick Look (space, or a double click), its app
-/// (Open), or is saved (Save As…).
+/// (T1057). A switch lists every file flat, biggest first, each with its task
+/// and a stack's two apart (T1056). A file opens in Quick Look (space, or a
+/// double click), its app (Open), or is saved (Save As…).
 struct LibraryPane: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
@@ -153,6 +154,7 @@ struct LibraryPane: View {
     @State private var kind: LibraryPage.Kind?
     /// The groups opened past their fold.
     @State private var opened: Set<String> = []
+    @State private var sort: LibraryPage.Sort = .newest
     /// The file a switched stack shows, by its row's id.
     @State private var variants: [String: String] = [:]
     /// The before and after open side by side.
@@ -172,6 +174,11 @@ struct LibraryPane: View {
     /// The groups the filter and the kind leave.
     private var groups: [LibraryPage.Group] { LibraryPage.groups(shown) }
 
+    private var isFlat: Bool { LibraryPage.isFlat(files ?? [], sort) }
+
+    /// The flat list, biggest first: a row per file, a stack's two apart.
+    private var biggest: [LibraryPage.Row] { LibraryPage.biggestRows(shown) }
+
     private func listed(_ g: LibraryPage.Group) -> LibraryPage.Listing {
         let draws = app.drawsThumbnails(peer: peer)
         return g.listed(open: opened.contains(g.id), query: query) { f in
@@ -189,7 +196,8 @@ struct LibraryPane: View {
 
     /// The rows top to bottom, a fold's too: what ↑ and ↓ walk.
     private var order: [String] {
-        groups.flatMap { g in
+        if isFlat { return biggest.map(\.id) }
+        return groups.flatMap { g in
             let l = listed(g)
             return l.all.map(\.id) + (l.folds ? [Self.foldKey(g)] : [])
         }
@@ -225,37 +233,48 @@ struct LibraryPane: View {
                 .padding(.vertical, 22)
                 Spacer()
             } else {
-                PickList(selection: $picked, order: order, name: "Files", across: true) {
-                    ForEach(groups) { g in
-                        let l = listed(g)
-                        LibraryHeading(g)
-                            .padding(.horizontal, 8)
-                            .padding(.top, 10)
-                            .padding(.bottom, 3)
-                        let rows = LibraryPage.stripRows(l.strip, columns: columns)
-                        // By its first file: a LazyVStack drops a row whose id
-                        // another group's row has too, as an offset's would.
-                        ForEach(rows, id: \.first) { row in
-                            stripRow(g, row, fold: row == rows.first && foldBeside(l) ? l.more : nil)
-                        }
-                        ForEach(l.rows) { r in
-                            PickRow(id: r.id, selection: $picked, open: { open(r) }) {
-                                if r.isStack {
-                                    LibraryStackRow(r, shown: showing(r)) { pick(r, $0) }
-                                } else {
-                                    LibraryFileRow(r.files[0])
-                                }
+                PickList(selection: $picked, order: order, name: "Files", reveal: true, across: !isFlat) {
+                    if isFlat {
+                        ForEach(biggest) { r in
+                            let f = r.files[0]
+                            PickRow(id: r.id, selection: $picked, open: { look(f) }) {
+                                fileRow(f, source: LibraryPage.source(f))
                             }
                             .contextMenu { actions(r) }
                         }
-                        if l.folds, !foldBeside(l) {
-                            PickRow(id: Self.foldKey(g), selection: $picked, act: { toggle(g) }) {
-                                Text(l.fewer ? "Show fewer" : "+\(l.more) more").foregroundStyle(theme.muted)
+                    } else {
+                        ForEach(groups) { g in
+                            let l = listed(g)
+                            LibraryHeading(g)
+                                .padding(.horizontal, 8)
+                                .padding(.top, 10)
+                                .padding(.bottom, 3)
+                            let rows = LibraryPage.stripRows(l.strip, columns: columns)
+                            // By its first file: a LazyVStack drops a row whose id
+                            // another group's row has too, as an offset's would.
+                            ForEach(rows, id: \.first) { row in
+                                stripRow(g, row, fold: row == rows.first && foldBeside(l) ? l.more : nil)
                             }
-                            .help(l.fewer ? "Folds this group to its newest files" : "Shows the rest of this group")
+                            ForEach(l.rows) { r in
+                                PickRow(id: r.id, selection: $picked, open: { open(r) }) {
+                                    if r.isStack {
+                                        LibraryStackRow(r, shown: showing(r)) { pick(r, $0) }
+                                    } else {
+                                        fileRow(r.files[0])
+                                    }
+                                }
+                                .contextMenu { actions(r) }
+                            }
+                            if l.folds, !foldBeside(l) {
+                                PickRow(id: Self.foldKey(g), selection: $picked, act: { toggle(g) }) {
+                                    Text(l.fewer ? "Show fewer" : "+\(l.more) more").foregroundStyle(theme.muted)
+                                }
+                                .help(l.fewer ? "Folds this group to its newest files" : "Shows the rest of this group")
+                            }
                         }
                     }
                 }
+                .id(isFlat)
                 .onGeometryChange(for: Double.self) { Double($0.size.width) } action: { width = $0 }
                 .onKeyPress(.space) {
                     if let g = groups.first(where: { Self.foldKey($0) == picked }) {
@@ -295,6 +314,7 @@ struct LibraryPane: View {
             query = ""
             kind = nil
             opened = []
+            sort = .newest
             variants = [:]
             thumbs.removeAll()
             noThumb = []
@@ -355,6 +375,28 @@ struct LibraryPane: View {
         }
     }
 
+    /// Turns the sort, the pick staying on its file. To the flat list a fold's
+    /// row lets go, which that list hasn't, and a stack's goes to the half it
+    /// shows. Back, a file under a fold opens its group first, so the new list
+    /// shows it, and a stack's half makes its row show that file.
+    private func turn(to new: LibraryPage.Sort) {
+        guard new != sort else { return }
+        if new == .biggest {
+            if groups.contains(where: { Self.foldKey($0) == picked }) {
+                picked = nil
+            } else if let r = row(picked) {
+                picked = LibraryPage.biggestRows([showing(r)])[0].id
+            }
+        } else if let f = row(picked)?.files[0], let g = groups.first(where: { $0.id == LibraryPage.key(f) }) {
+            if listed(g).row(of: f) == nil { opened.insert(g.id) }
+            if let r = listed(g).row(of: f) {
+                picked = r.id
+                if r.isStack { variants[r.id] = f.name }
+            }
+        }
+        sort = new
+    }
+
     /// Opens or folds a group, from its fold's row. Opening moves the pick
     /// to the first file that came out; folding leaves it on the row.
     private func toggle(_ g: LibraryPage.Group) {
@@ -373,11 +415,18 @@ struct LibraryPane: View {
         let all = files ?? []
         let chips = LibraryPage.chips(all, query: query, kind: kind)
         let filters = LibraryPage.showsFilter(all, query: query)
-        if filters || !chips.isEmpty {
+        let sorts = LibraryPage.showsSort(all)
+        if filters || sorts || !chips.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
-                if filters {
-                    PaneFilter(prompt: LibraryPage.filterPrompt(all), label: "Filter the library",
-                               help: "Shows the files whose name, task, thread or repository has these words", text: $query)
+                if filters || sorts {
+                    HStack(spacing: 10) {
+                        if filters {
+                            PaneFilter(prompt: LibraryPage.filterPrompt(all), label: "Filter the library",
+                                       help: "Shows the files whose name, task, thread or repository has these words", text: $query)
+                        }
+                        Spacer(minLength: 0)
+                        if sorts { LibrarySortSwitch(Binding { sort } set: { turn(to: $0) }) }
+                    }
                 }
                 if !chips.isEmpty {
                     LibraryChips(chips, kind: Binding { LibraryPage.picked(all, kind) } set: { kind = $0 })
@@ -390,6 +439,20 @@ struct LibraryPane: View {
     }
 
     /// The picked row's acts, on the file it shows.
+    /// A file's row, with its published page when it has one (T1061).
+    private func fileRow(_ f: AppAPI.LibraryFile, source: String? = nil) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            LibraryFileRow(f, source: source)
+            if let url = LibraryPage.published(f) {
+                Button("Open published page") { NSWorkspace.shared.open(url) }
+                    .buttonStyle(.link)
+                    .foregroundStyle(theme.action)
+                    .font(theme.sized(Flat.label))
+                    .help(url.absoluteString)
+            }
+        }
+    }
+
     @ViewBuilder
     private func actions(_ r: LibraryPage.Row) -> some View {
         let f = showing(r)
@@ -405,6 +468,10 @@ struct LibraryPane: View {
         .disabled(FileCaution.launches(f.name))
         .help(FileCaution.launches(f.name) ? "Open would run this file: Quick Look it or Save As…" : "")
         Button("Save As…") { Task { await saveAs(f) } }
+        if let url = LibraryPage.published(f) {
+            Divider()
+            Button("Open published page") { NSWorkspace.shared.open(url) }
+        }
     }
 
     static func key(_ f: AppAPI.LibraryFile) -> String { LibraryPage.id(f) + "/" + f.name }
@@ -421,6 +488,7 @@ struct LibraryPane: View {
 
     /// The listed row of this key: one under a fold has no action bar.
     private func row(_ key: String?) -> LibraryPage.Row? {
+        if isFlat { return biggest.first { $0.id == key } }
         for g in groups {
             if let r = listed(g).all.first(where: { $0.id == key }) { return r }
         }

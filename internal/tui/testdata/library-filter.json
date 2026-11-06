@@ -47,6 +47,22 @@
       {"title": "from studio/acme", "peer": "studio/acme", "message": "M-1", "state": "received", "name": "brief.pdf", "size": 5},
       {"title": "from studio/acme", "peer": "studio/acme", "message": "M-2", "state": "received", "name": "brief.zip", "size": 6}
     ],
+    "titled": [
+      {"thread": "t-0001", "task": "T1", "title": "A design", "name": "design.html", "doc_title": "Who May Run tm", "published": "https://claude.ai/artifact/abc"},
+      {"thread": "t-0002", "task": "T2", "title": "Plain", "name": "notes.md"}
+    ],
+    "sizes": [
+      {"thread": "t-0001", "task": "T1", "task_status": "done", "title": "New", "state": "running", "name": "small.md", "size": 10},
+      {"thread": "t-0001", "task": "T1", "task_status": "done", "title": "New", "state": "running", "name": "site-dark.png", "size": 3000},
+      {"thread": "t-0001", "task": "T1", "task_status": "done", "title": "New", "state": "running", "name": "site-light.png", "size": 200},
+      {"thread": "t-0001", "task": "T1", "task_status": "done", "title": "New", "state": "running", "name": "same-newest.png", "size": 500},
+      {"thread": "t-0002", "task": "T2", "title": "Older", "repo": "api", "state": "resolved", "name": "same-middle.png", "size": 500},
+      {"thread": "t-0003", "title": "No task", "state": "stopped", "name": "nothing.txt", "size": 0},
+      {"thread": "t-0004", "task": "T4", "task_status": "done", "title": "Packed", "state": "archived", "name": "packed.mp4", "size": 175100000},
+      {"thread": "t-0004", "task": "T4", "task_status": "done", "title": "Packed", "state": "archived", "name": "same-oldest.png", "size": 500},
+      {"title": "from studio/acme", "peer": "studio/acme", "message": "M-1", "state": "received", "name": "brief.zip", "size": 78700000},
+      {"title": "from studio/acme", "peer": "studio/acme", "message": "M-2", "state": "received", "name": "brief.zip", "size": 12}
+    ],
     "stacks-threads": [
       {"thread": "t-0001", "task": "T1", "title": "One", "name": "logo-dark.png"},
       {"thread": "t-0002", "task": "T2", "title": "Two", "name": "logo-light.png"}
@@ -97,6 +113,11 @@
     {"library": "linked", "query": "studio", "kind": "", "names": ["brief.pdf"], "chips": []},
     {"library": "linked", "query": "", "kind": "pages", "names": ["brief.pdf"],
      "chips": [["", 2], ["pages", 1], ["notes", 1]]},
+    {"library": "titled", "query": "who may", "kind": "", "names": ["design.html"], "chips": []},
+    {"library": "titled", "query": "design.html", "kind": "", "names": ["design.html"], "chips": []},
+    {"library": "titled", "query": "RUN design", "kind": "", "names": ["design.html"], "chips": []},
+    {"library": "titled", "query": "notes.md", "kind": "", "names": ["notes.md"], "chips": []},
+    {"library": "titled", "query": "artifact", "kind": "", "names": [], "chips": []},
     {"library": "none", "query": "", "kind": "", "names": [], "chips": []},
     {"library": "none", "query": "x", "kind": "images", "names": [], "chips": []},
     {"library": "one", "query": "", "kind": "", "names": ["one.png"], "chips": []},
@@ -213,6 +234,25 @@
     {"files": 37, "open": false, "query": "  ", "rows": 6, "more": 31, "fewer": false},
     {"files": 37, "open": true, "query": "shot", "rows": 37, "more": 0, "fewer": false},
     {"files": 6, "open": true, "query": "", "rows": 6, "more": 0, "fewer": false}
+  ],
+  "biggest": [
+    {"library": "sizes", "query": "", "kind": "", "names": ["packed.mp4", "brief.zip", "site-dark.png", "same-newest.png", "same-middle.png", "same-oldest.png", "site-light.png", "brief.zip", "small.md", "nothing.txt"]},
+    {"library": "sizes", "query": "", "kind": "images", "names": ["site-dark.png", "same-newest.png", "same-middle.png", "same-oldest.png", "site-light.png"]},
+    {"library": "sizes", "query": "site-light", "kind": "", "names": ["site-light.png"]},
+    {"library": "stacks-plain", "query": "", "kind": "", "names": ["logo-light.png", "logo-dark.png", "notes.md"]},
+    {"library": "stacks-seat", "query": "", "kind": "", "names": ["site-dark.png", "site-light.png"]},
+    {"library": "sizes", "query": "same", "kind": "", "names": ["same-newest.png", "same-middle.png", "same-oldest.png"]},
+    {"library": "sizes", "query": "", "kind": "archives", "names": ["brief.zip", "brief.zip"]},
+    {"library": "sizes", "query": "packed", "kind": "", "names": ["packed.mp4", "same-oldest.png"]},
+    {"library": "sizes", "query": "api", "kind": "", "names": ["same-middle.png"]},
+    {"library": "plain", "query": "", "kind": "", "names": ["shot-dark.png", "shot-light.png", "notes.md", "page.html"]},
+    {"library": "none", "query": "", "kind": "", "names": []}
+  ],
+  "sort": [
+    {"files": 0, "shows": false},
+    {"files": 1, "shows": false},
+    {"files": 2, "shows": true},
+    {"files": 37, "shows": true}
   ],
   "filter": [
     {"files": 0, "query": "", "shows": false},

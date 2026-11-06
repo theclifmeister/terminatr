@@ -689,6 +689,30 @@ public enum AppAPI {
         }
     }
 
+    public struct DoneMark: Codable, Sendable, Hashable {
+        public var at: String
+        public var title: String
+        public var group: Int
+        public var rows: Int
+        public var between: Bool
+
+        public init(at: String, title: String, group: Int, rows: Int = 0, between: Bool = false) {
+            self.at = at
+            self.title = title
+            self.group = group
+            self.rows = rows
+            self.between = between
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case at
+            case title
+            case group
+            case rows
+            case between
+        }
+    }
+
     public struct DoneRelease: Codable, Sendable, Hashable {
         public var label: String
         public var time: String
@@ -742,13 +766,15 @@ public enum AppAPI {
         public var groups: [DoneGroup]
         public var total: Int
         public var next: Int
+        public var mark: DoneMark?
         public var repos: [DoneRepo]
 
-        public init(tasks: [Task] = [], groups: [DoneGroup] = [], total: Int = 0, next: Int = 0, repos: [DoneRepo] = []) {
+        public init(tasks: [Task] = [], groups: [DoneGroup] = [], total: Int = 0, next: Int = 0, mark: DoneMark? = nil, repos: [DoneRepo] = []) {
             self.tasks = tasks
             self.groups = groups
             self.total = total
             self.next = next
+            self.mark = mark
             self.repos = repos
         }
 
@@ -757,6 +783,7 @@ public enum AppAPI {
             case groups
             case total
             case next
+            case mark
             case repos
         }
     }
@@ -1447,6 +1474,8 @@ public enum AppAPI {
         public var repo: String
         public var state: String
         public var name: String
+        public var docTitle: String
+        public var published: String
         public var size: Int
         public var time: Date
         public var peer: String
@@ -1454,7 +1483,7 @@ public enum AppAPI {
         public var project: String
         public var server: String
 
-        public init(thread: String = "", task: String = "", taskStatus: String = "", title: String, repo: String = "", state: String, name: String, size: Int, time: Date, peer: String = "", message: String = "", project: String = "", server: String = "") {
+        public init(thread: String = "", task: String = "", taskStatus: String = "", title: String, repo: String = "", state: String, name: String, docTitle: String = "", published: String = "", size: Int, time: Date, peer: String = "", message: String = "", project: String = "", server: String = "") {
             self.thread = thread
             self.task = task
             self.taskStatus = taskStatus
@@ -1462,6 +1491,8 @@ public enum AppAPI {
             self.repo = repo
             self.state = state
             self.name = name
+            self.docTitle = docTitle
+            self.published = published
             self.size = size
             self.time = time
             self.peer = peer
@@ -1478,6 +1509,8 @@ public enum AppAPI {
             case repo
             case state
             case name
+            case docTitle = "doc_title"
+            case published
             case size
             case time
             case peer
@@ -5729,6 +5762,17 @@ extension AppAPI.DoneGroup {
     }
 }
 
+extension AppAPI.DoneMark {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.at = try c.decode(String.self, forKey: .at)
+        self.title = try c.decode(String.self, forKey: .title)
+        self.group = try c.decode(Int.self, forKey: .group)
+        self.rows = try c.decodeIfPresent(Int.self, forKey: .rows) ?? 0
+        self.between = try c.decodeIfPresent(Bool.self, forKey: .between) ?? false
+    }
+}
+
 extension AppAPI.DoneRelease {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -5758,6 +5802,7 @@ extension AppAPI.DoneTasks {
         self.groups = try c.decodeIfPresent([AppAPI.DoneGroup].self, forKey: .groups) ?? []
         self.total = try c.decodeIfPresent(Int.self, forKey: .total) ?? 0
         self.next = try c.decodeIfPresent(Int.self, forKey: .next) ?? 0
+        self.mark = try c.decodeIfPresent(AppAPI.DoneMark.self, forKey: .mark)
         self.repos = try c.decodeIfPresent([AppAPI.DoneRepo].self, forKey: .repos) ?? []
     }
 }
@@ -6083,6 +6128,8 @@ extension AppAPI.LibraryFile {
         self.repo = try c.decodeIfPresent(String.self, forKey: .repo) ?? ""
         self.state = try c.decode(String.self, forKey: .state)
         self.name = try c.decode(String.self, forKey: .name)
+        self.docTitle = try c.decodeIfPresent(String.self, forKey: .docTitle) ?? ""
+        self.published = try c.decodeIfPresent(String.self, forKey: .published) ?? ""
         self.size = try c.decode(Int.self, forKey: .size)
         self.time = try c.decode(Date.self, forKey: .time)
         self.peer = try c.decodeIfPresent(String.self, forKey: .peer) ?? ""

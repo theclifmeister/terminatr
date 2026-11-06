@@ -286,17 +286,81 @@ func revealIn(out []DoneGroup, done []*Task, id int, loc *time.Location) {
 			continue
 		}
 		rows, _, _ := PageDone(done, loc, out[g].From, out[g].To, 0, 0)
-		at := slices.IndexFunc(rows, func(t *Task) bool { return t.ID == id })
-		if at < len(out[g].Tasks) {
-			return
-		}
-		n := max(at+1, min(DoneOpenRows, len(rows)))
-		out[g].Open, out[g].Tasks, out[g].Next = true, rows[:n], 0
-		if n < len(rows) {
-			out[g].Next = n
-		}
+		out[g].openTo(rows, slices.IndexFunc(rows, func(t *Task) bool { return t.ID == id }))
 		return
 	}
+}
+
+// openTo opens g, rows its tasks, read as far as row at.
+func (g *DoneGroup) openTo(rows []*Task, at int) {
+	if at < len(g.Tasks) {
+		g.Open = true
+		return
+	}
+	n := max(at+1, min(DoneOpenRows, len(rows)))
+	n = min(n, len(rows))
+	g.Open, g.Tasks, g.Next = true, rows[:n], 0
+	if n < len(rows) {
+		g.Next = n
+	}
+}
+
+// DoneMark is the line in Done at the human's last action (design
+// board-library, Board step 8), with Title its words. It stands in
+// groups[Group], below Rows of its tasks; or, with Between, above that
+// group's heading, for an action on a day no group holds. Group is
+// len(groups) when that is below them all.
+type DoneMark struct {
+	At      time.Time
+	Title   string
+	Group   int
+	Rows    int
+	Between bool
+}
+
+// MarkDone places the line for the human's action at, where in tm's words
+// ("on the iPhone", or "" from the terminal), in groups, which GroupDone
+// made of done as of now, and opens the group holding the day of it, however
+// old, as far as the line. Nil when no task has finished since.
+func MarkDone(groups []DoneGroup, done []*Task, at time.Time, where string, now time.Time) *DoneMark {
+	loc := now.Location()
+	day := at.In(loc).Format(time.DateOnly)
+	since := func(t *Task) bool {
+		key := t.DoneKey()
+		if when, err := time.Parse(time.RFC3339, key); err == nil {
+			return when.After(at)
+		}
+		// Only its day is known: since, once that day is a later one.
+		_, err := time.Parse(time.DateOnly, key)
+		return err == nil && key > day
+	}
+	if !slices.ContainsFunc(done, since) {
+		return nil
+	}
+	m := &DoneMark{At: at, Title: "you last acted " + DoneLabel(at.UTC().Format(time.RFC3339), now)}
+	m.Group = slices.IndexFunc(groups, func(g DoneGroup) bool { return day >= g.From && day <= g.To })
+	if m.Group >= 0 {
+		g := &groups[m.Group]
+		rows, _, _ := PageDone(done, loc, g.From, g.To, 0, 0)
+		m.Rows = slices.IndexFunc(rows, func(t *Task) bool { return !since(t) })
+		if m.Rows < 0 {
+			m.Rows = len(rows)
+		}
+		g.openTo(rows, m.Rows)
+		if g.Kind == DoneDayGroup {
+			m.Title = "you last acted at " + at.In(loc).Format("15:04")
+		}
+	} else {
+		m.Between = true
+		m.Group = slices.IndexFunc(groups, func(g DoneGroup) bool { return g.Kind == DoneUndatedGroup || day > g.To })
+		if m.Group < 0 {
+			m.Group = len(groups)
+		}
+	}
+	if where != "" {
+		m.Title += " " + where
+	}
+	return m
 }
 
 // PageDone is the page of done, tasks newest first, that finished from

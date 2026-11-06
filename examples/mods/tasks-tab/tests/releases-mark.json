@@ -1,0 +1,198 @@
+{
+  "name": "a release line and the line at the user's last action in one gap stand by time; with one repo or none, no g",
+  "answers": [
+    {
+      "method": "tasks.list",
+      "params": {
+        "slug": "demo"
+      },
+      "result": [
+        {
+          "id": "T1",
+          "title": "Task 1",
+          "status": "done",
+          "steps_done": 0,
+          "steps_total": 0,
+          "steps": [],
+          "updated": "2026-11-06",
+          "done_at": "2026-11-06T10:00:00Z",
+          "done_label": "10:00"
+        }
+      ]
+    },
+    {
+      "method": "tasks.done",
+      "params": {
+        "slug": "demo",
+        "options": {
+          "groups": true,
+          "reveal": ""
+        }
+      },
+      "result": {
+        "tasks": [],
+        "total": 2,
+        "next": 0,
+        "repos": [],
+        "mark": {
+          "at": "2026-11-06T08:00:00Z",
+          "title": "you last acted at 08:00",
+          "group": 0,
+          "rows": 1,
+          "between": false
+        },
+        "groups": [
+          {
+            "kind": "day",
+            "title": "Today",
+            "from": "2026-11-06",
+            "to": "2026-11-06",
+            "count": 2,
+            "archived": 0,
+            "open": true,
+            "tasks": [
+              {
+                "id": "T1",
+                "title": "Task 1",
+                "status": "done",
+                "steps_done": 0,
+                "steps_total": 0,
+                "steps": [],
+                "updated": "2026-11-06",
+                "done_at": "2026-11-06T10:00:00Z",
+                "done_label": "10:00"
+              },
+              {
+                "id": "T2",
+                "title": "Task 2",
+                "status": "done",
+                "steps_done": 0,
+                "steps_total": 0,
+                "steps": [],
+                "updated": "2026-11-06",
+                "done_at": "2026-11-06T10:00:00Z",
+                "done_label": "06:00"
+              }
+            ],
+            "next": 0,
+            "releases": [
+              {
+                "label": "2.0",
+                "time": "09:00",
+                "tag": "v2.0",
+                "at": "2026-11-06T09:00:00Z",
+                "offset": 1
+              },
+              {
+                "label": "1.9",
+                "time": "07:00",
+                "tag": "v1.9",
+                "at": "2026-11-06T07:00:00Z",
+                "offset": 1
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "events": [
+    {
+      "name": "view.opened",
+      "project": "demo",
+      "data": {
+        "view": "tasks",
+        "slot": "project.tab",
+        "project": "demo",
+        "width": 70,
+        "height": 20
+      }
+    },
+    {
+      "name": "ui.key",
+      "project": "demo",
+      "data": {
+        "view": "tasks",
+        "widget": "tasks",
+        "key": "b",
+        "target": {
+          "project": "demo"
+        }
+      }
+    }
+  ],
+  "expect": {
+    "calls": [
+      {
+        "method": "tasks.list",
+        "params": {
+          "slug": "demo"
+        }
+      },
+      {
+        "method": "ui.view.set",
+        "params": {
+          "view": "tasks"
+        }
+      },
+      {
+        "method": "ui.view.set",
+        "params": {
+          "view": "tasks",
+          "widget": {
+            "children": [
+              {
+                "kind": "table",
+                "rows": [
+                  {
+                    "id": "g:done"
+                  },
+                  {
+                    "id": "f:2026-11-06:2026-11-06"
+                  },
+                  {
+                    "id": "T1"
+                  },
+                  {
+                    "id": "r:2026-11-06:2026-11-06:0",
+                    "head": true,
+                    "tight": true
+                  },
+                  {
+                    "id": "y:mark",
+                    "head": true
+                  },
+                  {
+                    "id": "r:2026-11-06:2026-11-06:1",
+                    "head": true,
+                    "tight": true
+                  },
+                  {
+                    "id": "T2"
+                  }
+                ]
+              },
+              {
+                "kind": "keys",
+                "keys": [
+                  {
+                    "key": "b",
+                    "label": "hide done"
+                  },
+                  {
+                    "key": "enter",
+                    "label": "open or fold"
+                  },
+                  {
+                    "key": "p",
+                    "label": "must only"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

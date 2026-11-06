@@ -104,6 +104,17 @@ func TestModViews(t *testing.T) {
 	if err := call("ui.view.open", map[string]any{"view": "cost"}); err == nil {
 		t.Fatal("open after a cursor move")
 	}
+	// So does what the filter says, and it lets it open nothing either.
+	if _, perr := s.modViewInput(proto.ModViewInputParams{Mod: "panel", View: "queue", Project: "demo", Kind: "filter", Widget: "q", Filter: "fix"}, 42, human); perr != nil {
+		t.Fatal(perr)
+	}
+	ev = testwait.Next(t, sub, time.Second)
+	if in, ok := ev.Data.(modbus.Input); ev.Name != modbus.UIFilter || !ok || in.Widget != "q" || in.Filter != "fix" || in.Target.Project != "demo" {
+		t.Fatalf("event %s %+v", ev.Name, ev.Data)
+	}
+	if err := call("ui.view.open", map[string]any{"view": "cost"}); err == nil {
+		t.Fatal("open after a filter")
+	}
 	if _, perr := s.modViewInput(proto.ModViewInputParams{Mod: "panel", View: "queue", Project: "demo", Kind: "scroll"}, 42, human); perr == nil {
 		t.Fatal("kind scroll was taken")
 	}

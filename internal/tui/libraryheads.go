@@ -98,10 +98,7 @@ func libDay(t time.Time) string {
 // status, then the rest. When the kinds don't fit they become a count.
 func libHeading(files []thread.LibFile, w int) (title, meta string) {
 	f := files[0]
-	head := "from " + oneLine(f.Peer)
-	if f.Peer == "" {
-		head = joinSp(f.Task, oneLine(f.Title))
-	}
+	head := libSource(f)
 	if f.Peer == "" && f.TaskStatus != "" {
 		status := oneLine(f.TaskStatus)
 		_, look := stateLook(status)
@@ -123,6 +120,42 @@ func libHeading(files []thread.LibFile, w int) (title, meta string) {
 		text = line([]string{libCount(len(files), "file")})
 	}
 	return title, th().Faint.Render(ansi.Truncate(text, max(w, 8), "…"))
+}
+
+// libFileLabel is a file's row for w cells: its name, or its own title with
+// the name beside it, faint when it may be styled, and "· published" for a
+// page with a published copy. Both stay readable in a tight row: the title
+// gives way down to three fifths, then the name to what's left.
+func libFileLabel(f thread.LibFile, w int, styled bool) string {
+	name, tag := oneLine(f.Name), ""
+	if f.Published != "" {
+		tag = " · published"
+	}
+	nameW := ansi.StringWidth(name) + ansi.StringWidth(tag)
+	if f.DocTitle == "" {
+		if nameW > w {
+			if room := w - ansi.StringWidth(tag); room >= 8 {
+				return ansi.Truncate(name, room, "…") + tag
+			}
+			return fit(name, w)
+		}
+		return name + tag
+	}
+	title := oneLine(f.DocTitle)
+	titleW := min(ansi.StringWidth(title), max(w-2-min(nameW, max(w*2/5, 8)), 0))
+	nameRoom := w - 2 - titleW
+	if titleW < 4 {
+		return fit(title, w)
+	}
+	if room := nameRoom - ansi.StringWidth(tag); room >= 8 {
+		name = ansi.Truncate(name, room, "…") + tag
+	} else {
+		name = ansi.Truncate(name, nameRoom, "…")
+	}
+	if styled {
+		name = th().Faint.Render(name)
+	}
+	return ansi.Truncate(title, titleW, "…") + "  " + name
 }
 
 // libRow is a row under a heading: a file, or a fold's. f is the file, or
@@ -154,10 +187,21 @@ type libShownGroup struct {
 	rows  []libRow
 }
 
-// libShownGroups are the listed groups, in order.
+// libShownGroups are the listed groups, in order: biggest first, one
+// with no fold, whose heading doesn't show.
 func (pv *projectView) libShownGroups() []libShownGroup {
 	files := pv.libFiles()
 	var out []libShownGroup
+	if pv.libFlat() {
+		if len(files) == 0 {
+			return nil
+		}
+		g := libShownGroup{files: files}
+		for _, f := range files {
+			g.rows = append(g.rows, libRow{f: f})
+		}
+		return []libShownGroup{g}
+	}
 	for start := 0; start < len(files); {
 		end := start + 1
 		for end < len(files) && files[end].Group() == files[start].Group() {
