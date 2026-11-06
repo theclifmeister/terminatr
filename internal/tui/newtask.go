@@ -10,8 +10,8 @@ import (
 
 // The new-task prompt (+ in the project popup's Tasks tab): the task
 // templates of the mods that run for the project first, when there are
-// any (mods design §2 tier 3, the bundled default-templates' bug, spike
-// and chore among them), then the title. The task is the human's, added
+// any (mods design §2 tier 3, the bundled default-templates' bug, spike,
+// chore and week-in-review among them), then the title. The task is the human's, added
 // as tm task add [--template] adds it; the coordinator sees it on its
 // board.
 

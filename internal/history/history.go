@@ -79,6 +79,21 @@ func indexOf(p *project.Project) *index {
 // each repo's on its own. No repo, or release_tags = "none", runs no git;
 // settings that can't be read are no reason to fail the numbers.
 func (x *index) releases(p *project.Project, first string, loc *time.Location) []proto.HistoryRepo {
+	var out []proto.HistoryRepo
+	for _, r := range x.repoTags(p, first, loc) {
+		out = append(out, repoReleases(r.name, r.releases))
+	}
+	return out
+}
+
+// taggedRepo is one repo's name and the releases it has.
+type taggedRepo struct {
+	name     string
+	releases []releases.Release
+}
+
+// repoTags are the repos of p with a release, in its list's order.
+func (x *index) repoTags(p *project.Project, first string, loc *time.Location) []taggedRepo {
 	if len(p.Repos) == 0 || first == "" {
 		return nil
 	}
@@ -91,11 +106,11 @@ func (x *index) releases(p *project.Project, first string, loc *time.Location) [
 		return nil
 	}
 	names := tasks.RepoLabels(p.Repos)
-	var out []proto.HistoryRepo
+	var out []taggedRepo
 	for i, repo := range p.Repos {
 		rs := releases.Count(x.tags.Tags(repo), safety.ReleaseTags, first, loc)
 		if len(rs) > 0 {
-			out = append(out, repoReleases(names[i], rs))
+			out = append(out, taggedRepo{names[i], rs})
 		}
 	}
 	return out
@@ -170,24 +185,35 @@ type index struct {
 func (x *index) read(p *project.Project, loc *time.Location) (proto.History, error) {
 	x.mu.Lock()
 	defer x.mu.Unlock()
+	all, sources, first, err := x.load(p)
+	if err != nil {
+		return proto.History{}, err
+	}
+	return numbers(all, runsOf(sources), first, loc), nil
+}
+
+// load reads the task list and whatever the journal added: all the tasks,
+// the journal's lines oldest file first, and its oldest time. The lines
+// are the index's, good while x.mu is held.
+func (x *index) load(p *project.Project) ([]*tasks.Task, []*records, time.Time, error) {
 	// The journal before the archives: the ticker writes a line to its
 	// archive first, so a move meanwhile shows a line twice, which the
 	// numbers don't mind, and never not at all.
 	if err := x.follow(p.Path("JOURNAL.md")); err != nil {
-		return proto.History{}, err
+		return nil, nil, time.Time{}, err
 	}
 	names, err := x.readArchives(p.Path("journal"))
 	if err != nil {
-		return proto.History{}, err
+		return nil, nil, time.Time{}, err
 	}
 	s := p.Tasks()
 	board, err := s.Load()
 	if err != nil {
-		return proto.History{}, err
+		return nil, nil, time.Time{}, err
 	}
 	archived, err := s.LoadArchive()
 	if err != nil {
-		return proto.History{}, err
+		return nil, nil, time.Time{}, err
 	}
 	first := x.current.first
 	sources := make([]*records, 0, len(names)+1)
@@ -199,7 +225,7 @@ func (x *index) read(p *project.Project, loc *time.Location) (proto.History, err
 		}
 	}
 	sources = append(sources, &x.current)
-	return numbers(append(board.Tasks, archived.Tasks...), runsOf(sources), first, loc), nil
+	return append(board.Tasks, archived.Tasks...), sources, first, nil
 }
 
 // follow reads what was added to the journal since the last read. The
@@ -318,12 +344,7 @@ func numbers(all []*tasks.Task, runs map[int]*run, first time.Time, loc *time.Lo
 	if !first.IsZero() {
 		out.FirstRecord = first.In(loc).Format(time.DateOnly)
 	}
-	done := map[int]string{}
-	for id, r := range runs {
-		if !r.done.IsZero() {
-			done[id] = r.done.UTC().Format(time.RFC3339)
-		}
-	}
+	done := doneTimes(runs)
 	perDay := map[string]int{}
 	var took []int64
 	seen := map[int]bool{}
@@ -379,6 +400,17 @@ func numbers(all []*tasks.Task, runs map[int]*run, first time.Time, loc *time.Lo
 		out.Typical = Words(out.TypicalSeconds)
 	}
 	return out
+}
+
+// doneTimes are the runs' finish times, as tasks.DoneValue takes them.
+func doneTimes(runs map[int]*run) map[int]string {
+	done := map[int]string{}
+	for id, r := range runs {
+		if !r.done.IsZero() {
+			done[id] = r.done.UTC().Format(time.RFC3339)
+		}
+	}
+	return done
 }
 
 // dayOf is the day a done task's time or bare day falls on in loc, ""

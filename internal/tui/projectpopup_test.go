@@ -1726,7 +1726,7 @@ func TestAgentSettings(t *testing.T) {
 }
 
 // TestNewTaskPrompt: + in the Tasks tab offers the templates of the
-// project's mods (the built-in bug, spike and chore here), then asks for
+// project's mods (the built-in bug, spike, chore and week-in-review here), then asks for
 // the title, and adds the task as the human with the template laid on
 // it; with no template it asks for the title only.
 func TestNewTaskPrompt(t *testing.T) {
@@ -1743,7 +1743,7 @@ func TestNewTaskPrompt(t *testing.T) {
 	}
 	pressKey(t, m, "+")
 	out := screen(m)
-	for _, want := range []string{"New task · alpha", "no template", "bug · Bug: …", "spike · Spike: …", "chore · Chore: …"} {
+	for _, want := range []string{"New task · alpha", "no template", "bug · Bug: …", "spike · Spike: …", "chore · Chore: …", "week-in-review · Week in review: …"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("the template menu lacks %q:\n%s", want, out)
 		}
