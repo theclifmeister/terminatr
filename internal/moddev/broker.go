@@ -17,6 +17,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/modbroker"
 	"github.com/theclifmeister/terminatr/internal/modproto"
 	"github.com/theclifmeister/terminatr/internal/plat/caps"
+	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
 // Broker is the fake broker: it answers a mod's $ API calls as the
@@ -155,6 +156,8 @@ func (b *Broker) Answer(method string, params json.RawMessage) (json.RawMessage,
 		}
 	case "projects.list", "tasks.list", "actions.list", "memory.list", "designs.list":
 		return json.RawMessage("[]"), nil
+	case "history.get":
+		return marshal(proto.History{Days: []proto.HistoryDay{}}), nil
 	case "actions.available":
 		return json.RawMessage("false"), nil
 	case "thread.changes":

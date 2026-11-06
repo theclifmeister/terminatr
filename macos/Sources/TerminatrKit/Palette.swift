@@ -40,14 +40,17 @@ public struct PaletteItem: Identifiable, Hashable, Sendable {
         }
     }
 
-    /// A task the row shows in the task view (↩).
+    /// A task the row shows in the task view (↩); with a server, a paired
+    /// server's alias, read only in the paired task view.
     public struct TaskKey: Hashable, Sendable {
         public let project: String
         public let task: String
+        public let server: String
 
-        public init(project: String, task: String) {
+        public init(project: String, task: String, server: String = "") {
             self.project = project
             self.task = task
+            self.server = server
         }
     }
 
@@ -116,9 +119,12 @@ public enum Palette {
     /// needs, this server's projects (inactive ones too) and a paired
     /// server's, each project's coordinator and open threads, and the
     /// tasks the app knows: those that need the user, the threads', and
-    /// with the board (app API 6) those on deck and in the backlog.
+    /// with the board (app API 6) those on deck and in the backlog. A
+    /// paired server's threads are found by their title, and its open tasks
+    /// come from boards while it's up and shares them (PaletteBoards).
+    /// This server's rows come first, so they stay first on a tie.
     public static func items(projects: [AppAPI.Project], sessions: [AppAPI.Session], peers: [AppAPI.Peer],
-                             needs: [Need], now: Date = Date()) -> [PaletteItem] {
+                             needs: [Need], boards: PaletteBoards = PaletteBoards(), now: Date = Date()) -> [PaletteItem] {
         var out: [PaletteItem] = []
         func session(_ id: String) -> AppAPI.Session? {
             id.isEmpty ? nil : sessions.first { $0.id == id }
@@ -167,16 +173,28 @@ public enum Palette {
             }
         }
         for peer in peers {
-            let server = peer.name.isEmpty ? peer.alias : peer.name
+            let server = PeerPages.server(peer)
+            let readable = peer.state == "up"
             for p in peer.projects {
                 out.append(PaletteItem(id: "project:\(peer.alias)/\(p.project)", group: .projects, title: p.project,
                                        detail: "on \(server)", go: .project(p.project, server: peer.alias)))
-                for s in p.sessions {
-                    guard let ref = SessionRef(s, of: peer.alias) else { continue }
+                let running = p.sessions.compactMap { SessionRef($0, of: peer.alias) }
+                let stopped = p.stale ? [] : p.watched.filter { t in !t.done && !running.contains { $0.thread == t.id } }
+                    .map { SessionRef(project: p.project, thread: $0.id, server: peer.alias) }
+                for ref in running + stopped {
+                    let name = ref.naming(in: [], peers: [peer])
+                    let label = ref.isCoordinator ? "\(p.project) · coordinator" : name.title.isEmpty ? ref.thread : name.title
                     out.append(PaletteItem(id: "session:\(peer.alias)/\(p.project)/\(ref.thread)", group: .threads,
-                                           title: [s.task, ref.isCoordinator ? "\(p.project) · coordinator" : ref.thread]
-                                               .filter { !$0.isEmpty }.joined(separator: " "),
-                                           detail: "\(p.project) on \(server)", go: .session(ref)))
+                                           title: [name.task, label].filter { !$0.isEmpty }.joined(separator: " "),
+                                           detail: "\(p.project) on \(server)", go: .session(ref),
+                                           keywords: "\(ref.thread) \(peer.alias)"))
+                }
+                guard readable, p.pages, !p.stale else { continue }
+                for t in boards.tasks(PaletteBoards.Key(alias: peer.alias, project: p.project)) {
+                    out.append(PaletteItem(id: "task:\(peer.alias)/\(p.project)/\(t.ref)", group: .tasks, title: "\(t.ref) \(t.title)",
+                                           detail: "\(p.project) on \(server) · \(words(t.status))", go: .project(p.project, server: peer.alias),
+                                           task: PaletteItem.TaskKey(project: p.project, task: t.ref, server: peer.alias),
+                                           keywords: peer.alias))
                 }
             }
         }
@@ -202,6 +220,13 @@ public enum Palette {
             out += Array((first + found.filter { !first.contains($0) }).prefix(perGroup))
         }
         return out
+    }
+
+    /// Where the picked row is after the rows changed under it (a board's
+    /// read landed): the same row, or the same place when it went.
+    public static func held(at: Int, from old: [String], to new: [String]) -> Int {
+        guard !old.isEmpty else { return at }
+        return new.firstIndex(of: old[min(at, old.count - 1)]) ?? at
     }
 
     /// The Actions group's rows for project p, shown, with this tm's
