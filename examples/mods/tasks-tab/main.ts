@@ -391,14 +391,16 @@ const TICK_ROWS = 3;
 // tickRows are the rows of each repo's releases along the curve: "rel" with
 // one repo, a row each up to TICK_ROWS, then one row, any repo's, or with g
 // one repo's. None without releases.
-function tickRows(t: Tab, c: TM.HistoryCurve): TM.CurveRow[] {
+function tickRows(t: Tab, c: TM.HistoryCurve): TM.Value[] {
   const ticks = c.ticks ?? [];
-  const dots = (points: number[]) => c.points.map((_, i) => points.includes(i));
+  const dots = (points: number[]) => c.points.map((_, i) => points.indexOf(i) >= 0);
   if (ticks.length === 0) return [];
   if (ticks.length <= TICK_ROWS) return ticks.map((r) => ({ label: r.repo || "rel", dots: dots(r.points) }));
   const one = ticks.find((r) => r.repo === t.tickRepo);
   if (one) return [{ label: one.repo ?? "", dots: dots(one.points), word: "only this repo" }];
-  return [{ label: "rel", dots: dots(ticks.flatMap((r) => r.points)), word: "any repo" }];
+  const any: number[] = [];
+  for (const r of ticks) any.push(...r.points);
+  return [{ label: "rel", dots: dots(any), word: "any repo" }];
 }
 
 // nextTickRepo is what g shows next: any repo, then each in turn.

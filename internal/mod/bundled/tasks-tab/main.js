@@ -260,12 +260,14 @@
   function tickRows(t, c) {
     var _a, _b;
     const ticks = (_a = c.ticks) != null ? _a : [];
-    const dots = (points) => c.points.map((_, i) => points.includes(i));
+    const dots = (points) => c.points.map((_, i) => points.indexOf(i) >= 0);
     if (ticks.length === 0) return [];
     if (ticks.length <= TICK_ROWS) return ticks.map((r) => ({ label: r.repo || "rel", dots: dots(r.points) }));
     const one = ticks.find((r) => r.repo === t.tickRepo);
     if (one) return [{ label: (_b = one.repo) != null ? _b : "", dots: dots(one.points), word: "only this repo" }];
-    return [{ label: "rel", dots: dots(ticks.flatMap((r) => r.points)), word: "any repo" }];
+    const any = [];
+    for (const r of ticks) any.push(...r.points);
+    return [{ label: "rel", dots: dots(any), word: "any repo" }];
   }
   function nextTickRepo(t) {
     var _a, _b, _c;
