@@ -198,7 +198,7 @@ private struct InactiveFold: View {
 /// its coordinator as the screen's main row (LeadRow, T1001), running or
 /// not, with its context use (held, Save & Clear, T868), its board's counts
 /// as a StatStrip (at the write level Start Coordinator under them), its
-/// pages as one PageRow, its designs as DesignTiles (DesignsTiles), then
+/// pages as one PageRow, one line of its designs under way (DesignsLine), then
 /// every unresolved thread, done ones too, in the TUI's order
 /// (SidebarTree.threads), as SessionTiles, a thread's context use only when
 /// nearly full. An inactive project's rows are dormant.
@@ -233,9 +233,8 @@ struct ProjectScreen: View {
                         StartCoordinatorButton(project: slug)
                     }
                     pages
-                    if model.listsDesigns {
-                        DesignsTiles(project: p, sessions: model.sessions, generation: model.generation)
-                    }
+                        .designsLine(model.listsDesigns ? DesignsSource(project: p, sessions: model.sessions, generation: model.generation) : nil,
+                                     opens: .designs(slug))
                     let waiting = threads.filter { model.attention($0).waits }.count
                     SectionHeading("Threads", detail: threads.isEmpty ? "" : "\(threads.count)" + (waiting > 0 ? " · \(waiting) wait on you" : ""))
                     if threads.isEmpty {
@@ -298,7 +297,8 @@ struct ProjectScreen: View {
     }
 
     /// The project's pages, as the Mac's beside its dashboard: Memory and
-    /// Library with a tm that reads them, Mods with one that lists them.
+    /// Library with a tm that reads them, Designs and Mods with one that
+    /// lists them.
     private var pages: some View {
         let pages = model.pages
         let tiles: [(Route, String, FlatGlyph)] = [
@@ -306,6 +306,7 @@ struct ProjectScreen: View {
             (.board(slug), "Board", .board),
         ] + (pages.contains(.memory) ? [(.memory(slug), "Memory", .mark)] : [])
             + (pages.contains(.library) ? [(.library(slug), "Library", .books)] : [])
+            + (model.listsDesigns ? [(.designs(slug), "Designs", .designs)] : [])
             + (pages.contains(.mods) ? [(.mods(slug), "Mods", .mod)] : [])
         return PageRow {
             ForEach(Array(tiles.enumerated()), id: \.element.1) { i, tile in
