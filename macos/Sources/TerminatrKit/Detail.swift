@@ -54,6 +54,19 @@ public enum Dashboard {
         p.counts["done"] ?? 0
     }
 
+    /// The time of day in doneAt, in the viewer's time zone, for a row
+    /// under its day's heading (app API 57); empty when only the day is
+    /// known.
+    public static func finishedTime(_ at: String, calendar: Calendar = .current) -> String {
+        guard at.count > 10, let t = try? Date(at, strategy: .iso8601) else { return "" }
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.calendar = calendar
+        f.timeZone = calendar.timeZone
+        f.dateFormat = "HH:mm"
+        return f.string(from: t)
+    }
+
     /// What a done row says of its doneAt (app API 54), in the viewer's
     /// time zone: the time alone today, the day and time before that, the
     /// year too for another year's, no time when only the day is known;

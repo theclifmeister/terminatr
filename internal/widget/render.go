@@ -265,7 +265,7 @@ func (lo *layer) rows(w *Widget) {
 		// when the cursor is on the row, which a move may do without a
 		// new layout.
 		plain := func() string {
-			if w.Kind != KindTable {
+			if w.Kind != KindTable || len(r.Cells) == 0 && len(r.Spans) > 0 {
 				return pad(clip(lo.plainSpans(r.Spans), lo.w), lo.w, false)
 			}
 			ps := make([]string, 0, len(w.Columns))
@@ -279,7 +279,7 @@ func (lo *layer) rows(w *Widget) {
 			return pad(clip(strings.Join(ps, "  "), lo.w), lo.w, false)
 		}
 		var s string
-		if w.Kind == KindTable {
+		if w.Kind == KindTable && (len(r.Cells) > 0 || len(r.Spans) == 0) {
 			cs := make([]string, 0, len(w.Columns))
 			for j, c := range w.Columns {
 				var cell []Span

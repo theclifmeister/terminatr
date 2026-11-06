@@ -28,6 +28,8 @@ export interface TM {
   tasks: {
     /** A project's tasks, in board order. Needs the project_read grant. */
     list(slug: string): Promise<TM.Task[]>;
+    /** A project's done tasks, newest first (mod API 1.16), from tm's task records only, no git, in the server's time zone: with options.groups Done's headings, the newest 7 days with work (at most 30 rows open), then older work by week, then by month, the archive's tasks counted; empty spans have no heading. Otherwise a page of the tasks, by days from options.from to options.to, the archive's too with options.archived. Needs the project_read grant. */
+    done(slug: string, options?: TM.DoneOptions): Promise<TM.DoneTasks>;
   };
   designs: {
     /** A project's designs (mod API 1.10), by name: those tm design set recorded and those a task names (archived tasks too), each with its status from its build tasks, its design task, page, decided answers and open questions. A task's design and after (tasks.list) say which tasks build which. Needs the project_read grant. */
@@ -367,6 +369,35 @@ export declare namespace TM {
     project: string;
   }
 
+  interface DoneGroup {
+    kind: string;
+    title: string;
+    from: string;
+    to: string;
+    count: number;
+    archived: number;
+    open: boolean;
+    tasks: Task[];
+    next: number;
+  }
+
+  interface DoneOptions {
+    groups?: boolean;
+    reveal?: string;
+    from?: string;
+    to?: string;
+    archived?: boolean;
+    offset?: number;
+    limit?: number;
+  }
+
+  interface DoneTasks {
+    tasks: Task[];
+    groups: DoneGroup[];
+    total: number;
+    next: number;
+  }
+
   interface FetchOptions {
     method?: string;
     headers?: Record<string, string>;
@@ -577,6 +608,7 @@ export declare namespace TM {
     done_label?: string;
     waits_for?: string[];
     waiters?: number;
+    archived?: boolean;
   }
 
   interface TaskChanged {

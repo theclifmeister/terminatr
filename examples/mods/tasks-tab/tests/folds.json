@@ -1,0 +1,573 @@
+{
+  "name": "enter on a heading opens or folds it, reading the archive only for a fold that holds archived tasks; … more reads on; an archived row binds only task.show; the groups come from tm, so an empty week has no heading",
+  "answers": [
+    {
+      "method": "tasks.list",
+      "params": {
+        "slug": "demo"
+      },
+      "result": [
+        {
+          "id": "T40",
+          "title": "Task 40",
+          "status": "done",
+          "steps_done": 0,
+          "steps_total": 0,
+          "steps": [],
+          "updated": "2026-09-02",
+          "done_at": "2026-09-02T10:00:00Z",
+          "done_label": "2 Sep 10:00"
+        }
+      ]
+    },
+    {
+      "method": "tasks.done",
+      "params": {
+        "slug": "demo",
+        "options": {
+          "groups": true,
+          "reveal": ""
+        }
+      },
+      "result": {
+        "tasks": [],
+        "total": 56,
+        "next": 0,
+        "groups": [
+          {
+            "kind": "day",
+            "title": "Today",
+            "from": "2026-11-06",
+            "to": "2026-11-06",
+            "count": 1,
+            "archived": 0,
+            "open": true,
+            "tasks": [
+              {
+                "id": "T40",
+                "title": "Task 40",
+                "status": "done",
+                "steps_done": 0,
+                "steps_total": 0,
+                "steps": [],
+                "updated": "2026-09-02",
+                "done_at": "2026-09-02T10:00:00Z",
+                "done_label": "2 Sep 10:00"
+              }
+            ],
+            "next": 0
+          },
+          {
+            "kind": "week",
+            "title": "19–25 Oct",
+            "from": "2026-10-19",
+            "to": "2026-10-25",
+            "count": 3,
+            "archived": 0,
+            "open": false,
+            "tasks": [],
+            "next": 0
+          },
+          {
+            "kind": "month",
+            "title": "September",
+            "from": "2026-09-01",
+            "to": "2026-09-30",
+            "count": 52,
+            "archived": 52,
+            "open": false,
+            "tasks": [],
+            "next": 0
+          }
+        ]
+      }
+    },
+    {
+      "method": "tasks.done",
+      "params": {
+        "slug": "demo",
+        "options": {
+          "from": "2026-10-19",
+          "to": "2026-10-25",
+          "archived": false,
+          "offset": 0,
+          "limit": 50
+        }
+      },
+      "result": {
+        "tasks": [
+          {
+            "id": "T30",
+            "title": "Task 30",
+            "status": "done",
+            "steps_done": 0,
+            "steps_total": 0,
+            "steps": [],
+            "updated": "2026-09-02",
+            "done_at": "2026-09-02T10:00:00Z",
+            "done_label": "2 Sep 10:00"
+          },
+          {
+            "id": "T29",
+            "title": "Task 29",
+            "status": "done",
+            "steps_done": 0,
+            "steps_total": 0,
+            "steps": [],
+            "updated": "2026-09-02",
+            "done_at": "2026-09-02T10:00:00Z",
+            "done_label": "2 Sep 10:00"
+          },
+          {
+            "id": "T28",
+            "title": "Task 28",
+            "status": "done",
+            "steps_done": 0,
+            "steps_total": 0,
+            "steps": [],
+            "updated": "2026-09-02",
+            "done_at": "2026-09-02T10:00:00Z",
+            "done_label": "2 Sep 10:00"
+          }
+        ],
+        "groups": [],
+        "total": 3,
+        "next": 0
+      }
+    },
+    {
+      "method": "tasks.done",
+      "params": {
+        "slug": "demo",
+        "options": {
+          "from": "2026-09-01",
+          "to": "2026-09-30",
+          "archived": true,
+          "offset": 0,
+          "limit": 50
+        }
+      },
+      "result": {
+        "tasks": [
+          {
+            "id": "T27",
+            "title": "Task 27",
+            "status": "done",
+            "steps_done": 0,
+            "steps_total": 0,
+            "steps": [],
+            "updated": "2026-09-02",
+            "done_at": "2026-09-02T10:00:00Z",
+            "done_label": "2 Sep 10:00",
+            "archived": true
+          }
+        ],
+        "groups": [],
+        "total": 52,
+        "next": 50
+      }
+    },
+    {
+      "method": "tasks.done",
+      "params": {
+        "slug": "demo",
+        "options": {
+          "from": "2026-09-01",
+          "to": "2026-09-30",
+          "archived": true,
+          "offset": 50,
+          "limit": 50
+        }
+      },
+      "result": {
+        "tasks": [
+          {
+            "id": "T2",
+            "title": "Task 2",
+            "status": "done",
+            "steps_done": 0,
+            "steps_total": 0,
+            "steps": [],
+            "updated": "2026-09-02",
+            "done_at": "2026-09-02T10:00:00Z",
+            "done_label": "2 Sep 10:00",
+            "archived": true
+          },
+          {
+            "id": "T1",
+            "title": "Task 1",
+            "status": "done",
+            "steps_done": 0,
+            "steps_total": 0,
+            "steps": [],
+            "updated": "2026-09-02",
+            "done_at": "2026-09-02T10:00:00Z",
+            "done_label": "2 Sep 10:00",
+            "archived": true
+          }
+        ],
+        "groups": [],
+        "total": 52,
+        "next": 0
+      }
+    }
+  ],
+  "events": [
+    {
+      "name": "view.opened",
+      "project": "demo",
+      "data": {
+        "view": "tasks",
+        "slot": "project.tab",
+        "project": "demo",
+        "width": 70,
+        "height": 20
+      }
+    },
+    {
+      "name": "ui.key",
+      "project": "demo",
+      "data": {
+        "view": "tasks",
+        "widget": "tasks",
+        "key": "b",
+        "target": {
+          "project": "demo"
+        }
+      }
+    },
+    {
+      "name": "ui.key",
+      "project": "demo",
+      "data": {
+        "view": "tasks",
+        "widget": "tasks",
+        "key": "enter",
+        "row": "f:2026-10-19:2026-10-25",
+        "target": {
+          "project": "demo"
+        }
+      }
+    },
+    {
+      "name": "ui.key",
+      "project": "demo",
+      "data": {
+        "view": "tasks",
+        "widget": "tasks",
+        "key": "enter",
+        "row": "f:2026-09-01:2026-09-30",
+        "target": {
+          "project": "demo"
+        }
+      }
+    },
+    {
+      "name": "ui.key",
+      "project": "demo",
+      "data": {
+        "view": "tasks",
+        "widget": "tasks",
+        "key": "enter",
+        "row": "m:2026-09-01:2026-09-30",
+        "target": {
+          "project": "demo"
+        }
+      }
+    },
+    {
+      "name": "ui.key",
+      "project": "demo",
+      "data": {
+        "view": "tasks",
+        "widget": "tasks",
+        "key": "enter",
+        "row": "f:2026-10-19:2026-10-25",
+        "target": {
+          "project": "demo"
+        }
+      }
+    }
+  ],
+  "expect": {
+    "calls": [
+      {
+        "method": "tasks.list",
+        "params": {
+          "slug": "demo"
+        }
+      },
+      {
+        "method": "ui.view.set",
+        "params": {
+          "view": "tasks"
+        }
+      },
+      {
+        "method": "tasks.list",
+        "params": {
+          "slug": "demo"
+        }
+      },
+      {
+        "method": "tasks.done",
+        "params": {
+          "slug": "demo",
+          "options": {
+            "groups": true
+          }
+        }
+      },
+      {
+        "method": "ui.view.set",
+        "params": {
+          "view": "tasks",
+          "widget": {
+            "kind": "stack",
+            "children": [
+              {
+                "kind": "table",
+                "rows": [
+                  {
+                    "id": "g:done",
+                    "head": true
+                  },
+                  {
+                    "id": "f:2026-11-06:2026-11-06"
+                  },
+                  {
+                    "id": "T40"
+                  },
+                  {
+                    "id": "f:2026-10-19:2026-10-25",
+                    "spans": [
+                      {
+                        "text": "19–25 Oct",
+                        "role": "faint"
+                      },
+                      {
+                        "text": " · 3  ▸",
+                        "role": "faint"
+                      }
+                    ]
+                  },
+                  {
+                    "id": "f:2026-09-01:2026-09-30",
+                    "spans": [
+                      {
+                        "text": "September",
+                        "role": "faint"
+                      },
+                      {
+                        "text": " · 52  ▸",
+                        "role": "faint"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "kind": "keys"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "method": "tasks.done",
+        "params": {
+          "slug": "demo",
+          "options": {
+            "from": "2026-10-19",
+            "to": "2026-10-25",
+            "archived": false,
+            "offset": 0,
+            "limit": 50
+          }
+        }
+      },
+      {
+        "method": "ui.view.set",
+        "params": {
+          "view": "tasks",
+          "widget": {
+            "kind": "stack",
+            "children": [
+              {
+                "kind": "table",
+                "rows": [
+                  {
+                    "id": "g:done"
+                  },
+                  {
+                    "id": "f:2026-11-06:2026-11-06"
+                  },
+                  {
+                    "id": "T40"
+                  },
+                  {
+                    "id": "f:2026-10-19:2026-10-25"
+                  },
+                  {
+                    "id": "T30"
+                  },
+                  {
+                    "id": "T29"
+                  },
+                  {
+                    "id": "T28"
+                  },
+                  {
+                    "id": "f:2026-09-01:2026-09-30"
+                  }
+                ]
+              },
+              {
+                "kind": "keys"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "method": "tasks.done",
+        "params": {
+          "slug": "demo",
+          "options": {
+            "from": "2026-09-01",
+            "to": "2026-09-30",
+            "archived": true,
+            "offset": 0,
+            "limit": 50
+          }
+        }
+      },
+      {
+        "method": "ui.view.set",
+        "params": {
+          "view": "tasks",
+          "widget": {
+            "kind": "stack",
+            "children": [
+              {
+                "kind": "table",
+                "rows": [
+                  {
+                    "id": "g:done"
+                  },
+                  {
+                    "id": "f:2026-11-06:2026-11-06"
+                  },
+                  {
+                    "id": "T40"
+                  },
+                  {
+                    "id": "f:2026-10-19:2026-10-25"
+                  },
+                  {
+                    "id": "T30"
+                  },
+                  {
+                    "id": "T29"
+                  },
+                  {
+                    "id": "T28"
+                  },
+                  {
+                    "id": "f:2026-09-01:2026-09-30"
+                  },
+                  {
+                    "id": "T27",
+                    "actions": [
+                      {
+                        "id": "task.show",
+                        "target": {
+                          "project": "demo",
+                          "task": "T27"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "m:2026-09-01:2026-09-30",
+                    "spans": [
+                      {
+                        "text": "  … 51 more",
+                        "role": "faint"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "kind": "keys"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "method": "tasks.done",
+        "params": {
+          "slug": "demo",
+          "options": {
+            "from": "2026-09-01",
+            "to": "2026-09-30",
+            "archived": true,
+            "offset": 50,
+            "limit": 50
+          }
+        }
+      },
+      {
+        "method": "ui.view.set",
+        "params": {
+          "view": "tasks"
+        }
+      },
+      {
+        "method": "ui.view.set",
+        "params": {
+          "view": "tasks",
+          "widget": {
+            "kind": "stack",
+            "children": [
+              {
+                "kind": "table",
+                "rows": [
+                  {
+                    "id": "g:done"
+                  },
+                  {
+                    "id": "f:2026-11-06:2026-11-06"
+                  },
+                  {
+                    "id": "T40"
+                  },
+                  {
+                    "id": "f:2026-10-19:2026-10-25"
+                  },
+                  {
+                    "id": "f:2026-09-01:2026-09-30"
+                  },
+                  {
+                    "id": "T27"
+                  },
+                  {
+                    "id": "T2"
+                  },
+                  {
+                    "id": "T1"
+                  }
+                ]
+              },
+              {
+                "kind": "keys"
+              }
+            ]
+          }
+        }
+      }
+    ]
+  }
+}
