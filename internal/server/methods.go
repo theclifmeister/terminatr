@@ -300,6 +300,10 @@ func init() {
 		proto.MethodTaskTemplates: {gate: gateHuman, call: typed(func(s *Server, p proto.TaskDoneParams, _ callCtx) (any, *proto.Error) {
 			return s.taskTemplates(p)
 		})},
+		// A project's daily numbers, read only (CapHistory).
+		proto.MethodProjectHistory: {gate: gateHuman, call: typed(func(s *Server, p proto.HistoryParams, _ callCtx) (any, *proto.Error) {
+			return s.projectHistory(p)
+		})},
 		// A project's designs, read only (CapDesigns).
 		proto.MethodDesignList: {gate: gateHuman, call: typed(func(s *Server, p proto.DesignListParams, _ callCtx) (any, *proto.Error) {
 			return s.designList(p)
@@ -436,6 +440,8 @@ func init() {
 		proto.MethodPeerLibraryThumbnail: {gate: gateHuman, call: typed((*Server).readPeerThumbnail)},
 		// A paired server's designs, read only (CapPeerDesigns, T888).
 		proto.MethodPeerDesignList: {gate: gateHuman, call: typed((*Server).listPeerDesigns)},
+		// A paired server's daily numbers, read only (CapPeerHistory).
+		proto.MethodPeerHistory: {gate: gateHuman, call: typed((*Server).readPeerHistory)},
 		proto.MethodPeerNeedAct: {gate: gateHuman, call: typed(func(s *Server, p proto.PeerNeedActParams, c callCtx) (any, *proto.Error) {
 			return s.needAct(p, c)
 		})},

@@ -1139,6 +1139,60 @@ public enum AppAPI {
         }
     }
 
+    public struct History: Codable, Sendable, Hashable {
+        public var firstRecord: String
+        public var done: Int
+        public var open: Int
+        public var dropped: Int
+        public var days: [HistoryDay]
+        public var bestDay: HistoryDay?
+        public var timed: Int
+        public var typicalSeconds: Int
+        public var typical: String
+        public var truncated: Bool
+
+        public init(firstRecord: String = "", done: Int, open: Int, dropped: Int, days: [HistoryDay] = [], bestDay: HistoryDay? = nil, timed: Int, typicalSeconds: Int = 0, typical: String = "", truncated: Bool = false) {
+            self.firstRecord = firstRecord
+            self.done = done
+            self.open = open
+            self.dropped = dropped
+            self.days = days
+            self.bestDay = bestDay
+            self.timed = timed
+            self.typicalSeconds = typicalSeconds
+            self.typical = typical
+            self.truncated = truncated
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case firstRecord = "first_record"
+            case done
+            case open
+            case dropped
+            case days
+            case bestDay = "best_day"
+            case timed
+            case typicalSeconds = "typical_seconds"
+            case typical
+            case truncated
+        }
+    }
+
+    public struct HistoryDay: Codable, Sendable, Hashable {
+        public var day: String
+        public var done: Int
+
+        public init(day: String, done: Int) {
+            self.day = day
+            self.done = done
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case day
+            case done
+        }
+    }
+
     public struct Item: Codable, Sendable, Hashable, Identifiable {
         public var id: String
         public var kind: String
@@ -5036,6 +5090,7 @@ public enum AppAPI {
         public static let paneInput = Call<PaneInputParams, Empty>("pane.input", write: true, target: "pane.vt")
         public static let paneVt = Subscription<PaneParams, PaneResult, PaneEvent>("pane.vt", events: ["pane.repaint", "pane.output", "pane.resize", "pane.closed"])
         public static let peerDesignList = Call<PeerPagesParams, Designs>("peer.design-list", write: false)
+        public static let peerHistory = Call<PeerPagesParams, History>("peer.history", write: false)
         public static let peerLibraryList = Call<PeerPagesParams, Library>("peer.library-list", write: false)
         public static let peerLibraryRead = Call<PeerLibraryReadParams, LibraryChunk>("peer.library-read", write: false)
         public static let peerLibraryThumbnail = Call<PeerLibraryThumbnailParams, LibraryThumbnail>("peer.library-thumbnail", write: false)
@@ -5060,6 +5115,7 @@ public enum AppAPI {
         public static let programUmbrellaAccept = Call<ProgramUmbrellaParams, ProgramUmbrellaDone>("program.umbrella.accept", write: true)
         public static let programUmbrellaSendBack = Call<ProgramUmbrellaParams, ProgramUmbrellaDone>("program.umbrella.send-back", write: true)
         public static let projectActive = Call<ProjectActiveParams, ProjectActive>("project.active", write: true)
+        public static let projectHistory = Call<ProjectParams, History>("project.history", write: false)
         public static let projectNew = Call<ProjectNewParams, ProjectNew>("project.new", write: true)
         public static let projectOpen = Call<ProjectOpenParams, ProjectOpen>("project.open", write: true)
         public static let projectPin = Call<ProjectPinParams, ProjectPinned>("project.pin", write: true)
@@ -5627,6 +5683,30 @@ extension AppAPI.Hello {
         self.methods = try c.decodeIfPresent([String].self, forKey: .methods) ?? []
         self.server = try c.decodeIfPresent(AppAPI.Server.self, forKey: .server)
         self.error = try c.decodeIfPresent(AppAPI.Error.self, forKey: .error)
+    }
+}
+
+extension AppAPI.History {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.firstRecord = try c.decodeIfPresent(String.self, forKey: .firstRecord) ?? ""
+        self.done = try c.decode(Int.self, forKey: .done)
+        self.open = try c.decode(Int.self, forKey: .open)
+        self.dropped = try c.decode(Int.self, forKey: .dropped)
+        self.days = try c.decodeIfPresent([AppAPI.HistoryDay].self, forKey: .days) ?? []
+        self.bestDay = try c.decodeIfPresent(AppAPI.HistoryDay.self, forKey: .bestDay)
+        self.timed = try c.decode(Int.self, forKey: .timed)
+        self.typicalSeconds = try c.decodeIfPresent(Int.self, forKey: .typicalSeconds) ?? 0
+        self.typical = try c.decodeIfPresent(String.self, forKey: .typical) ?? ""
+        self.truncated = try c.decodeIfPresent(Bool.self, forKey: .truncated) ?? false
+    }
+}
+
+extension AppAPI.HistoryDay {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.day = try c.decode(String.self, forKey: .day)
+        self.done = try c.decode(Int.self, forKey: .done)
     }
 }
 

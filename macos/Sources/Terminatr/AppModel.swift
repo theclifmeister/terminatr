@@ -159,6 +159,10 @@ final class AppModel {
     var newTask: String?
     /// The task the task view shows (TaskSheet), nil for none.
     var taskShown: TaskShown?
+    /// A paired server's task the window shows, read only.
+    var peerTaskShown: PeerTaskShown?
+    /// The paired boards the command palette searches.
+    var paletteBoards = PaletteBoards()
     /// What the bridge did: Settings › Advanced shows it.
     private(set) var log = BridgeLog()
     /// The need ⌥⌘↓ or ⌥⌘↑ showed last (Need.step).
@@ -441,6 +445,7 @@ final class AppModel {
             if l.gen != gen || !loaded.peers {
                 gen = l.gen
                 peers = l.peers
+                paletteBoards.prune(peers: peers, reads: readsPeerPages)
                 loaded.peers = true
                 changed()
             }
@@ -1077,6 +1082,20 @@ final class AppModel {
         return false
     }
 
+    /// Reads the paired boards due (PaletteBoards), each on its own so a
+    /// slow server holds up only its own rows.
+    func readPaletteBoards() {
+        for key in paletteBoards.due(peers: peers, reads: readsPeerPages, now: Date()) {
+            Task {
+                do {
+                    paletteBoards.store(try await peerPages(key.alias, key.project), for: key)
+                } catch {
+                    paletteBoards.failed(key)
+                }
+            }
+        }
+    }
+
     /// A paired server's project's board and overview (peer.pages-read):
     /// its "not shared" errors as AppAPI.Error (PeerPages.notSharedCodes).
     func peerPages(_ alias: String, _ project: String) async throws -> AppAPI.PeerPages {
@@ -1424,6 +1443,38 @@ final class AppModel {
     /// first, or board order from an older tm.
     func doneTasks(_ project: String) async throws -> [AppAPI.Task] {
         try await connected().call(AppAPI.Methods.taskDone, AppAPI.ProjectParams(project: project)).tasks
+    }
+
+    /// Whether this tm answers a project's daily numbers (app API 58).
+    var readsHistory: Bool {
+        if case .connected(let h) = phase { return Compatibility.readsHistory(h) }
+        return false
+    }
+
+    /// Whether this tm asks a paired server for its numbers (app API 58).
+    var readsPeerHistory: Bool {
+        if case .connected(let h) = phase { return Compatibility.readsPeerHistory(h) }
+        return false
+    }
+
+    /// A project's daily numbers (project.history); none from an older
+    /// tm, so what draws them hides.
+    func history(_ project: String) async throws -> AppAPI.History? {
+        guard readsHistory else { return nil }
+        return try await connected().call(AppAPI.Methods.projectHistory, AppAPI.ProjectParams(project: project))
+    }
+
+    /// A paired server's project's daily numbers (peer.history); none
+    /// from an older tm on either side, or when it shares no pages.
+    func peerHistory(_ alias: String, _ project: String) async throws -> AppAPI.History? {
+        guard readsPeerHistory else { return nil }
+        do {
+            return try await connected().call(AppAPI.Methods.peerHistory, AppAPI.PeerPagesParams(alias: alias, project: project))
+        } catch {
+            let state: PeerPages.State<Int> = PeerPages.state(error)
+            if state == .notShared { return nil }
+            throw error
+        }
     }
 
     /// The task templates of the mods that run in project

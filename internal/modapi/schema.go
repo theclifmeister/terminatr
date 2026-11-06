@@ -345,6 +345,8 @@ var Methods = []Method{
 		Doc: "A project's tasks, in board order."},
 	{Name: "designs.list", Params: []Param{{Name: "slug", Type: typ[string]()}}, Result: typ[[]Design](), Needs: mod.PermProjectRead,
 		Doc: "A project's designs (mod API 1.10), by name: those tm design set recorded and those a task names (archived tasks too), each with its status from its build tasks, its design task, page, decided answers and open questions. A task's design and after (tasks.list) say which tasks build which."},
+	{Name: "history.get", Params: []Param{{Name: "slug", Type: typ[string]()}}, Result: typ[proto.History](), Needs: mod.PermProjectRead,
+		Doc: "A project's daily numbers (mod API 1.17), from tm's records alone, never git: done per day, oldest first, only the days with work, in tm's time zone; the first record's day; the counts of done, open and dropped tasks, archived ones too; the best day; and the median time from start to done, from 10 timed tasks. Read again on tasks.changed when the done count moved."},
 	{Name: "thread.get", Params: []Param{{Name: "project", Type: typ[string]()}, {Name: "thread", Type: typ[string]()}}, Result: typ[*proto.WatchThread](), Needs: mod.PermProjectRead,
 		Doc: "A thread of a project; null when there is none."},
 	{Name: "report.get", Params: []Param{{Name: "project", Type: typ[string]()}, {Name: "thread", Type: typ[string]()}}, Result: typ[*modbus.Report](), Needs: mod.PermProjectRead,

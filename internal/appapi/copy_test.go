@@ -329,6 +329,7 @@ func TestCopies(t *testing.T) {
 		".Code", ".Summary"})
 	check("task.get", homeOf(taskOf), []string{".Archived"})
 	check("task.done", homeOf(doneTasksOf), []string{".Tasks[].Archived"})
+	check("project.history", homeOf(historyOf), nil)
 	// Programs (app API 44): the members' read splits them into
 	// (server, project); a task's archive flag and after refs, and the
 	// paths of a renamed or deleted program's folder, stay home.
@@ -679,13 +680,13 @@ func TestAllowlist(t *testing.T) {
 		proto.MethodSessionAnswer, proto.MethodSessionApprove, proto.MethodSessionKeys, proto.MethodSessionList,
 		proto.MethodSessionPrompt, proto.MethodSessionWatch, proto.MethodSessionsWatch, proto.MethodTaskAsk,
 		proto.MethodTaskAccept, proto.MethodTaskSendBack, proto.MethodTaskDelegate, proto.MethodProjectOpen,
-		proto.MethodQuestionsOpen, proto.MethodTaskAdd, proto.MethodTaskPriority, proto.MethodTaskGet, proto.MethodTaskDone, proto.MethodTaskTemplates, proto.MethodPaneVT, proto.MethodTranscriptWatch, MethodPaneInput,
+		proto.MethodQuestionsOpen, proto.MethodTaskAdd, proto.MethodTaskPriority, proto.MethodTaskGet, proto.MethodTaskDone, proto.MethodTaskTemplates, proto.MethodProjectHistory, proto.MethodPaneVT, proto.MethodTranscriptWatch, MethodPaneInput,
 		proto.MethodSessionFile, proto.MethodCoordinatorClear, proto.MethodProjectActive, proto.MethodSessionUpload,
 		proto.MethodLinkAct, proto.MethodPeerShareAnswer, proto.MethodPeerNeedAct, MethodGuardRefusals, MethodGuardDecide, proto.MethodTranscriptPage,
 		proto.MethodProjectPin, proto.MethodProjectNew, proto.MethodSessionAdoptRequest, proto.MethodSessionRemote, proto.MethodLinkSend,
 		proto.MethodMemoryList, proto.MethodMemoryRead, proto.MethodLibraryList, proto.MethodLibraryRead, proto.MethodLibraryThumbnail, proto.MethodDesignList, proto.MethodSearchQuery, proto.MethodSearchTimeline, proto.MethodSearchShow, proto.MethodAppReportAdd,
 		proto.MethodFilesList, proto.MethodFilesRead, proto.MethodFilesStamp, proto.MethodFilesDiff, proto.MethodFilesRepos,
-		proto.MethodPeerPagesRead, proto.MethodPeerLibraryList, proto.MethodPeerLibraryRead, proto.MethodPeerLibraryThumbnail, proto.MethodPeerDesignList,
+		proto.MethodPeerPagesRead, proto.MethodPeerLibraryList, proto.MethodPeerLibraryRead, proto.MethodPeerLibraryThumbnail, proto.MethodPeerDesignList, proto.MethodPeerHistory,
 		MethodDeviceNonce, MethodDeviceBye, MethodDeviceList, MethodDevicePair, MethodDevicePairWait, MethodDevicePairAnswer, MethodDeviceAccess,
 		MethodDeviceName, MethodDeviceRemove, proto.MethodModsList, proto.MethodModsSet, proto.MethodModsSetting,
 		proto.MethodProgramGet, proto.MethodProgramNeeds, proto.MethodProgramRead, proto.MethodProgramSearch, proto.MethodProgramSearchTimeline,

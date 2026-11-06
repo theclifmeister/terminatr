@@ -99,3 +99,27 @@ func TestDesignsAreCleaned(t *testing.T) {
 		t.Errorf("second: %+v", out.Designs[1])
 	}
 }
+
+// TestCleanHistory: what a paired server answers is checked: no day that
+// isn't one, no negative count, one short line of words, a bounded list.
+func TestCleanHistory(t *testing.T) {
+	in := proto.History{FirstRecord: "<script>", Done: -1, Open: -2, Dropped: -3, Timed: -4, TypicalSeconds: -5, Typical: "a\nb\x1b[31m",
+		Days:    []proto.HistoryDay{{Day: "2026-10-05", Done: 2}, {Day: "../../etc", Done: 1}, {Day: "2026-10-06", Done: -1}},
+		BestDay: &proto.HistoryDay{Day: "nope", Done: 9}}
+	out := cleanHistory(in)
+	if out.FirstRecord != "" || out.Done != 0 || out.Open != 0 || out.Dropped != 0 || out.Timed != 0 || out.TypicalSeconds != 0 || out.BestDay != nil {
+		t.Errorf("%+v", out)
+	}
+	if len(out.Days) != 2 || out.Days[0].Day != "2026-10-05" || out.Days[1].Done != 0 {
+		t.Errorf("days: %+v", out.Days)
+	}
+	if strings.ContainsAny(out.Typical, "\n\x1b") {
+		t.Errorf("words: %q", out.Typical)
+	}
+	if n := cleanHistory(proto.History{Days: make([]proto.HistoryDay, proto.PeerHistoryDays+5)}); !n.Truncated {
+		t.Error("too many days: not cut")
+	}
+	if out := cleanHistory(proto.History{}); out.Days == nil {
+		t.Error("days is null")
+	}
+}
