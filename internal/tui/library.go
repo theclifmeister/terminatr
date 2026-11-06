@@ -13,14 +13,17 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/thread"
+	"github.com/theclifmeister/terminatr/internal/thumb"
 )
 
 // The project popup's Library tab (docs/SPEC.md §4): the files every
 // thread of the project attached to its reports, the resolved and
 // archived threads' too, grouped by task and thread, newest first, and a
 // group per linked project for the files it sent (§16.13). enter reads
-// one in the popup; X deletes the selected file and D the files of its
-// thread, each after y. A file shows by name and size, never a path.
+// one in the popup, o opens one in this computer's viewer, an image shows
+// in half-blocks (imagepreview.go); X deletes the selected file and D the
+// files of its thread, each after y. A file shows by name and size, never
+// a path.
 
 // libraryOrder are the library's files grouped by thread (or linked
 // project), the group with the newest file first and each group's files
@@ -134,6 +137,8 @@ func (pv *projectView) libraryKey(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	switch k.String() {
 	case "enter":
 		return m.openLibFile(pv, f)
+	case "o":
+		return m.openLibCopy(pv.slug, libFileID(f), f.Name)
 	case "X":
 		if f.Peer != "" {
 			m.confirm("Delete a file", "Delete "+oneLine(f.Name)+" ("+sizeWords(f.Size)+"), which "+f.Peer+" sent with "+f.Message+"? It can't be brought back.", func() tea.Cmd {
@@ -196,6 +201,11 @@ type textView struct {
 	diff     []diffLine
 	changeAt int
 	seek     bool
+
+	// image is an image's cells in place of text (imagepreview.go), and
+	// open, on a file o opens, opens it in this computer's viewer.
+	image *imagePreview
+	open  func(m *dash) tea.Cmd
 }
 
 // scrollKey scrolls *scroll for key k over n lines; it says whether k
@@ -210,10 +220,24 @@ func scrollKey(scroll *int, k tea.KeyPressMsg, n int) bool {
 
 func (m *dash) openLibFile(pv *projectView, f thread.LibFile) tea.Cmd {
 	tv := &textView{title: oneLine(f.Name) + " · " + sizeWords(f.Size)}
-	id := f.Thread
+	id := libFileID(f)
 	if f.Peer != "" {
-		// Another project's: data, shown as text or not at all.
-		id, tv.title = f.Message, oneLine(f.Name)+" · "+sizeWords(f.Size)+" · from "+f.Peer
+		// Another project's: data, shown as its cells, as text or not at all.
+		tv.title = oneLine(f.Name) + " · " + sizeWords(f.Size) + " · from " + f.Peer
+	}
+	tv.open = func(m *dash) tea.Cmd { return m.openLibCopy(pv.slug, id, f.Name) }
+	if previewable() && thumb.Supported(f.Name) {
+		key := thumbKey(f)
+		img, known := pv.thumbs[key]
+		if !known {
+			img = fetchThumb(m.src, pv.slug, id, f.Name)
+			pv.keepThumb(key, img)
+		}
+		if img != nil {
+			tv.image = img
+			m.push(tv)
+			return nil
+		}
 	}
 	data, truncated, err := m.src.LibraryRead(pv.slug, id, f.Name, libMax)
 	switch {
@@ -230,6 +254,14 @@ func (m *dash) openLibFile(pv *projectView, f thread.LibFile) tea.Cmd {
 // slug's link to other, as the Library tab shows one.
 func (m *dash) openLinkFile(slug, other string, msg *link.Message) tea.Cmd {
 	tv := &textView{title: oneLine(msg.File) + " · " + link.MB(msg.FileSize) + " · from " + other}
+	tv.open = func(m *dash) tea.Cmd { return m.openLibCopy(slug, msg.ID, msg.File) }
+	if previewable() && thumb.Supported(msg.File) {
+		if img := fetchThumb(m.src, slug, msg.ID, msg.File); img != nil {
+			tv.image = img
+			m.push(tv)
+			return nil
+		}
+	}
 	data, truncated, err := m.src.LibraryRead(slug, msg.ID, msg.File, libMax)
 	if err != nil {
 		tv.note = "can't read it: " + oneLine(err.Error())
@@ -326,7 +358,11 @@ func (tv *textView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		tv.bottom = false
 		return nil
 	}
-	if s := k.String(); s == "esc" || s == "q" && tv.quit {
+	s := k.String()
+	if s == "o" && tv.open != nil {
+		return tv.open(m)
+	}
+	if s == "esc" || s == "q" && tv.quit {
 		m.pop()
 	}
 	return nil
@@ -334,13 +370,30 @@ func (tv *textView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 
 func (tv *textView) wheel(m *dash, d int) { tv.key(m, arrow(d)) }
 
+// keyHints are the viewer's action row.
+func (tv *textView) keyHints() string {
+	keys := "↑ ↓ scroll · esc back"
+	if tv.image != nil {
+		keys = "esc back"
+	}
+	if tv.open != nil {
+		keys = "o open · " + keys
+	}
+	return keys
+}
+
 func (tv *textView) render(m *dash) string {
+	if tv.image != nil {
+		b := box{title: tv.title, sel: -1, keys: tv.keyHints()}
+		b.body = tv.image.lines(m.inner(viewWidth), m.boxRows(b))
+		return m.popup(b)
+	}
 	lines := tv.lines(m.inner(viewWidth))
 	if tv.seek {
 		tv.seek = false
 		tv.scroll = clampScroll(tv.changeAt-diffLeadIn, len(lines))
 	}
-	b := box{title: tv.title, body: lines, sel: -1, scroll: tv.scroll, keys: "↑ ↓ scroll · esc back"}
+	b := box{title: tv.title, body: lines, sel: -1, scroll: tv.scroll, keys: tv.keyHints()}
 	if tv.bottom {
 		// From the end: as many lines as the box shows.
 		tv.scroll = max(len(lines)-m.boxRows(b), 0)

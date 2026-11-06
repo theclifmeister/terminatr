@@ -450,6 +450,7 @@ var coreActions = []struct {
 	{"popup", bindable{id: "task.coordinator", keys: []string{"c"}, fixed: true, help: "open the project's coordinator about the task"}},
 	{"popup", bindable{id: "tasks.done", keys: []string{"b"}, fixed: true, help: "list the done tasks, or collapse them"}},
 	{"popup", bindable{id: "library.read", keys: []string{"enter"}, fixed: true, help: "read the library file"}},
+	{"popup", bindable{id: "library.open", keys: []string{"o"}, fixed: true, help: "open the library file in this computer's viewer"}},
 	{"popup", bindable{id: "library.delete", keys: []string{"X"}, fixed: true, help: "delete the library file (asks first)"}},
 	{"popup", bindable{id: "library.delete-thread", keys: []string{"D"}, fixed: true, help: "delete all of the thread's library files (asks first)"}},
 	{"popup", bindable{id: "message.open-file", keys: []string{"o"}, fixed: true, help: "open a file of the message in your viewer, from a copy (the message's dialog; a menu when it has several)"}},
