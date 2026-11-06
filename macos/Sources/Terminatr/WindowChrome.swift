@@ -674,35 +674,25 @@ struct PairServerSheet: View {
     @Environment(\.theme) private var theme
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Pair a server")
-                .font(theme.title(.title, .heavy))
-            Text("Pairing happens in tm, on both servers. On this one, run:")
-                .foregroundStyle(theme.muted)
-            command("tm peer pair --relay <relay> --as <name>")
-            Text("It prints a code. On the other server, run:")
-                .foregroundStyle(theme.muted)
-            command("tm peer join <relay>/<code> --as <name>")
-            Text("The other server then lists here under its name, with what it shares.")
-                .foregroundStyle(theme.muted)
-                .fixedSize(horizontal: false, vertical: true)
-            HStack {
-                Spacer()
-                Button("Done") { dismiss() }
-                    .keyboardShortcut(.defaultAction)
-                    .tint(theme.action)
+        FlatSheet(width: 480) {
+            SheetTitle("Pair a server")
+        } content: {
+            SheetBody {
+                Text("Pairing happens in tm, on both servers. On this one, run:")
+                    .foregroundStyle(theme.muted)
+                CommandText("tm peer pair --relay <relay> --as <name>")
+                Text("It prints a code. On the other server, run:")
+                    .foregroundStyle(theme.muted)
+                CommandText("tm peer join <relay>/<code> --as <name>")
+                Text("The other server then lists here under its name, with what it shares.")
+                    .foregroundStyle(theme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+        } footer: {
+            SheetEscape { dismiss() }
+            Button("Done") { dismiss() }
+                .buttonStyle(.flatPrimary)
+                .keyboardShortcut(.defaultAction)
         }
-        .padding(18)
-        .frame(width: 480)
-    }
-
-    private func command(_ text: String) -> some View {
-        Text(text)
-            .font(theme.mono(.callout))
-            .textSelection(.enabled)
-            .padding(10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(theme.pane, in: RoundedRectangle(cornerRadius: 6))
     }
 }
