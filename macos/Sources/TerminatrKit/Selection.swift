@@ -120,6 +120,9 @@ public struct Navigation: Codable, Equatable, Sendable {
     /// members unfolded (sectionKey, memberKey: they start folded), as
     /// the TUI's view.Tree has them.
     public var unfolded: Set<String> = []
+    /// The tab each project was left on, by its selection (ProjectTab's
+    /// words, so a tab this build lacks drops out): none is the Overview.
+    public var projectTabs: [Selection: String] = [:]
 
     /// Whether the sidebar lists what needs the user (folded by default).
     public var needsOpen: Bool {
@@ -135,7 +138,7 @@ public struct Navigation: Codable, Equatable, Sendable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case selection, back, forward, collapsed, showInactive, unfolded
+        case selection, back, forward, collapsed, showInactive, unfolded, projectTabs
     }
 
     /// A save from before a field was added reads as its default.
@@ -147,6 +150,7 @@ public struct Navigation: Codable, Equatable, Sendable {
         collapsed = try c.decodeIfPresent(Set<String>.self, forKey: .collapsed) ?? []
         showInactive = try c.decodeIfPresent(Bool.self, forKey: .showInactive) ?? false
         unfolded = try c.decodeIfPresent(Set<String>.self, forKey: .unfolded) ?? []
+        projectTabs = try c.decodeIfPresent([Selection: String].self, forKey: .projectTabs) ?? [:]
     }
 
     /// Shows s; the one shown before goes on the back list.

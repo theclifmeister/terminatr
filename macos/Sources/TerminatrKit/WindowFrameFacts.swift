@@ -8,6 +8,7 @@ public enum ProjectTab: String, CaseIterable, Identifiable, Sendable {
     case board = "Board"
     case memory = "Memory"
     case library = "Library"
+    case designs = "Designs"
     case mods = "Mods"
 
     public var id: String { rawValue }
@@ -17,12 +18,18 @@ public enum ProjectTab: String, CaseIterable, Identifiable, Sendable {
         guard let hello else { return [.overview, .board] }
         var out: [ProjectTab] = [.overview, .board]
         if Compatibility.readsProjectFiles(hello) { out += [.memory, .library] }
+        if Compatibility.listsDesigns(hello) { out.append(.designs) }
         if Compatibility.listsMods(hello) { out.append(.mods) }
         return out
     }
 
-    /// A paired server's project's: its mods are its own, never here.
-    public static let paired: [ProjectTab] = [.overview, .board, .memory, .library]
+    /// A paired server's project's: its mods are its own, never here; its
+    /// designs while hello's tm lists designs at all.
+    public static func paired(_ hello: AppAPI.Hello?) -> [ProjectTab] {
+        var out: [ProjectTab] = [.overview, .board, .memory, .library]
+        if let hello, Compatibility.listsDesigns(hello) { out.append(.designs) }
+        return out
+    }
 }
 
 /// A project's tile: two letters of its name, a hyphenated name's first
