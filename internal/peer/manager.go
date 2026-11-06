@@ -245,6 +245,9 @@ func (m *Manager) caps() []string {
 		if _, ok := m.opts.Export.(DesignsExporter); ok {
 			caps = append(caps, CapPageDesigns)
 		}
+		if _, ok := m.opts.Export.(HistoryExporter); ok {
+			caps = append(caps, CapPageHistory)
+		}
 		if _, ok := m.opts.Export.(WorktreeExporter); ok {
 			caps = append(caps, CapWorktree)
 		}

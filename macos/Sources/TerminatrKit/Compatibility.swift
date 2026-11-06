@@ -18,6 +18,27 @@ public enum Compatibility: Equatable, Sendable {
     /// peer.list the windows and the menu bar use.
     public static let minimumAPI = 2
 
+    /// The app API that has project.history and peer.history: a project's
+    /// daily numbers need it.
+    public static let historyAPI = 55
+
+    /// Whether hello's tm answers a project's daily numbers, its server
+    /// too (project.history, caps history): else whatever draws them
+    /// hides.
+    public static func readsHistory(_ hello: AppAPI.Hello) -> Bool {
+        hello.appApi >= historyAPI && hello.methods.contains(AppAPI.Methods.projectHistory.name)
+            && (hello.server?.caps ?? []).contains("history")
+    }
+
+    /// Whether hello's tm asks a paired server for a project's daily
+    /// numbers, its server too (peer.history, caps peer-history). A paired
+    /// server on an older tm still answers no-pages to the read, so
+    /// AppModel.peerHistory has none to show there either.
+    public static func readsPeerHistory(_ hello: AppAPI.Hello) -> Bool {
+        hello.appApi >= historyAPI && hello.methods.contains(AppAPI.Methods.peerHistory.name)
+            && (hello.server?.caps ?? []).contains("peer-history")
+    }
+
     /// The app API that has task.add: File › New Task… needs it.
     public static let taskAddAPI = 7
 

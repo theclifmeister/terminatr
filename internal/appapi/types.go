@@ -1212,6 +1212,42 @@ func doneTasksOf(r server.TaskDone) DoneTasks {
 	return out
 }
 
+// History is project.history's and peer.history's result: a project's
+// daily numbers, from tm's records alone, its days in the answering
+// server's time zone. Typical and TypicalSeconds come from 10 timed
+// tasks; Truncated says a paired server left out its oldest days.
+type History struct {
+	FirstRecord    string       `json:"first_record,omitempty"`
+	Done           int          `json:"done"`
+	Open           int          `json:"open"`
+	Dropped        int          `json:"dropped"`
+	Days           []HistoryDay `json:"days"`
+	BestDay        *HistoryDay  `json:"best_day,omitempty"`
+	Timed          int          `json:"timed"`
+	TypicalSeconds int64        `json:"typical_seconds,omitempty"`
+	Typical        string       `json:"typical,omitempty"`
+	Truncated      bool         `json:"truncated,omitempty"`
+}
+
+// HistoryDay is a day with work (2026-11-06) and how many tasks finished
+// on it.
+type HistoryDay struct {
+	Day  string `json:"day"`
+	Done int    `json:"done"`
+}
+
+func historyOf(r proto.History) History {
+	out := History{FirstRecord: r.FirstRecord, Done: r.Done, Open: r.Open, Dropped: r.Dropped, Days: make([]HistoryDay, 0, len(r.Days)),
+		Timed: r.Timed, TypicalSeconds: r.TypicalSeconds, Typical: r.Typical, Truncated: r.Truncated}
+	for _, d := range r.Days {
+		out.Days = append(out.Days, HistoryDay{Day: d.Day, Done: d.Done})
+	}
+	if r.BestDay != nil {
+		out.BestDay = &HistoryDay{Day: r.BestDay.Day, Done: r.BestDay.Done}
+	}
+	return out
+}
+
 // Templates is task.templates' result: the task templates of the mods
 // that run in the project, by mod and name.
 type Templates struct {

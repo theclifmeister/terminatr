@@ -17,6 +17,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/modbroker"
 	"github.com/theclifmeister/terminatr/internal/modproto"
 	"github.com/theclifmeister/terminatr/internal/project"
+	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 )
 
@@ -149,6 +150,17 @@ func TestModBroker(t *testing.T) {
 		!slices.Equal(d.Tasks, []string{"T2", "T3"}) || d.TasksDone != 1 || !slices.Equal(d.Answers, answers) ||
 		len(d.Questions) != 1 || d.Questions[0].Header != "Colour" || d.Questions[0].Question != "Red?" {
 		t.Fatalf("designs.list = %+v", d)
+	}
+	// history.get (mod API 1.15): the numbers, for a project it runs in.
+	got, err = call("history.get", map[string]string{"slug": "demo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if h, ok := got.(proto.History); !ok || h.Days == nil {
+		t.Fatalf("history.get = %+v", got)
+	}
+	if _, err := call("history.get", map[string]string{"slug": "other"}); code(err) != modbroker.CodeDenied {
+		t.Errorf("history.get of another project: %v", err)
 	}
 	if _, err := call("designs.list", map[string]string{"slug": "other"}); code(err) != modbroker.CodeDenied {
 		t.Fatalf("designs of a project it doesn't run for: %v", err)

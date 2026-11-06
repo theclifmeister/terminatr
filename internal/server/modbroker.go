@@ -23,6 +23,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/history"
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modapi"
@@ -363,6 +364,13 @@ func (s *Server) modMethods(b *modbroker.Broker) {
 			return nil, err
 		}
 		return modDesigns(p)
+	})
+	b.Handle("history.get", mod.PermProjectRead, func(_ context.Context, c *modbroker.Call) (any, error) {
+		p, err := modProject(c, &struct{}{})
+		if err != nil {
+			return nil, err
+		}
+		return history.Read(p)
 	})
 	b.Handle("thread.get", mod.PermProjectRead, func(_ context.Context, c *modbroker.Call) (any, error) {
 		var a struct {
