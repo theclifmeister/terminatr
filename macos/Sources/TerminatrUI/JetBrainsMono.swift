@@ -10,7 +10,8 @@ import UIKit
 public typealias PlatformFont = UIFont
 #endif
 
-/// The apps' mono font, JetBrains Mono 2.304 (T1029): code, diffs, file
+/// The apps' mono font, JetBrains Mono NL 2.304 (T1029), the family without
+/// ligatures, so a command reads as typed: code, diffs, file
 /// views, the terminal, ids and the conversation's text. The six static
 /// faces in Fonts/ (with OFL.txt, its licence) are the ones drawn: the
 /// weights Theme.mono is asked for, and bold and italic for Markdown's
@@ -60,10 +61,10 @@ public enum JetBrainsMono {
     /// A face's PostScript name, for a weight.
     public static func face(_ weight: Font.Weight) -> String {
         switch weight {
-        case .bold, .heavy, .black: "JetBrainsMono-Bold"
-        case .semibold: "JetBrainsMono-SemiBold"
-        case .medium: "JetBrainsMono-Medium"
-        default: "JetBrainsMono-Regular"
+        case .bold, .heavy, .black: "JetBrainsMonoNL-Bold"
+        case .semibold: "JetBrainsMonoNL-SemiBold"
+        case .medium: "JetBrainsMonoNL-Medium"
+        default: "JetBrainsMonoNL-Regular"
         }
     }
 

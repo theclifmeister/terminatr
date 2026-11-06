@@ -30,7 +30,7 @@ let package = Package(
     ],
     targets: [
         .target(name: "TerminatrKit", swiftSettings: werror),
-        // Fonts/: JetBrains Mono's faces in use and its OFL licence (T1029).
+        // Fonts/: JetBrains Mono NL's faces in use and its OFL licence (T1029).
         .target(name: "TerminatrUI", dependencies: ["TerminatrKit"], resources: [.copy("Fonts")], swiftSettings: werror),
         .target(
             name: "TerminatrPane",

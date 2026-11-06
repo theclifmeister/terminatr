@@ -134,13 +134,13 @@ public struct Theme: Sendable {
         .system(size: size(style), weight: weight)
     }
 
-    /// JetBrains Mono (T1029) at a style's size: code, paths, ids. Labels,
+    /// JetBrains Mono NL (T1029) at a style's size: code, paths, ids. Labels,
     /// buttons and lists stay the system's.
     public func mono(_ style: TextStyle, _ weight: Font.Weight = .regular) -> Font {
         JetBrainsMono.swiftUI(size: size(style), weight: legible(weight))
     }
 
-    /// JetBrains Mono at a measured size, times the text size.
+    /// JetBrains Mono NL at a measured size, times the text size.
     public func monoSized(_ points: CGFloat, _ weight: Font.Weight = .regular) -> Font {
         JetBrainsMono.swiftUI(size: points * scale, weight: legible(weight))
     }

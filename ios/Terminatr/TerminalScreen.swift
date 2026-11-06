@@ -354,7 +354,7 @@ final class PhonePaneHost: UIScrollView, UIScrollViewDelegate {
         place()
     }
 
-    /// A cell's width per point of font size: JetBrains Mono's, as SwiftTerm
+    /// A cell's width per point of font size: JetBrains Mono NL's, as SwiftTerm
     /// measures a cell.
     static let advance: CGFloat = {
         let f = JetBrainsMono.font(size: 100)

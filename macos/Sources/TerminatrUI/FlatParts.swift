@@ -35,7 +35,7 @@ extension View {
     /// The design page's line height on the phone (1.45, T1008): points'
     /// text gets its line boxes, between lines and at its top and bottom. The
     /// Mac's text keeps the system's line height.
-    /// `mono`: the text is in JetBrains Mono, whose lines are taller.
+    /// `mono`: the text is in JetBrains Mono NL, whose lines are taller.
     public func pageLeading(_ points: CGFloat, mono: Bool = false) -> some View {
         modifier(PageLeading(points: points, mono: mono))
     }
