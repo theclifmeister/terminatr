@@ -18,14 +18,13 @@ enum SessionPage: String, CaseIterable {
 /// on the conversation (-terminal YES opens it on the terminal, the
 /// Simulator's screenshots); the tab is kept for each session while the
 /// server is (Places), so going back to one shows what it showed. While the
-/// terminal shows, Repaint asks the pane afresh. On a phone's width the tab
-/// bar hides here, so the composer has the bottom; beside a list (an iPad,
-/// an open Duo) the bar stays.
+/// terminal shows, Repaint asks the pane afresh. The tab bar (a Duo's rail)
+/// stays here as on any other screen (T1071), so Needs you, Projects and
+/// Search are a tap away from every session.
 struct SessionScreen: View {
     @Environment(PhoneModel.self) private var model
     @Environment(\.theme) private var theme
     @Environment(\.dynamicTypeSize) private var typeSize
-    @Environment(\.horizontalSizeClass) private var width
     @Environment(\.showParent) private var showParent
     @Environment(\.showList) private var showList
     @Environment(\.back) private var back
@@ -62,7 +61,6 @@ struct SessionScreen: View {
         .navigationTitle(model.title(ref))
         .toolbar(.hidden, for: .navigationBar)
         .swipesBack()
-        .toolbar(width == .compact ? .hidden : .automatic, for: .tabBar)
         .asksSaveClear(ref, isPresented: $clearing)
         .kept($tab, "tab \(ref)")
         // Opening a sleeping coordinator wakes it, as enter on its row in
@@ -76,23 +74,15 @@ struct SessionScreen: View {
         .environment(\.showTerminal, ShowTerminal { tab = .terminal })
     }
 
-    /// The bar: `.phbar`, Back or the list, the title, its buttons.
+    /// The bar: `.phbar`, Back, the list while it is folded away, the
+    /// title, its buttons.
     private var bar: some View {
         HStack(spacing: 9) {
+            if let go = back?.action ?? (pushed ? { dismiss() } : nil) {
+                BackButton(action: go)
+            }
             if let showList {
                 icon("List", "list.bullet", label: showList.shown ? "Hide the list" : "Show the list", action: showList.toggle)
-            } else if let go = back?.action ?? (pushed ? { dismiss() } : nil) {
-                Button(action: go) {
-                    FlatIcon(.back)
-                        .foregroundStyle(theme.muted)
-                        .padding(14)
-                        .contentShape(Rectangle())
-                        .padding(-14)
-                }
-                .buttonStyle(.plain)
-                .hoverEffect()
-                .accessibilityLabel("Back")
-                .accessibilityIdentifier("BackButton")
             }
             SessionTitle(model.title(ref), place: model.place(ref), role: ref.role, state: model.attention(ref), context: model.context(ref))
             if ref.isCoordinator || ref.director, !ref.isRemote, model.clearsCoordinators, model.leadSession(ref) != nil {

@@ -22,7 +22,7 @@ App Store submission (not TestFlight) needs iPad screenshots: 13-inch, 2064×275
 
 ## Flat look
 
-Every screen draws its own flat bar (`ScreenBar.swift`, `SessionScreen.swift`) on the theme's solid colours and hides the navigation bar, whose glass buttons and, on an open iPhone Duo, whose rail placement can't be flattened; a swipe from the edge still goes back (`swipesBack`). A filter is a field in the screen (`FilterField`), as the system's search bar needs the navigation bar. Lists are flat panels (`PanelList`), not `List`, whose grouped sections iOS rounds itself.
+Every screen draws its own flat bar (`ScreenBar.swift`, `SessionScreen.swift`) on the theme's solid colours and hides the navigation bar, whose glass buttons and, on an open iPhone Duo, whose rail placement can't be flattened; a swipe from the edge still goes back (`swipesBack`). Every screen reached by navigation has the same Back (`BackButton`), even with nothing pushed under it, when it goes to the tab's root; a tab's root has none. The tab bar, or a Duo's rail, stays on every screen, sessions included. A filter is a field in the screen (`FilterField`), as the system's search bar needs the navigation bar. Lists are flat panels (`PanelList`), not `List`, whose grouped sections iOS rounds itself.
 
 What stays iOS's own on iOS 27: the tab bar's glass capsule on an iPhone, the Duo's rail, an iPad's floating tab bar and sidebar, and sheets' system chrome. `TabBand` puts a solid band with a line under the capsule, so nothing shows through it. `UITabBarAppearance`, `.toolbarBackground` and `UIDesignRequiresCompatibility` don't change it (tried on the iOS 27.1 and 27.0 Simulators). Going further means replacing `TabView` with our own bar and rail.
 

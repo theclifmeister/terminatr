@@ -3008,8 +3008,8 @@ func inPlaceFiles(cmd string, args []string) []string {
 
 // tmAgentMod are the tm mod subcommands an agent may run; the others,
 // tm project's tmProjectWrites (and repo add), tm access's
-// tmAccessWrites, tm peer's and tm device's but their reads, tm app
-// bridge and the dashboard write tm's settings in the tm process itself
+// tmAccessWrites, tm peer's and tm device's but their reads, tm server's
+// tmServerWrites, tm app bridge and the dashboard write tm's settings in the tm process itself
 // or act for the human, theirs alone: an agent past its sandbox (yolo)
 // that runs one with its session's variables unset and out of its
 // session's process tree would pass for the human (internal/cli: Run,
@@ -3021,6 +3021,7 @@ var (
 	tmAccessWrites  = setOf("add rm edit drop undrop set reset")
 	tmPeerReads     = setOf("list requests")
 	tmDeviceReads   = setOf("list reports report")
+	tmServerWrites  = setOf("stop restart service")
 )
 
 // tmWritesSettings is which of those tm with args (after its name) is
@@ -3046,7 +3047,7 @@ func tmWritesSettings(args []string) string {
 	case len(pos) == 0:
 	case args[i] == "mod" && !tmAgentMod[pos[0]], args[i] == "project" && tmProjectWrites[pos[0]],
 		args[i] == "peer" && !tmPeerReads[pos[0]], args[i] == "device" && !tmDeviceReads[pos[0]],
-		args[i] == "app" && pos[0] == "bridge":
+		args[i] == "app" && pos[0] == "bridge", args[i] == "server" && tmServerWrites[pos[0]]:
 		return "tm " + args[i] + " " + safe(pos[0])
 	case args[i] == "project" && (pos[0] == "repo" || pos[0] == "repos") && len(pos) > 1 && pos[1] == "add":
 		return "tm project repo add"

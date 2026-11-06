@@ -130,6 +130,21 @@ func (p *tmProc) run(stdin string, args ...string) (int, string, string) {
 	return code, out.String(), errb.String()
 }
 
+// TestServerCommandsHumanOnlyBinary: a thread's and a coordinator's
+// session variables are enough for the tm binary to refuse them the
+// server's stop, restart and service, here on this test's own home.
+func TestServerCommandsHumanOnlyBinary(t *testing.T) {
+	p := newProc(t)
+	for _, as := range []*tmProc{p.as("thread", "demo", "t-0001"), p.as("coordinator", "demo", "")} {
+		for _, args := range serverHumanCommands {
+			code, out, errs := as.run("", args...)
+			if code != ExitRefused || out != "" || !strings.Contains(errs, "human-only") {
+				t.Errorf("%v: exit %d, stdout %q, stderr %q", args, code, out, errs)
+			}
+		}
+	}
+}
+
 func (p *tmProc) ok(args ...string) string {
 	p.t.Helper()
 	code, out, errs := p.run("", args...)

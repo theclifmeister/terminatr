@@ -135,6 +135,7 @@ The dependency rule: `server`, `session`, `ticker`, `tui`, `project`, `thread` a
   - `tm server stop` refuses while agent sessions are running unless you pass `--yes`, or confirm on a TTY.
   - `tm server stop` and `tm server restart` work whatever protocol the running server speaks, older or newer (§3.3, Stopping across protocols). Restart is how a server of another version is replaced, so it never refuses on version.
   - `tm server stop --force` SIGKILLs a hung server (the pid that holds the lock).
+  - `tm server stop` (with `--force` too), `tm server restart` and `tm server service` are the human's: tm refuses them to an agent as `human-only`, and the guard's floor refuses them too. A scratch tm of an agent's own, with its own home and socket, runs them.
 - **Other commands.** `tm server status` prints the pid, uptime, version, protocol and session count, and once the server has an identity key its server id and each link to a paired server (§16.7). `tm server restart` is stop, then start, then resume (§3.6).
 - **Foreground mode.** `tm server run` without `--detached` stays in the foreground and logs to stderr. Tests and service managers use this mode.
 - **Start at login (optional).** `tm server service install|uninstall` writes and loads a service file:
