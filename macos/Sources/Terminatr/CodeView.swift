@@ -75,13 +75,15 @@ struct CodeView: NSViewRepresentable {
         let added = NSColor(theme.good), removed = NSColor(theme.attention)
         (v.layoutManager as? TintedLayout)?.update(text: text, marks: marks, added: added, removed: removed)
         ruler.update(text: text, marks: marks, added: added, removed: removed, font: NSFont.monospacedDigitSystemFont(ofSize: size - 1, weight: .regular), ink: NSColor(theme.faint))
+        // Far down a file, the layout has to know how tall it is first.
+        let seek = sameFile ? 0 : max((marks?.firstChange ?? 0) - 3, 0)
+        if seek > 0, let box = v.textContainer { v.layoutManager?.ensureLayout(for: box) }
         v.sizeToFit()
         if sameFile {
             s.contentView.scroll(to: keep)
-        } else if let first = marks?.firstChange {
-            let row = ceil(size * 1.5)
-            let top = CGFloat(max(first - 3, 0)) * row + (first > 3 ? v.textContainerInset.height : 0)
-            s.contentView.scroll(to: NSPoint(x: 0, y: min(top, max(v.frame.height - s.contentSize.height, 0))))
+        } else if seek > 0 {
+            let top = CGFloat(seek) * ceil(size * 1.5) + v.textContainerInset.height
+            s.contentView.scroll(to: NSPoint(x: min(keep.x, 0), y: min(top, max(v.frame.height - s.contentView.bounds.height, 0))))
         } else {
             s.contentView.scroll(to: .zero)
         }
@@ -94,7 +96,9 @@ struct CodeView: NSViewRepresentable {
 /// line's colour crosses the pane.
 private final class CodeText: NSTextView {
     override func setFrameSize(_ newSize: NSSize) {
-        super.setFrameSize(NSSize(width: max(newSize.width, enclosingScrollView?.contentSize.width ?? 0), height: newSize.height))
+        // A clip view under the ruler starts left of the text, by the ruler.
+        let shows = enclosingScrollView?.contentView.bounds ?? .zero
+        super.setFrameSize(NSSize(width: max(newSize.width, shows.width + min(shows.minX, 0)), height: newSize.height))
     }
 }
 

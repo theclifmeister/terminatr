@@ -156,7 +156,7 @@ func TestDiffAgainstBase(t *testing.T) {
 func TestDiffText(t *testing.T) {
 	s, _ := checkout(t)
 	ctx := context.Background()
-	write(t, s.Root, "evil.txt", "ok\nbad\x1b[2J‮\ttabbed\r\nnot \xff utf8\nlast")
+	write(t, s.Root, "evil.txt", "ok\nbad\x1b[2J\u202e\ttabbed\r\nnot \xff utf8\nlast")
 	write(t, s.Root, "many.txt", strings.Repeat(`"<>&"`+"\n", proto.MaxFilesDiff/6))
 	gittest.Run(t, s.Root, "add", ".")
 	gittest.Run(t, s.Root, "commit", "-q", "-m", "more")
