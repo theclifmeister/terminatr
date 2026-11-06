@@ -184,6 +184,9 @@ type Row struct {
 	// line unless it comes first. The cursor never stops on one, the
 	// filter hides it, and it binds nothing.
 	Head bool `json:"head,omitempty"`
+	// Tight draws a head row without the blank line before it (mod API
+	// 1.22), a rule among the rows rather than a section's start.
+	Tight bool `json:"tight,omitempty"`
 	// More are lines drawn under the row while the cursor is on it
 	// (mod API 1.2), such as a task's steps: the console shows them as
 	// the cursor moves, without asking the mod.

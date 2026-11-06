@@ -93,6 +93,73 @@ private func group(_ title: String, _ from: String, _ to: String, count: Int, op
     #expect(new.groups[0].key == "2026-09-01:2026-09-30" && new.groups[0].archived == 2 && new.groups[0].tasks[0].archived && !new.groups[0].open)
 }
 
+private func line(_ label: String, repo: String = "", at offset: Int) -> AppAPI.DoneRelease {
+    AppAPI.DoneRelease(label: label, time: "05:03", repo: repo, tag: "v\(label)", at: "2026-11-06T05:03:00Z", offset: offset)
+}
+
+private func words(_ entries: [DoneLedger.Entry]) -> [String] {
+    entries.map {
+        switch $0 {
+        case .task(let t): t.ref
+        case .release(let r): r.label
+        }
+    }
+}
+
+/// Lines sit where tm says among the rows, two at one minute in the order
+/// they came; one past the rows read waits for them; a fold hides its own.
+@Test func releaseLinesSitAmongTheRows() {
+    var l = DoneLedger()
+    var day = group("Today", "2026-11-06", "2026-11-06", count: 3, open: true, tasks: [task(1), task(2)], next: 2)
+    day.releases = [line("a 1.0", repo: "a", at: 0), line("b 2.0", repo: "b", at: 1), line("b 1.9", repo: "b", at: 1), line("a 0.9", repo: "a", at: 3)]
+    let first = l.take(AppAPI.DoneTasks(tasks: [], groups: [day], total: 3))
+    #expect(first.isEmpty)
+    #expect(words(l.entries(in: day)) == ["a 1.0", "T1", "b 2.0", "b 1.9", "T2"])
+    l.append(day, AppAPI.DoneTasks(tasks: [task(3)]))
+    #expect(words(l.entries(in: day)) == ["a 1.0", "T1", "b 2.0", "b 1.9", "T2", "T3", "a 0.9"])
+    // The same tag in two repos: each line keeps its row.
+    #expect(Set(l.entries(in: day).map(\.id)).count == 7)
+    _ = l.press(day)
+    #expect(l.entries(in: day).isEmpty)
+}
+
+/// No tags, no lines; and with one repo, nothing to filter by.
+@Test func noReleasesNoLines() {
+    var l = DoneLedger()
+    let day = group("Today", "2026-11-06", "2026-11-06", count: 1, open: true, tasks: [task(1)])
+    _ = l.take(AppAPI.DoneTasks(tasks: [], groups: [day], total: 1))
+    #expect(words(l.entries(in: day)) == ["T1"] && l.repos.isEmpty)
+}
+
+/// Changing the repo forgets the rows of the last, not which folds are open.
+@Test func aRepoFilterReadsAgain() {
+    var l = DoneLedger()
+    let week = group("19–25 Oct", "2026-10-19", "2026-10-25", count: 3)
+    let repos = [AppAPI.DoneRepo(repo: "a", done: 2, releases: 128), AppAPI.DoneRepo(repo: "none", done: 1)]
+    _ = l.take(AppAPI.DoneTasks(tasks: [], groups: [week], total: 3, repos: repos))
+    #expect(l.repos == repos)
+    let reads = l.press(week)
+    #expect(reads)
+    l.set(week, AppAPI.DoneTasks(tasks: [task(1)]))
+    l.refilter()
+    #expect(l.groups == nil && l.tasks(in: week).isEmpty && l.isOpen(week))
+    let again = l.take(AppAPI.DoneTasks(tasks: [], groups: [week], total: 1, repos: repos))
+    #expect(again.first?.limit == DoneLedger.page)
+    #expect(DoneRepoWords.title("") == "All repos" && DoneRepoWords.title("none") == "No repo" && DoneRepoWords.title("a") == "a")
+    #expect(DoneRepoWords.releases(1) == "1 release" && DoneRepoWords.releases(6) == "6 releases")
+}
+
+/// A tm before app API 68 refuses repo in task.done's params.
+@Test func olderTMIsNotSentARepo() throws {
+    var h = AppAPI.Hello(appApi: 67, tm: "v0.82.0", build: "x", methods: [AppAPI.Methods.taskDone.name])
+    #expect(!Compatibility.filtersDone(h))
+    h.appApi = 68
+    #expect(Compatibility.filtersDone(h))
+    let old = AppAPI.TaskDoneNoRepoParams(AppAPI.TaskDoneParams(project: "p", groups: true, tz: "UTC"))
+    let keys = try JSONSerialization.jsonObject(with: JSONEncoder().encode(old)) as? [String: Any]
+    #expect(keys?["repo"] == nil && keys?["project"] as? String == "p" && keys?["groups"] as? Bool == true)
+}
+
 /// The line at the user's last action: among an open group's rows, gone with
 /// the fold, above a heading for a day no group holds, or below them all.
 @Test func theLineStandsWhereTmSays() {
@@ -131,4 +198,22 @@ private func group(_ title: String, _ from: String, _ to: String, count: Int, op
     #expect(old.mark == nil)
     let new = try JSONDecoder().decode(AppAPI.DoneTasks.self, from: Data(#"{"tasks":[],"mark":{"at":"2026-11-05T22:14:00Z","title":"you last acted at 23:14 on the iPhone","group":1}}"#.utf8))
     #expect(new.mark?.title == "you last acted at 23:14 on the iPhone" && new.mark?.rows == 0 && new.mark?.between == false)
+}
+
+/// The line at the last action and release lines in one gap stand by time.
+@Test func theMarkStandsAmongReleaseLinesByTime() throws {
+    var l = DoneLedger()
+    var day = group("Today", "2026-11-06", "2026-11-06", count: 2, open: true, tasks: [task(1), task(2)])
+    var newer = line("2.0", at: 1), older = line("1.9", at: 1)
+    newer.at = "2026-11-06T09:00:00Z"
+    older.at = "2026-11-06T07:00:00Z"
+    day.releases = [newer, older]
+    let mark = AppAPI.DoneMark(at: "2026-11-06T08:00:00Z", title: "you last acted at 08:00", group: 0, rows: 1)
+    let first = l.take(AppAPI.DoneTasks(tasks: [], groups: [day], total: 2, mark: mark))
+    #expect(first.isEmpty)
+    #expect(words(l.entries(in: day)) == ["T1", "2.0", "1.9", "T2"])
+    // Below T1 and 2.0, above 1.9.
+    #expect(l.markEntry(in: day) == 2)
+    let other = group("Yesterday", "2026-11-05", "2026-11-05", count: 1, open: true, tasks: [task(3)])
+    #expect(l.markEntry(in: other) == nil)
 }

@@ -598,11 +598,12 @@ func modTasks(slug string, board *tasks.Board, items []project.Item) []ModTask {
 // archive is read for groups, whose counts need its dates, and for a range
 // the mod says holds archived tasks.
 func modDone(p *project.Project, o modapi.DoneOptions, now time.Time) (modapi.DoneTasks, error) {
-	out := modapi.DoneTasks{Tasks: []ModTask{}, Groups: []modapi.DoneGroup{}}
-	done, err := p.Tasks().Done(o.Groups || o.Archived)
+	out := modapi.DoneTasks{Tasks: []ModTask{}, Groups: []modapi.DoneGroup{}, Repos: []modapi.DoneRepo{}}
+	led, err := readDoneLedger(p, o.Groups || o.Archived, o.Repo)
 	if err != nil {
 		return out, err
 	}
+	done := led.done
 	items, _ := p.Inbox()
 	// A done task waits for nothing, and only part of the board is here
 	// to say otherwise.
@@ -610,6 +611,7 @@ func modDone(p *project.Project, o modapi.DoneOptions, now time.Time) (modapi.Do
 		out := modTasks(p.Slug, &tasks.Board{Tasks: ts}, items)
 		for i := range out {
 			out[i].WaitsFor, out[i].Waiters = nil, 0
+			out[i].Repo = led.rowRepo(ts[i])
 		}
 		return out
 	}
@@ -623,13 +625,21 @@ func modDone(p *project.Project, o modapi.DoneOptions, now time.Time) (modapi.Do
 	}
 	out.Total = len(done)
 	reveal, _ := tasks.ParseRef(o.Reveal)
-	groups := tasks.GroupDone(done, now, reveal)
+	groups := led.groups(p, now, reveal)
 	if m := markDone(p, groups, done, now); m != nil {
 		out.Mark = &modapi.DoneMark{At: m.At.UTC().Format(time.RFC3339), Title: m.Title, Group: m.Group, Rows: m.Rows, Between: m.Between}
 	}
 	for _, g := range groups {
+		lines := make([]modapi.DoneRelease, 0, len(g.Releases))
+		for _, l := range g.Releases {
+			lines = append(lines, modapi.DoneRelease{Label: l.Label(), Time: l.Time, Repo: l.Repo, Part: l.Part, Tag: l.Tag,
+				At: l.At.UTC().Format(time.RFC3339), Offset: l.Offset})
+		}
 		out.Groups = append(out.Groups, modapi.DoneGroup{Kind: g.Kind, Title: g.Title, From: g.From, To: g.To,
-			Count: g.Count, Archived: g.Archived, Open: g.Open, Tasks: rows(g.Tasks), Next: g.Next})
+			Count: g.Count, Archived: g.Archived, Open: g.Open, Tasks: rows(g.Tasks), Next: g.Next, Releases: lines})
+	}
+	for _, r := range led.repoCounts(p, now.Location()) {
+		out.Repos = append(out.Repos, modapi.DoneRepo(r))
 	}
 	return out, nil
 }

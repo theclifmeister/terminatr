@@ -428,6 +428,11 @@ func TestParamsCopies(t *testing.T) {
 	if want := (proto.SessionApproveParams{ID: "s-1", Choice: 2, Escape: true, Session: true}); err != nil || p != want {
 		t.Errorf("approve params %+v %v", p, err)
 	}
+	m, _ = Lookup(proto.MethodTaskDone)
+	p, err = m.toServer(json.RawMessage(`{"project":"web","groups":true,"repo":"site"}`))
+	if want := (proto.TaskDoneParams{Project: "web", Groups: true, Repo: "site"}); err != nil || p != want {
+		t.Errorf("task.done params %+v %v", p, err)
+	}
 	m, _ = Lookup(proto.MethodFilesRead)
 	p, err = m.toServer(json.RawMessage(`{"session":"s-1","repo":{"path":"/r/two"},"path":"pic.png","offset":9,"ignored":true,"binary":true}`))
 	if want := (proto.FilesReadParams{Session: "s-1", Repo: "/r/two", Path: "pic.png", Offset: 9, Ignored: true, Binary: true}); err != nil || p != want {

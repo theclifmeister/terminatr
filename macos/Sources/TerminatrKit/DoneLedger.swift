@@ -4,11 +4,56 @@ extension AppAPI.Methods {
     /// task.done as a tm before app API 57 takes it, the project alone: its
     /// bridge refuses params it doesn't know, which TaskDoneParams sends.
     public static let taskDoneAll = AppAPI.Call<AppAPI.ProjectParams, AppAPI.DoneTasks>("task.done", write: false)
+    /// task.done as a tm of app API 57 to 67 takes it, without a repo.
+    public static let taskDoneNoRepo = AppAPI.Call<AppAPI.TaskDoneNoRepoParams, AppAPI.DoneTasks>("task.done", write: false)
+}
+
+extension AppAPI {
+    /// TaskDoneParams without repo, which the bridge of a tm before app API
+    /// 68 refuses.
+    public struct TaskDoneNoRepoParams: Codable, Sendable, Hashable {
+        public var project: String
+        public var groups: Bool
+        public var from: String
+        public var to: String
+        public var archived: Bool
+        public var offset: Int
+        public var limit: Int
+        public var tz: String
+
+        public init(_ p: TaskDoneParams) {
+            project = p.project
+            groups = p.groups
+            from = p.from
+            to = p.to
+            archived = p.archived
+            offset = p.offset
+            limit = p.limit
+            tz = p.tz
+        }
+    }
 }
 
 extension AppAPI.DoneGroup {
     /// Names the group among its project's: its days don't overlap another's.
     public var key: String { "\(from):\(to)" }
+}
+
+/// What a repo filter calls its entries: tm's name for a repo, and none and
+/// all in words.
+public enum DoneRepoWords {
+    public static func title(_ repo: String) -> String {
+        switch repo {
+        case "": "All repos"
+        case "none": "No repo"
+        default: repo
+        }
+    }
+
+    /// A release count beside a filter: never a sum, only one repo's.
+    public static func releases(_ count: Int) -> String {
+        count == 1 ? "1 release" : "\(count) releases"
+    }
 }
 
 /// What a board shows of Done by day (app API 57; design board-library,
@@ -35,6 +80,8 @@ public struct DoneLedger: Equatable, Sendable {
     public private(set) var groups: [AppAPI.DoneGroup]?
     /// How many done tasks the groups hold, the archive's too.
     public private(set) var total = 0
+    /// What a filter offers, with several repos (app API 68).
+    public private(set) var repos: [AppAPI.DoneRepo] = []
     /// The line at the user's last action (app API 67), when work has
     /// finished since.
     public private(set) var mark: AppAPI.DoneMark?
@@ -79,6 +126,63 @@ public struct DoneLedger: Equatable, Sendable {
         isOpen(group) ? rows[group.key]?.tasks ?? [] : []
     }
 
+    /// One row of an open group: a task, or a release's line.
+    public enum Entry: Hashable, Sendable, Identifiable {
+        case task(AppAPI.Task)
+        case release(AppAPI.DoneRelease)
+
+        public var id: String {
+            switch self {
+            case .task(let t): "t:\(t.id)"
+            case .release(let r): "r:\(r.repo):\(r.tag)"
+            }
+        }
+    }
+
+    /// The rows read of group with the release lines at their times, tm
+    /// having said how many rows each comes after. A line past the rows
+    /// read waits for them.
+    public func entries(in group: AppAPI.DoneGroup) -> [Entry] {
+        guard isOpen(group) else { return [] }
+        let rows = tasks(in: group)
+        var out: [Entry] = []
+        var lines = group.releases[...]
+        for (i, t) in rows.enumerated() {
+            while let l = lines.first, l.offset <= i {
+                out.append(.release(l))
+                lines = lines.dropFirst()
+            }
+            out.append(.task(t))
+        }
+        while let l = lines.first, l.offset <= rows.count {
+            out.append(.release(l))
+            lines = lines.dropFirst()
+        }
+        return out
+    }
+
+    /// Which of group's entries the line at the user's last action stands
+    /// above: below its rows (markRows), and among the release lines of that
+    /// gap by time. Nil when it stands elsewhere.
+    public func markEntry(in group: AppAPI.DoneGroup) -> Int? {
+        guard let above = markRows(in: group), let mark else { return nil }
+        let all = entries(in: group)
+        var at = 0
+        var seen = 0
+        while at < all.count, seen < above {
+            if case .task = all[at] { seen += 1 }
+            at += 1
+        }
+        while at < all.count, case .release(let r) = all[at], r.at >= mark.at { at += 1 }
+        return at
+    }
+
+    /// Forgets what was read of another repo, keeping which folds are open.
+    public mutating func refilter() {
+        groups = nil
+        rows = [:]
+    }
+
     /// How many more rows group has to read.
     public func more(in group: AppAPI.DoneGroup) -> Int {
         guard isOpen(group), let f = rows[group.key], f.next > 0 else { return 0 }
@@ -96,6 +200,7 @@ public struct DoneLedger: Equatable, Sendable {
         let was = rows
         groups = done.groups
         total = done.total
+        repos = done.repos
         mark = done.mark
         rows = [:]
         var again: [(group: AppAPI.DoneGroup, limit: Int)] = []
