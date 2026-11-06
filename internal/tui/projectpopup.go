@@ -57,7 +57,13 @@ var tabNames = [tabCount]string{"overview", "inbox", "tasks", "settings", "acces
 
 type projectView struct {
 	slug string
-	tab  int
+	// thumbs are the Library's thumbnails drawn so far, by thumbKey, nil
+	// for a file that has none; thumbOrder is their age and thumbBusy says
+	// one is being asked for (imagepreview.go).
+	thumbs     map[string]*imagePreview
+	thumbOrder []string
+	thumbBusy  bool
+	tab        int
 	// sel is each tab's selection: a repository, an inbox item, a
 	// setting, a line of the keys.
 	sel [tabCount]int
@@ -490,6 +496,7 @@ func (pv *projectView) box(m *dash) box {
 	var libHead []string
 	sel := -1
 	keys := "← → tabs · esc close"
+	libCols := 0
 	switch pv.tab {
 	case tabOverview:
 		body, sel, hits = pv.overview(m, p, w)
@@ -520,13 +527,18 @@ func (pv *projectView) box(m *dash) box {
 		body = keyLines(w, m.commandHelp())
 		keys = "↑ ↓ scroll · " + keys
 	case tabLibrary:
-		body, sel, hits = pv.libraryLines(w)
+		libCols = pv.libPreviewCols(m, w)
+		listW := w
+		if libCols > 0 {
+			listW = w - libCols - libPreviewGap
+		}
+		body, sel, hits = pv.libraryLines(listW)
 		libHead, libHits = pv.libraryHead(w)
 		switch {
 		case pv.libTyping:
 			keys = "filter ▸ type a name, task, thread or repo · enter keep · esc clear"
 		case len(pv.libFiles()) > 0:
-			keys = "enter read · X delete · D delete the thread's · " + keys
+			keys = libTabKeys
 		}
 	case tabDesigns:
 		body, sel, hits = pv.designLines(w)
@@ -577,6 +589,9 @@ func (pv *projectView) box(m *dash) box {
 	}
 	b := box{title: pv.slug, head: head, body: body, sel: -1, hits: all, keys: keys}
 	b.scroll = pv.scroll(m.boxRows(b)-len(head), sel, len(body))
+	if libCols > 0 {
+		pv.drawLibPreview(m, &b, w, libCols)
+	}
 	return b
 }
 
@@ -648,6 +663,13 @@ func (pv *projectView) click(m *dash, item, col int, double bool) tea.Cmd {
 	}
 	if l := pv.list(); l != nil {
 		return l.click(m, item, col)
+	}
+	if pv.tab == tabLibrary {
+		// The preview column isn't the row beside it.
+		w := m.inner(viewWidth)
+		if cols := pv.libPreviewCols(m, w); cols > 0 && col >= w-cols-libPreviewGap {
+			return nil
+		}
 	}
 	pv.sel[pv.tab] = item
 	if pv.tab == tabMessages {

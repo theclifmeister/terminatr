@@ -230,6 +230,9 @@ type PollSource interface {
 	// "", journaled, saying how many went.
 	Library(slug string) ([]thread.LibFile, error)
 	LibraryRead(slug, id, name string, max int64) (data []byte, truncated bool, err error)
+	// LibraryThumbnail is a library file's small JPEG, from the server;
+	// any error means the file shows by name and size.
+	LibraryThumbnail(slug, id, name string) ([]byte, error)
 	LibraryRemove(slug, id, name string) (int, error)
 	// Designs are the project's designs with their build, from its
 	// board and archive (project.DesignBuilds), for the project popup's
@@ -913,6 +916,17 @@ func (s *ServerSource) LibraryRead(slug, id, name string, max int64) ([]byte, bo
 		return link.ReadFile(p, id, name, max)
 	}
 	return thread.ReadLibraryFile(p, id, name, max)
+}
+
+// LibraryThumbnail asks the server for a library file's thumbnail, made
+// on first view and cached (library.thumbnail): an older server refuses
+// the method, which the caller takes as any file without one. On a
+// connection of its own: the first one of a large image takes a while,
+// and the source's connection serves one call at a time.
+func (s *ServerSource) LibraryThumbnail(slug, id, name string) ([]byte, error) {
+	var res proto.LibraryThumbnailResult
+	err := filesCall(s.Paths, proto.MethodLibraryThumbnail, proto.LibraryThumbnailParams{Project: slug, ID: id, Name: name}, &res)
+	return res.Data, err
 }
 
 func (s *ServerSource) LibraryRemove(slug, id, name string) (int, error) {
