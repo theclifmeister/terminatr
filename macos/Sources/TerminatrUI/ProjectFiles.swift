@@ -205,6 +205,69 @@ public struct LibraryHeading: View {
     }
 }
 
+/// A thumbnail in a Library group's strip (T1059): the picture, or its
+/// ground until it comes, with the file's name under it. A landscape picture
+/// fills the frame from its top, where a screenshot's title is; a tall one
+/// fits inside it, whole.
+public struct LibraryTile: View {
+    @Environment(\.theme) private var theme
+    let file: AppAPI.LibraryFile
+    let image: FileImage.Drawn?
+
+    public init(_ file: AppAPI.LibraryFile, image: FileImage.Drawn?) {
+        self.file = file
+        self.image = image
+    }
+
+    public var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 5)
+        VStack(alignment: .leading, spacing: 3) {
+            Color.clear
+                .aspectRatio(300.0 / 190.0, contentMode: .fit)
+                .background(theme.selection)
+                .overlay(alignment: .top) {
+                    if let image {
+                        Image(decorative: image.image, scale: 1)
+                            .resizable()
+                            .interpolation(.high)
+                            .aspectRatio(contentMode: image.height > image.width ? .fit : .fill)
+                    }
+                }
+                .clipShape(shape)
+                .overlay { shape.strokeBorder(theme.line, lineWidth: theme.contrast ? 1.5 : 1) }
+            Text(file.name)
+                .font(theme.sized(Flat.label))
+                .foregroundStyle(theme.muted)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(file.name), \(Attachment.size(file.size))")
+        .accessibilityAddTraits(.isImage)
+    }
+}
+
+/// The +N at the end of a Library group's strip, beside the tiles.
+public struct LibraryStripFold: View {
+    @Environment(\.theme) private var theme
+    let more: Int
+    /// Its width beside the tiles.
+    public static let width = 62.0
+
+    public init(more: Int) {
+        self.more = more
+    }
+
+    public var body: some View {
+        Text("+\(more)")
+            .font(theme.sized(Flat.text, .semibold))
+            .foregroundStyle(theme.action)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .accessibilityLabel("\(more) more")
+    }
+}
+
 /// A library file in the Library page: its name, size and date.
 public struct LibraryFileRow: View {
     @Environment(\.theme) private var theme

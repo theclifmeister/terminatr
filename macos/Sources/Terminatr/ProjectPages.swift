@@ -130,9 +130,11 @@ struct MemoryPane: View {
 /// (resolved and archived threads' too) and the files linked projects
 /// sent, grouped by thread, newest first, with a filter from 7 files and
 /// chips for its kinds (T1054). A heading says the group's task status,
-/// kinds and size, and a group over six files folds (T1055). A file opens
-/// in Quick Look (space, or a double click), its app (Open), or is saved
-/// (Save As…).
+/// kinds and size, and a group over six files folds (T1055). A group's
+/// images show as a strip of thumbnails, four until it opens, each asked for
+/// when it comes into view; other files stay rows, and so does an image with
+/// no thumbnail (T1059). A file opens in Quick Look (space, or a double
+/// click), its app (Open), or is saved (Save As…).
 struct LibraryPane: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
@@ -149,6 +151,12 @@ struct LibraryPane: View {
     @State private var kind: LibraryPage.Kind?
     /// The groups opened past their fold.
     @State private var opened: Set<String> = []
+    /// The thumbnails drawn so far, and the images whose answer was no
+    /// thumbnail: those are rows from then on.
+    @State private var thumbs = LibraryThumbs()
+    @State private var noThumb: Set<String> = []
+    /// The list's width, which says how many thumbnails go across.
+    @State private var width = 0.0
 
     /// The files the filter and the kind leave.
     private var shown: [AppAPI.LibraryFile] {
@@ -158,15 +166,26 @@ struct LibraryPane: View {
     /// The groups the filter and the kind leave.
     private var groups: [LibraryPage.Group] { LibraryPage.groups(shown) }
 
-    private func listed(_ g: LibraryPage.Group) -> (files: [AppAPI.LibraryFile], more: Int, fewer: Bool) {
-        g.listed(open: opened.contains(g.id), query: query)
+    private func listed(_ g: LibraryPage.Group) -> LibraryPage.Listing {
+        let draws = app.drawsThumbnails(peer: peer)
+        return g.listed(open: opened.contains(g.id), query: query) { f in
+            draws && LibraryPage.hasThumbnail(f) && !noThumb.contains(Self.key(f))
+        }
+    }
+
+    private var columns: Int { LibraryPage.stripColumns(width: width) }
+
+    /// Whether a group's fold sits at the end of its strip: when it's the
+    /// last thing in the group and there's room beside four tiles.
+    private func foldBeside(_ l: LibraryPage.Listing) -> Bool {
+        l.more > 0 && l.rows.isEmpty && columns == LibraryPage.stripAt
     }
 
     /// The rows top to bottom, a fold's too: what ↑ and ↓ walk.
     private var order: [String] {
         groups.flatMap { g in
             let l = listed(g)
-            return l.files.map(Self.key) + (l.more > 0 || l.fewer ? [Self.foldKey(g)] : [])
+            return l.files.map(Self.key) + (l.folds ? [Self.foldKey(g)] : [])
         }
     }
 
@@ -200,25 +219,32 @@ struct LibraryPane: View {
                 .padding(.vertical, 22)
                 Spacer()
             } else {
-                PickList(selection: $picked, order: order, name: "Files") {
+                PickList(selection: $picked, order: order, name: "Files", across: true) {
                     ForEach(groups) { g in
                         let l = listed(g)
                         LibraryHeading(g)
                             .padding(.horizontal, 8)
                             .padding(.top, 10)
                             .padding(.bottom, 3)
-                        ForEach(l.files, id: \.self) { f in
+                        let rows = LibraryPage.stripRows(l.strip, columns: columns)
+                        // By its first file: a LazyVStack drops a row whose id
+                        // another group's row has too, as an offset's would.
+                        ForEach(rows, id: \.first) { row in
+                            stripRow(g, row, fold: row == rows.first && foldBeside(l) ? l.more : nil)
+                        }
+                        ForEach(l.rows, id: \.self) { f in
                             PickRow(id: Self.key(f), selection: $picked, open: { look(f) }) { LibraryFileRow(f) }
                                 .contextMenu { actions(f) }
                         }
-                        if l.more > 0 || l.fewer {
+                        if l.folds, !foldBeside(l) {
                             PickRow(id: Self.foldKey(g), selection: $picked, act: { toggle(g) }) {
                                 Text(l.fewer ? "Show fewer" : "+\(l.more) more").foregroundStyle(theme.muted)
                             }
-                            .help(l.fewer ? "Folds this group to its six newest files" : "Shows the rest of this group")
+                            .help(l.fewer ? "Folds this group to its newest files" : "Shows the rest of this group")
                         }
                     }
                 }
+                .onGeometryChange(for: Double.self) { Double($0.size.width) } action: { width = $0 }
                 .onKeyPress(.space) {
                     if let g = groups.first(where: { Self.foldKey($0) == picked }) {
                         toggle(g)
@@ -248,15 +274,70 @@ struct LibraryPane: View {
             query = ""
             kind = nil
             opened = []
+            thumbs.removeAll()
+            noThumb = []
+        }
+    }
+
+    /// One row of a group's strip, as wide as any other's, so tiles line up
+    /// from group to group. Each is a row of the lazy list: a tile asks for
+    /// its picture when it comes into view.
+    private func stripRow(_ g: LibraryPage.Group, _ row: [AppAPI.LibraryFile], fold: Int?) -> some View {
+        HStack(alignment: .top, spacing: 5) {
+            ForEach(row, id: \.self) { f in
+                PickRow(id: Self.key(f), selection: $picked, open: { look(f) }, tile: true) {
+                    LibraryTile(f, image: thumbs[Self.thumbKey(project, peer, f)])
+                }
+                .help("\(f.name) · \(Attachment.size(f.size))")
+                .contextMenu { actions(f) }
+                .task(id: Self.thumbKey(project, peer, f)) { await draw(f) }
+            }
+            ForEach(row.count..<columns, id: \.self) { _ in
+                Color.clear.frame(maxWidth: .infinity, maxHeight: 1)
+            }
+            if columns == LibraryPage.stripAt {
+                Group {
+                    if let fold {
+                        PickRow(id: Self.foldKey(g), selection: $picked, act: { toggle(g) }, tile: true) { LibraryStripFold(more: fold) }
+                            .help("Shows the rest of this group")
+                    } else {
+                        Color.clear.frame(maxHeight: 1)
+                    }
+                }
+                .frame(width: LibraryStripFold.width)
+            }
+        }
+        .padding(.horizontal, 5)
+    }
+
+    /// Asks for a tile's picture, once it has stayed in view a moment: a
+    /// quick scroll past asks for nothing. No thumbnail makes the file a row.
+    private func draw(_ f: AppAPI.LibraryFile) async {
+        let key = Self.thumbKey(project, peer, f)
+        if thumbs[key] != nil {
+            thumbs.touch(key)
+            return
+        }
+        try? await Task.sleep(for: .milliseconds(120))
+        guard !Task.isCancelled else { return }
+        let answer = await app.libraryThumbnail(project, peer: peer, f)
+        guard !Task.isCancelled else { return }
+        let image = if let answer { await LibraryPage.drawn(answer) } else { FileImage.Drawn?.none }
+        guard !Task.isCancelled else { return }
+        if let image {
+            thumbs.add(key, image)
+        } else {
+            noThumb.insert(Self.key(f))
         }
     }
 
     /// Opens or folds a group, from its fold's row. Opening moves the pick
     /// to the first file that came out; folding leaves it on the row.
     private func toggle(_ g: LibraryPage.Group) {
-        if listed(g).more > 0 {
+        let was = listed(g)
+        if was.more > 0 {
             opened.insert(g.id)
-            picked = g.files.dropFirst(LibraryPage.foldAt).first.map(Self.key)
+            picked = listed(g).files.first { !was.files.contains($0) }.map(Self.key)
         } else {
             opened.remove(g.id)
         }
@@ -297,6 +378,12 @@ struct LibraryPane: View {
     }
 
     static func key(_ f: AppAPI.LibraryFile) -> String { LibraryPage.id(f) + "/" + f.name }
+
+    /// What a drawn thumbnail is kept by: the file as it is now, wherever
+    /// it lives, so one that changed is asked for again.
+    static func thumbKey(_ project: String, _ peer: String?, _ f: AppAPI.LibraryFile) -> String {
+        [peer ?? "", project, key(f), String(f.size), String(f.time.timeIntervalSince1970)].joined(separator: "\n")
+    }
 
     /// A group's fold row in the list; no file's key, which has a name after
     /// its slash.
