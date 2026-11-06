@@ -3,6 +3,7 @@ package server
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"slices"
@@ -387,6 +388,20 @@ func TestTaskDoneGroups(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer app.Close()
+	// Real repositories with no tags, one on another host.
+	repo := func(remote string) string {
+		t.Helper()
+		dir := t.TempDir()
+		for _, args := range [][]string{{"init", "-q"}, {"remote", "add", "origin", remote}} {
+			cmd := exec.Command("git", args...)
+			cmd.Dir = dir
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("git %v: %v: %s", args, err, out)
+			}
+		}
+		return dir
+	}
+	a, b, c := repo("https://github.com/o/a"), repo("https://github.com/o/b"), repo("https://gitlab.example/o/c")
 	bin := t.TempDir()
 	mark := filepath.Join(bin, "git-ran")
 	if err := os.WriteFile(filepath.Join(bin, "git"), []byte("#!/bin/sh\ntouch '"+mark+"'\nexit 1\n"), 0o755); err != nil {
@@ -397,7 +412,7 @@ func TestTaskDoneGroups(t *testing.T) {
 	today := now.Format(time.DateOnly)
 	old := now.AddDate(-1, 0, 0).Format(time.DateOnly)
 	var first []SideDoneGroup
-	for slug, repos := range map[string][]string{"plain": nil, "one": {t.TempDir()}, "several": {t.TempDir(), t.TempDir()}, "other": {t.TempDir()}} {
+	for slug, repos := range map[string][]string{"plain": nil, "one": {a}, "several": {a, b}, "other": {c}} {
 		pr, err := project.New(project.Options{Slug: slug, Repos: repos})
 		if err != nil {
 			t.Fatal(err)
