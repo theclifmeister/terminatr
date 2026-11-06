@@ -54,36 +54,37 @@ struct ShortcutsSheet: View {
     ]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Keyboard Shortcuts")
-                .font(theme.title(.title, .heavy))
-            ForEach(Self.groups, id: \.0) { group, keys in
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(group)
-                        .font(theme.body(.caption))
-                        .foregroundStyle(theme.muted)
-                    Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 5) {
-                        ForEach(keys, id: \.0) { key, what in
-                            GridRow {
-                                Text(key)
-                                    .font(theme.mono(.callout, .medium))
-                                    .foregroundStyle(theme.action)
-                                    .frame(minWidth: 96, alignment: .leading)
-                                Text(what)
-                                    .font(theme.body(.callout))
+        FlatSheet(width: 560) {
+            SheetTitle("Keyboard Shortcuts")
+        } content: {
+            ScrollView {
+                SheetBody {
+                    ForEach(Self.groups, id: \.0) { group, keys in
+                        VStack(alignment: .leading, spacing: 6) {
+                            PaneLabel(group)
+                            Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 5) {
+                                ForEach(keys, id: \.0) { key, what in
+                                    GridRow {
+                                        Text(key)
+                                            .font(theme.monoSized(Flat.label, .medium))
+                                            .foregroundStyle(theme.action)
+                                            .frame(minWidth: 96, alignment: .leading)
+                                        Text(what)
+                                            .font(theme.sized(Flat.label))
+                                    }
+                                }
                             }
                         }
                     }
                 }
             }
-            HStack {
-                Spacer()
-                Button("Done") { dismiss() }
-                    .keyboardShortcut(.defaultAction)
-                    .tint(theme.action)
-            }
+            .frame(maxHeight: 620)
+            .fixedSize(horizontal: false, vertical: true)
+        } footer: {
+            SheetEscape { dismiss() }
+            Button("Done") { dismiss() }
+                .buttonStyle(.flatPrimary)
+                .keyboardShortcut(.defaultAction)
         }
-        .padding(18)
-        .frame(width: 560)
     }
 }
