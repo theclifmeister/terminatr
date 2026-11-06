@@ -124,6 +124,7 @@ public enum LibraryPage {
             var changed = false
             do {
                 repeat {
+                    try Task.checkCancellation()
                     let c = try await fetch(params(out.count))
                     if size >= 0, c.size != size || c.mtime != mtime {
                         changed = true
