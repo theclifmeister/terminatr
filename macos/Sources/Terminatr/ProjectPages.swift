@@ -176,7 +176,7 @@ struct LibraryPane: View {
                         kind = nil
                     }
                 }
-                .padding(.horizontal, 24)
+                .padding(.horizontal, 16)
                 .padding(.vertical, 22)
                 Spacer()
             } else {
@@ -215,6 +215,7 @@ struct LibraryPane: View {
                 }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .quickLookPreview($looking)
         .task(id: project) { await list() }
         .onChange(of: project) {

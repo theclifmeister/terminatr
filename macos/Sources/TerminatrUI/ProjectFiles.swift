@@ -103,7 +103,8 @@ public struct MemoryFileRow: View {
 }
 
 /// The Library page's kinds (T1054): a chip with its count for all and
-/// for each kind that has files. They scroll sideways when they don't fit.
+/// for each kind that has files. When they don't fit they wrap on the Mac,
+/// where a mouse couldn't scroll them, and scroll sideways on the iPhone.
 public struct LibraryChips: View {
     @Environment(\.theme) private var theme
     let chips: [LibraryPage.Chip]
@@ -115,36 +116,41 @@ public struct LibraryChips: View {
     }
 
     public var body: some View {
+        #if os(macOS)
+        FlowRow(spacing: 5) { row }
+        #else
         ScrollView(.horizontal) {
-            HStack(spacing: 5) {
-                ForEach(chips) { c in
-                    let on = c.kind == kind
-                    Button {
-                        kind = c.kind
-                    } label: {
-                        HStack(spacing: 4) {
-                            Text(c.word)
-                            Text(String(c.count)).opacity(on ? 0.72 : 1).foregroundStyle(on ? theme.pane : theme.muted)
-                        }
-                        .font(theme.sized(Flat.label))
-                        .foregroundStyle(on ? theme.pane : theme.ink)
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 3)
-                        .background(on ? theme.ink : .clear, in: RoundedRectangle(cornerRadius: 5))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 5)
-                                .strokeBorder(on ? theme.ink : theme.line, lineWidth: theme.contrast ? 1.5 : 1)
-                        }
-                        .contentShape(RoundedRectangle(cornerRadius: 5))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("\(c.word), \(c.count)")
-                    .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
-                }
-            }
+            HStack(spacing: 5) { row }
         }
         .scrollIndicators(.hidden)
+        #endif
+    }
+
+    private var row: some View {
+        ForEach(chips) { c in
+            let on = c.kind == kind
+            Button {
+                kind = c.kind
+            } label: {
+                HStack(spacing: 4) {
+                    Text(c.word)
+                    Text(String(c.count)).opacity(on ? 0.72 : 1).foregroundStyle(on ? theme.pane : theme.muted)
+                }
+                .font(theme.sized(Flat.label))
+                .foregroundStyle(on ? theme.pane : theme.ink)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 3)
+                .background(on ? theme.ink : .clear, in: RoundedRectangle(cornerRadius: 5))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 5)
+                        .strokeBorder(on ? theme.ink : theme.line, lineWidth: theme.contrast ? 1.5 : 1)
+                }
+                .contentShape(RoundedRectangle(cornerRadius: 5))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("\(c.word), \(c.count)")
+            .accessibilityAddTraits(on ? .isSelected : [])
+        }
     }
 }
 
