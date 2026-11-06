@@ -47,6 +47,10 @@
       {"title": "from studio/acme", "peer": "studio/acme", "message": "M-1", "state": "received", "name": "brief.pdf", "size": 5},
       {"title": "from studio/acme", "peer": "studio/acme", "message": "M-2", "state": "received", "name": "brief.zip", "size": 6}
     ],
+    "titled": [
+      {"thread": "t-0001", "task": "T1", "title": "A design", "name": "design.html", "doc_title": "Who May Run tm", "published": "https://claude.ai/artifact/abc"},
+      {"thread": "t-0002", "task": "T2", "title": "Plain", "name": "notes.md"}
+    ],
     "sizes": [
       {"thread": "t-0001", "task": "T1", "task_status": "done", "title": "New", "state": "running", "name": "small.md", "size": 10},
       {"thread": "t-0001", "task": "T1", "task_status": "done", "title": "New", "state": "running", "name": "site-dark.png", "size": 3000},
@@ -109,6 +113,11 @@
     {"library": "linked", "query": "studio", "kind": "", "names": ["brief.pdf"], "chips": []},
     {"library": "linked", "query": "", "kind": "pages", "names": ["brief.pdf"],
      "chips": [["", 2], ["pages", 1], ["notes", 1]]},
+    {"library": "titled", "query": "who may", "kind": "", "names": ["design.html"], "chips": []},
+    {"library": "titled", "query": "design.html", "kind": "", "names": ["design.html"], "chips": []},
+    {"library": "titled", "query": "RUN design", "kind": "", "names": ["design.html"], "chips": []},
+    {"library": "titled", "query": "notes.md", "kind": "", "names": ["notes.md"], "chips": []},
+    {"library": "titled", "query": "artifact", "kind": "", "names": [], "chips": []},
     {"library": "none", "query": "", "kind": "", "names": [], "chips": []},
     {"library": "none", "query": "x", "kind": "images", "names": [], "chips": []},
     {"library": "one", "query": "", "kind": "", "names": ["one.png"], "chips": []},

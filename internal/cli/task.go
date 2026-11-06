@@ -33,6 +33,9 @@ const taskUsage = `usage: tm task <command> [--project <slug>] [--json]
   status T12 dropped --approved-by-user --note "why"
                                 the coordinator, once the user decided not to do it;
                                 never counted as done; any other status reopens it
+  status T12 started --approved-by-user --note "sent back: …"
+                                the coordinator, once the user sent a done task back;
+                                without it a status on a done task is refused
   edit T12 [--title "…"] [--notes "…" | --notes-file F] [--priority P] [--owner O] [--repo R] [--design NAME] [--after T10,T11]
                                 --after is the whole list; while programs are on, a member's
                                 task also takes its program's tasks (acme-api/T12)
@@ -116,12 +119,9 @@ func runTask(e *Env, args []string) error {
 				return &tasks.Error{Code: "invalid-status", Msg: fmt.Sprintf("%q is not one of open, ready, started, blocked, review, done, dropped", pos[1])}
 			}
 			var res tasks.Result
-			switch {
-			case *approved && !st.Closed():
-				return usagef("--approved-by-user only goes with done or dropped")
-			case *approved:
+			if *approved {
 				res, err = s.SetApproved(e.Caller, id, st, *note)
-			default:
+			} else {
 				res, err = s.SetStatus(e.Caller, id, st, *note)
 			}
 			return e.done(res, err, *asJSON, string(st))

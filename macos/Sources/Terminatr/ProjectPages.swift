@@ -238,7 +238,7 @@ struct LibraryPane: View {
                         ForEach(biggest) { r in
                             let f = r.files[0]
                             PickRow(id: r.id, selection: $picked, open: { look(f) }) {
-                                LibraryFileRow(f, source: LibraryPage.source(f))
+                                fileRow(f, source: LibraryPage.source(f))
                             }
                             .contextMenu { actions(r) }
                         }
@@ -260,7 +260,7 @@ struct LibraryPane: View {
                                     if r.isStack {
                                         LibraryStackRow(r, shown: showing(r)) { pick(r, $0) }
                                     } else {
-                                        LibraryFileRow(r.files[0])
+                                        fileRow(r.files[0])
                                     }
                                 }
                                 .contextMenu { actions(r) }
@@ -439,6 +439,20 @@ struct LibraryPane: View {
     }
 
     /// The picked row's acts, on the file it shows.
+    /// A file's row, with its published page when it has one (T1061).
+    private func fileRow(_ f: AppAPI.LibraryFile, source: String? = nil) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            LibraryFileRow(f, source: source)
+            if let url = LibraryPage.published(f) {
+                Button("Open published page") { NSWorkspace.shared.open(url) }
+                    .buttonStyle(.link)
+                    .foregroundStyle(theme.action)
+                    .font(theme.sized(Flat.label))
+                    .help(url.absoluteString)
+            }
+        }
+    }
+
     @ViewBuilder
     private func actions(_ r: LibraryPage.Row) -> some View {
         let f = showing(r)
@@ -454,6 +468,10 @@ struct LibraryPane: View {
         .disabled(FileCaution.launches(f.name))
         .help(FileCaution.launches(f.name) ? "Open would run this file: Quick Look it or Save As…" : "")
         Button("Save As…") { Task { await saveAs(f) } }
+        if let url = LibraryPage.published(f) {
+            Divider()
+            Button("Open published page") { NSWorkspace.shared.open(url) }
+        }
     }
 
     static func key(_ f: AppAPI.LibraryFile) -> String { LibraryPage.id(f) + "/" + f.name }

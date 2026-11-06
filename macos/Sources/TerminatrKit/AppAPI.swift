@@ -1417,6 +1417,8 @@ public enum AppAPI {
         public var repo: String
         public var state: String
         public var name: String
+        public var docTitle: String
+        public var published: String
         public var size: Int
         public var time: Date
         public var peer: String
@@ -1424,7 +1426,7 @@ public enum AppAPI {
         public var project: String
         public var server: String
 
-        public init(thread: String = "", task: String = "", taskStatus: String = "", title: String, repo: String = "", state: String, name: String, size: Int, time: Date, peer: String = "", message: String = "", project: String = "", server: String = "") {
+        public init(thread: String = "", task: String = "", taskStatus: String = "", title: String, repo: String = "", state: String, name: String, docTitle: String = "", published: String = "", size: Int, time: Date, peer: String = "", message: String = "", project: String = "", server: String = "") {
             self.thread = thread
             self.task = task
             self.taskStatus = taskStatus
@@ -1432,6 +1434,8 @@ public enum AppAPI {
             self.repo = repo
             self.state = state
             self.name = name
+            self.docTitle = docTitle
+            self.published = published
             self.size = size
             self.time = time
             self.peer = peer
@@ -1448,6 +1452,8 @@ public enum AppAPI {
             case repo
             case state
             case name
+            case docTitle = "doc_title"
+            case published
             case size
             case time
             case peer
@@ -6061,6 +6067,8 @@ extension AppAPI.LibraryFile {
         self.repo = try c.decodeIfPresent(String.self, forKey: .repo) ?? ""
         self.state = try c.decode(String.self, forKey: .state)
         self.name = try c.decode(String.self, forKey: .name)
+        self.docTitle = try c.decodeIfPresent(String.self, forKey: .docTitle) ?? ""
+        self.published = try c.decodeIfPresent(String.self, forKey: .published) ?? ""
         self.size = try c.decode(Int.self, forKey: .size)
         self.time = try c.decode(Date.self, forKey: .time)
         self.peer = try c.decodeIfPresent(String.self, forKey: .peer) ?? ""

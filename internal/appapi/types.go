@@ -1882,10 +1882,14 @@ type Library struct {
 // the status of the thread's task, "" for none (app API 55; the Library's
 // heading says it). Repo is the folder name of the thread's repository in
 // a project with several (app API 53; the Library's filter finds by it and
-// its heading names it). A coordinator's or director's own file has "seat"
-// for its Thread (app API 59). In a program's listing Project is the member
-// it is in and Server that member's paired server, both empty for the
-// director's own. library.read names it by Thread, else Message, and Name.
+// its heading names it). DocTitle is a page's title or a note's first
+// heading, "" for none (app API 64; the row shows it with the name, and the
+// filter finds by it). Published is the https page the designs list has for
+// a page of its design task, "" for none, and always on a paired server's
+// (app API 64). A coordinator's or director's own file has "seat" for its
+// Thread (app API 59). In a program's listing Project is the member it is in
+// and Server that member's paired server, both empty for the director's own.
+// library.read names it by Thread, else Message, and Name.
 type LibraryFile struct {
 	Thread     string    `json:"thread,omitempty"`
 	Task       string    `json:"task,omitempty"`
@@ -1894,6 +1898,8 @@ type LibraryFile struct {
 	Repo       string    `json:"repo,omitempty"`
 	State      string    `json:"state"`
 	Name       string    `json:"name"`
+	DocTitle   string    `json:"doc_title,omitempty"`
+	Published  string    `json:"published,omitempty"`
 	Size       int64     `json:"size"`
 	Time       time.Time `json:"time"`
 	Peer       string    `json:"peer,omitempty"`
@@ -1929,7 +1935,7 @@ func libraryOf(r proto.LibraryListResult) Library {
 	out := Library{Files: []LibraryFile{}, Note: r.Note}
 	for _, f := range r.Files {
 		out.Files = append(out.Files, LibraryFile{Thread: f.Thread, Task: f.Task, TaskStatus: f.TaskStatus, Title: f.Title, Repo: f.Repo, State: f.State,
-			Name: f.Name, Size: f.Size, Time: f.Time, Peer: f.Peer, Message: f.Message, Project: f.Project, Server: f.Server})
+			Name: f.Name, DocTitle: f.DocTitle, Published: f.Published, Size: f.Size, Time: f.Time, Peer: f.Peer, Message: f.Message, Project: f.Project, Server: f.Server})
 	}
 	return out
 }

@@ -251,7 +251,7 @@ func TestCallerRules(t *testing.T) {
 	h.ok(coord, "task", "status", "T1", "review")
 	h.expect(1, "human-only", coord, "task", "status", "T1", "done")
 	h.expect(1, "coordinator-only", thr, "task", "status", "T1", "done", "--approved-by-user")
-	h.expect(2, "", coord, "task", "status", "T1", "review", "--approved-by-user")
+	h.expect(1, "invalid-status", coord, "task", "status", "T1", "started", "--approved-by-user")
 	h.ok(coord, "task", "status", "T1", "done", "--approved-by-user")
 	if inbox := h.ok(coord, "inbox", "list"); inbox != "" {
 		t.Fatalf("inbox %q", inbox)
@@ -266,6 +266,10 @@ func TestCallerRules(t *testing.T) {
 		t.Fatalf("list:\n%s", out)
 	}
 	h.ok(coord, "task", "status", "T2", "open")
+
+	// A done task moves only on the user's word (T1099).
+	h.expect(1, "task-done", coord, "task", "status", "T1", "review", "--note", "Check: late")
+	h.ok(coord, "task", "status", "T1", "started", "--approved-by-user", "--note", "sent back: redo")
 
 	// Agents can't write another project's tasks.
 	h.ok(human, "project", "new", "other")

@@ -91,7 +91,7 @@ func projectLibrary(p *project.Project) ([]thread.LibFile, error) {
 
 func libraryFileOf(f thread.LibFile) proto.LibraryFile {
 	return proto.LibraryFile{Thread: f.Thread, Task: f.Task, TaskStatus: f.TaskStatus, Title: f.Title, Repo: f.Repo, State: f.State,
-		Name: f.Name, Size: f.Size, Time: f.Time, Peer: f.Peer, Message: f.Message, Project: f.Project, Server: f.Server}
+		Name: f.Name, DocTitle: f.DocTitle, Published: f.Published, Size: f.Size, Time: f.Time, Peer: f.Peer, Message: f.Message, Project: f.Project, Server: f.Server}
 }
 
 // libraryRead is a chunk of a thread's library file, or, for ID a
