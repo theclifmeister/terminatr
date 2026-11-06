@@ -18,6 +18,8 @@ public enum Flat {
     public static let label: CGFloat = 13
     /// A row's and running text's size.
     public static let text: CGFloat = 14
+    /// A conversation's messages and the composer's text, in mono.
+    public static let conversation: CGFloat = 13
     /// A chip's size, as the inspector's header's.
     public static let chip: CGFloat = 11.5
     /// A list column's side margin on the phone (`.colL`, `.pin`); what
@@ -33,19 +35,22 @@ extension View {
     /// The design page's line height on the phone (1.45, T1008): points'
     /// text gets its line boxes, between lines and at its top and bottom. The
     /// Mac's text keeps the system's line height.
-    public func pageLeading(_ points: CGFloat) -> some View {
-        modifier(PageLeading(points: points))
+    /// `mono`: the text is in JetBrains Mono NL, whose lines are taller.
+    public func pageLeading(_ points: CGFloat, mono: Bool = false) -> some View {
+        modifier(PageLeading(points: points, mono: mono))
     }
 }
 
 private struct PageLeading: ViewModifier {
     @Environment(\.theme) private var theme
     let points: CGFloat
+    let mono: Bool
 
     func body(content: Content) -> some View {
         #if canImport(UIKit)
         let size = points * theme.scale
-        let extra = max(size * 1.45 - UIFont.systemFont(ofSize: size).lineHeight, 0)
+        let font = mono ? JetBrainsMono.font(size: size) : UIFont.systemFont(ofSize: size)
+        let extra = max(size * 1.45 - font.lineHeight, 0)
         content
             .lineSpacing(extra)
             .padding(.vertical, extra / 2)
@@ -83,7 +88,7 @@ public struct Chip: View {
         let shape = RoundedRectangle(cornerRadius: Radius.chip)
         let ink = colour ?? theme.muted
         Text(word)
-            .font(.system(size: Flat.chip * theme.scale, design: mono ? .monospaced : .default))
+            .font(mono ? theme.monoSized(Flat.chip) : theme.sized(Flat.chip))
             .foregroundStyle(ink)
             .lineLimit(1)
             .fixedSize()
@@ -342,7 +347,7 @@ public struct StatStrip: View {
 
     @ViewBuilder private func cell(_ s: (value: String, word: String)) -> some View {
         Text(s.value)
-            .font(.system(size: 15 * theme.scale, weight: .medium, design: .monospaced))
+            .font(theme.monoSized(15, .medium))
             .lineLimit(1)
             .fixedSize()
         Text(s.word)

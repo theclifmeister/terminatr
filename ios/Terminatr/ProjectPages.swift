@@ -152,7 +152,7 @@ struct LibraryScreen: View {
                 ForEach(LibraryPage.groups(files)) { g in
                     VStack(alignment: .leading, spacing: 1) {
                         Text(g.title).font(theme.sized(12)).lines(1)
-                        Text(g.detail).font(.system(size: 11 * theme.scale, design: .monospaced))
+                        Text(g.detail).font(theme.monoSized(11))
                     }
                     .foregroundStyle(theme.muted)
                     .padding(.top, Spacing.item)

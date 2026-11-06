@@ -296,11 +296,11 @@ struct SessionInspector: View {
             HStack(spacing: Spacing.item) {
                 if let task = t?.task {
                     Text(task.ref)
-                        .font(.system(size: 12.5 * theme.scale, weight: .medium, design: .monospaced))
+                        .font(theme.monoSized(12.5, .medium))
                         .foregroundStyle(theme.action)
                 }
                 Text(ref.thread)
-                    .font(.system(size: 12.5 * theme.scale, design: .monospaced))
+                    .font(theme.monoSized(12.5))
                     .foregroundStyle(theme.muted)
             }
             Text(t?.task?.title ?? t?.record.title ?? ref.thread)

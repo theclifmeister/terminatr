@@ -9,17 +9,19 @@ import TerminatrKit
 struct MarkdownTable: View {
     @Environment(\.theme) private var theme
     let table: SafeMarkdown.Table
+    /// In a conversation: its text is mono.
+    var conversation = false
     @State private var width: CGFloat?
 
     var body: some View {
         ScrollView(.horizontal) {
             TableLayout(columns: table.align.count, fit: width) {
                 ForEach(Array(table.header.enumerated()), id: \.offset) { c, s in
-                    cell(s, c).font(theme.body(.subheadline)).foregroundStyle(theme.muted).background(theme.pane)
+                    cell(s, c).font(conversation ? theme.mono(.subheadline) : theme.body(.subheadline)).foregroundStyle(theme.muted).background(theme.pane)
                 }
                 ForEach(Array(table.rows.enumerated()), id: \.offset) { _, row in
                     ForEach(Array(row.enumerated()), id: \.offset) { c, s in
-                        cell(s, c).font(theme.body(.body)).background(theme.pane)
+                        cell(s, c).font(conversation ? theme.conversation : theme.body(.body)).background(theme.pane)
                     }
                 }
             }
@@ -34,7 +36,7 @@ struct MarkdownTable: View {
     }
 
     private func cell(_ s: AttributedString, _ column: Int) -> some View {
-        Text(s)
+        Text(theme.coded(s))
             .multilineTextAlignment(textAlignment(column))
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 10)

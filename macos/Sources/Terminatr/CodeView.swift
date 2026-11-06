@@ -66,7 +66,7 @@ struct CodeView: NSViewRepresentable {
         let sameFile = c.id == id
         guard c.text != text || c.marks != marks || !sameFile || c.look != look else { return }
         let keep = s.contentView.bounds.origin
-        let font = NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
+        let font = JetBrainsMono.font(size: size)
         let lines = NSMutableParagraphStyle()
         lines.minimumLineHeight = ceil(size * 1.5)
         lines.maximumLineHeight = ceil(size * 1.5)
@@ -77,7 +77,7 @@ struct CodeView: NSViewRepresentable {
         v.selectedTextAttributes = [.backgroundColor: NSColor(theme.selection)]
         let added = NSColor(theme.good), removed = NSColor(theme.attention)
         (v.layoutManager as? TintedLayout)?.update(text: text, marks: marks, added: added, removed: removed)
-        ruler.update(text: text, marks: marks, added: added, removed: removed, font: NSFont.monospacedDigitSystemFont(ofSize: size - 1, weight: .regular), ink: NSColor(theme.faint), ground: NSColor(theme.pane))
+        ruler.update(text: text, marks: marks, added: added, removed: removed, font: JetBrainsMono.font(size: size - 1), ink: NSColor(theme.faint), ground: NSColor(theme.pane))
         let left = -ruler.requiredThickness
         s.contentView.scroll(to: NSPoint(x: sameFile && keep.x > 0 ? keep.x : left, y: keep.y))
         // Far down a file, the layout has to know how tall it is first.
@@ -169,7 +169,7 @@ private final class TintedLayout: NSLayoutManager {
 private final class LineNumbers: NSRulerView {
     private weak var text: NSTextView?
     private var starts = [0]
-    private var numberFont = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+    private var numberFont = JetBrainsMono.font(size: 11)
     private var ink = NSColor.secondaryLabelColor
     private var marks: FileMarks?
     private var added = NSColor.clear

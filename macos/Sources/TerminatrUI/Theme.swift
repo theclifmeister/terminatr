@@ -69,6 +69,8 @@ public struct Theme: Sendable {
     /// the body triples), so a title word fits a row at accessibility
     /// sizes rather than breaking (T851).
     public var titleGrowth: CGFloat = 1
+    /// The phone's Bold Text is on (Theme.mono).
+    public var boldText = false
 
     public init(_ name: ThemeName, colours: ThemeColours? = nil) {
         let c = colours ?? name.colours
@@ -132,9 +134,31 @@ public struct Theme: Sendable {
         .system(size: size(style), weight: weight)
     }
 
-    /// The system's mono, SF Mono.
+    /// JetBrains Mono NL (T1029) at a style's size: code, paths, ids. Labels,
+    /// buttons and lists stay the system's.
     public func mono(_ style: TextStyle, _ weight: Font.Weight = .regular) -> Font {
-        .system(size: size(style), weight: weight, design: .monospaced)
+        JetBrainsMono.swiftUI(size: size(style), weight: legible(weight))
+    }
+
+    /// JetBrains Mono NL at a measured size, times the text size.
+    public func monoSized(_ points: CGFloat, _ weight: Font.Weight = .regular) -> Font {
+        JetBrainsMono.swiftUI(size: points * scale, weight: legible(weight))
+    }
+
+    /// A conversation's messages and the composer's text: mono, a size
+    /// under the system's running text as its letters are wider.
+    public var conversation: Font { monoSized(Flat.conversation) }
+
+    /// The same for UIKit's text view.
+    public var conversationFont: PlatformFont {
+        JetBrainsMono.font(size: Flat.conversation * scale, weight: legible(.regular))
+    }
+
+    /// What Bold Text makes of a mono weight: the system's own fonts take
+    /// it themselves, a bundled one doesn't.
+    private func legible(_ weight: Font.Weight) -> Font.Weight {
+        guard boldText else { return weight }
+        return weight == .regular ? .semibold : .bold
     }
 
     /// The body's font, the system's.
@@ -148,6 +172,7 @@ public struct Theme: Sendable {
         var t = Theme(name, colours: colours.increasedContrast())
         t.scale = scale
         t.titleGrowth = titleGrowth
+        t.boldText = boldText
         return t
     }
 

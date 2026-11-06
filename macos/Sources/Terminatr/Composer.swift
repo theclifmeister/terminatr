@@ -117,7 +117,7 @@ struct Composer: View {
                 }
                 TextEditor(text: $text)
                     .scrollContentBackground(.hidden)
-                    .font(theme.sized(13))
+                    .font(theme.conversation)
                     .frame(minHeight: 18, maxHeight: 120)
                     .fixedSize(horizontal: false, vertical: true)
                     .focused($focused)

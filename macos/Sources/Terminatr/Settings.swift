@@ -224,7 +224,7 @@ private struct AdvancedSettings: View {
                         LazyVStack(alignment: .leading, spacing: 3) {
                             ForEach(model.log.entries) { e in
                                 Text("\(Self.time.string(from: e.time))  \(e.text)")
-                                    .font(.system(.caption, design: .monospaced))
+                                    .font(JetBrainsMono.swiftUI(size: 10))
                                     .textSelection(.enabled)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .id(e.id)

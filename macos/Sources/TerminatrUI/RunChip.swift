@@ -22,13 +22,13 @@ public struct RunChip: View {
                 .foregroundStyle(theme.muted)
                 .rotationEffect(.degrees(open ? 90 : 0))
             Text(run.headline)
-                .font(.system(size: 12.5 * theme.scale, design: .monospaced))
+                .font(theme.monoSized(12.5))
                 .foregroundStyle(theme.muted)
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .frame(minHeight: 18.75 * theme.scale)
             state
-                .font(.system(size: 12.5 * theme.scale, design: .monospaced))
+                .font(theme.monoSized(12.5))
                 .fixedSize()
         }
         .padding(.vertical, 12)
