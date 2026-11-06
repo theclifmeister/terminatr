@@ -133,8 +133,10 @@ struct MemoryPane: View {
 /// kinds and size, and a group over six files folds (T1055). A group's
 /// images show as a strip of thumbnails, four until it opens, each asked for
 /// when it comes into view; other files stay rows, and so does an image with
-/// no thumbnail (T1059). A file opens in Quick Look (space, or a double
-/// click), its app (Open), or is saved (Save As…).
+/// no thumbnail (T1059). Two images that are one picture twice are one tile
+/// or row with a switch, v too, and before and after open side by side
+/// (T1057). A file opens in Quick Look (space, or a double click), its app
+/// (Open), or is saved (Save As…).
 struct LibraryPane: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
@@ -151,6 +153,10 @@ struct LibraryPane: View {
     @State private var kind: LibraryPage.Kind?
     /// The groups opened past their fold.
     @State private var opened: Set<String> = []
+    /// The file a switched stack shows, by its row's id.
+    @State private var variants: [String: String] = [:]
+    /// The before and after open side by side.
+    @State private var comparing: LibraryPage.Row?
     /// The thumbnails drawn so far, and the images whose answer was no
     /// thumbnail: those are rows from then on.
     @State private var thumbs = LibraryThumbs()
@@ -185,7 +191,7 @@ struct LibraryPane: View {
     private var order: [String] {
         groups.flatMap { g in
             let l = listed(g)
-            return l.files.map(Self.key) + (l.folds ? [Self.foldKey(g)] : [])
+            return l.all.map(\.id) + (l.folds ? [Self.foldKey(g)] : [])
         }
     }
 
@@ -232,9 +238,15 @@ struct LibraryPane: View {
                         ForEach(rows, id: \.first) { row in
                             stripRow(g, row, fold: row == rows.first && foldBeside(l) ? l.more : nil)
                         }
-                        ForEach(l.rows, id: \.self) { f in
-                            PickRow(id: Self.key(f), selection: $picked, open: { look(f) }) { LibraryFileRow(f) }
-                                .contextMenu { actions(f) }
+                        ForEach(l.rows) { r in
+                            PickRow(id: r.id, selection: $picked, open: { open(r) }) {
+                                if r.isStack {
+                                    LibraryStackRow(r, shown: showing(r)) { pick(r, $0) }
+                                } else {
+                                    LibraryFileRow(r.files[0])
+                                }
+                            }
+                            .contextMenu { actions(r) }
                         }
                         if l.folds, !foldBeside(l) {
                             PickRow(id: Self.foldKey(g), selection: $picked, act: { toggle(g) }) {
@@ -250,15 +262,21 @@ struct LibraryPane: View {
                         toggle(g)
                         return .handled
                     }
-                    guard let f = file(picked) else { return .ignored }
-                    look(f)
+                    guard let r = row(picked) else { return .ignored }
+                    open(r)
                     return .handled
                 }
-                if busy || file(picked) != nil {
+                .onKeyPress("v") {
+                    guard let r = row(picked), r.isStack else { return .ignored }
+                    let shown = showing(r)
+                    variants[r.id] = r.files.first { $0.name != shown.name }?.name
+                    return .handled
+                }
+                if busy || row(picked) != nil {
                     HStack(spacing: 7) {
                         if busy { ProgressView().controlSize(.small) }
                         Spacer()
-                        if let f = file(picked) { actions(f) }
+                        if let r = row(picked) { actions(r) }
                     }
                     .buttonStyle(.flat)
                     .padding(.horizontal, 12)
@@ -269,11 +287,15 @@ struct LibraryPane: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .quickLookPreview($looking)
+        .sheet(item: $comparing) { r in
+            LibraryCompare(row: r) { await bytes($0) }
+        }
         .task(id: project) { await list() }
         .onChange(of: project) {
             query = ""
             kind = nil
             opened = []
+            variants = [:]
             thumbs.removeAll()
             noThumb = []
         }
@@ -281,15 +303,17 @@ struct LibraryPane: View {
 
     /// One row of a group's strip, as wide as any other's, so tiles line up
     /// from group to group. Each is a row of the lazy list: a tile asks for
-    /// its picture when it comes into view.
-    private func stripRow(_ g: LibraryPage.Group, _ row: [AppAPI.LibraryFile], fold: Int?) -> some View {
+    /// its picture when it comes into view. A stack is one tile, of the file
+    /// it shows.
+    private func stripRow(_ g: LibraryPage.Group, _ row: [LibraryPage.Row], fold: Int?) -> some View {
         HStack(alignment: .top, spacing: 5) {
-            ForEach(row, id: \.self) { f in
-                PickRow(id: Self.key(f), selection: $picked, open: { look(f) }, tile: true) {
-                    LibraryTile(f, image: thumbs[Self.thumbKey(project, peer, f)])
+            ForEach(row) { r in
+                let f = showing(r)
+                PickRow(id: r.id, selection: $picked, open: { open(r) }, tile: true) {
+                    LibraryTile(f, image: thumbs[Self.thumbKey(project, peer, f)], stack: r.isStack ? r : nil) { pick(r, $0) }
                 }
                 .help("\(f.name) · \(Attachment.size(f.size))")
-                .contextMenu { actions(f) }
+                .contextMenu { actions(r) }
                 .task(id: Self.thumbKey(project, peer, f)) { await draw(f) }
             }
             ForEach(row.count..<columns, id: \.self) { _ in
@@ -337,7 +361,7 @@ struct LibraryPane: View {
         let was = listed(g)
         if was.more > 0 {
             opened.insert(g.id)
-            picked = listed(g).files.first { !was.files.contains($0) }.map(Self.key)
+            picked = listed(g).all.first { !was.all.contains($0) }?.id
         } else {
             opened.remove(g.id)
         }
@@ -365,8 +389,14 @@ struct LibraryPane: View {
         }
     }
 
+    /// The picked row's acts, on the file it shows.
     @ViewBuilder
-    private func actions(_ f: AppAPI.LibraryFile) -> some View {
+    private func actions(_ r: LibraryPage.Row) -> some View {
+        let f = showing(r)
+        if r.opensSideBySide {
+            Button("Side by Side") { comparing = r }
+                .help("Shows before and after together")
+        }
         Button("Quick Look") { look(f) }
         Button("Open") {
             guard !FileCaution.launches(f.name) else { return }
@@ -389,12 +419,33 @@ struct LibraryPane: View {
     /// its slash.
     static func foldKey(_ g: LibraryPage.Group) -> String { "fold:" + g.id }
 
-    /// The listed file of this key: one under a fold has no action bar.
-    private func file(_ key: String?) -> AppAPI.LibraryFile? {
+    /// The listed row of this key: one under a fold has no action bar.
+    private func row(_ key: String?) -> LibraryPage.Row? {
         for g in groups {
-            if let f = listed(g).files.first(where: { Self.key($0) == key }) { return f }
+            if let r = listed(g).all.first(where: { $0.id == key }) { return r }
         }
         return nil
+    }
+
+    /// The file a row shows: a stack's first, until its switch moves.
+    private func showing(_ r: LibraryPage.Row) -> AppAPI.LibraryFile {
+        r.files.first { $0.name == variants[r.id] } ?? r.files[0]
+    }
+
+    /// A stack's switch: the pick goes with it, and the row shows this file.
+    private func pick(_ r: LibraryPage.Row, _ f: AppAPI.LibraryFile) {
+        picked = r.id
+        variants[r.id] = f.name
+    }
+
+    /// A row's double click, or space: before and after side by side, any
+    /// other file in Quick Look.
+    private func open(_ r: LibraryPage.Row) {
+        if r.opensSideBySide {
+            comparing = r
+        } else {
+            look(showing(r))
+        }
     }
 
     private func list() async {

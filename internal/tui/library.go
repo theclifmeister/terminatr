@@ -28,8 +28,9 @@ import (
 // in half-blocks (imagepreview.go); X deletes the selected file and D the
 // files of its thread, each after y; / filters and t steps through the
 // kinds (libraryfilter.go). A group's heading says its task's status, kinds
-// and size, and a long group folds (libraryheads.go). A file shows by name
-// and size, never a path.
+// and size, and a long group folds (libraryheads.go). Two images that are one
+// picture twice list as one row, and v switches it (librarystack.go). A file
+// shows by name and size, never a path.
 
 // libraryOrder are the library's files grouped by thread (or linked
 // project), the seat's own group first, then the group with the newest
@@ -75,7 +76,8 @@ func (pv *projectView) libFiles() []thread.LibFile {
 }
 
 // narrowLib sets the filter and the kind; the selection stays on its file
-// while that still shows, else it goes to the first.
+// while that still shows, else it goes to the first. A stack the filter leaves
+// one file of is that file's row.
 func (pv *projectView) narrowLib(query, pick string) {
 	at, ok := pv.selLib()
 	pv.libFilter, pv.libPick = query, pick
@@ -292,10 +294,15 @@ func (pv *projectView) libraryLines(w int) ([]string, int, []int) {
 		for _, r := range g.rows {
 			l := "  " + r.word()
 			if r.isFile() {
-				size := fmt.Sprintf("%9s", sizeWords(r.f.Size))
+				size := fmt.Sprintf("%*s", libSizeCols, sizeWords(r.f.Size))
 				l = "  " + fit(oneLine(r.f.Name), max(w-len(size)-4, 4)) + "  " + size
 			}
 			switch {
+			case r.stack != nil:
+				if i == pv.sel[tabLibrary] {
+					sel = len(out)
+				}
+				l = libStackLine(r, w, i == pv.sel[tabLibrary])
 			case i == pv.sel[tabLibrary]:
 				sel = len(out)
 				l = th().Sel.Render(fit(l, w))
@@ -311,8 +318,9 @@ func (pv *projectView) libraryLines(w int) ([]string, int, []int) {
 	return out, sel, hits
 }
 
-// libraryKey: / filters and t steps through the kinds; enter reads the
-// selected file, X deletes it and D its thread's files, each after y.
+// libraryKey: / filters and t steps through the kinds; v switches a stack;
+// enter reads the selected file, X deletes it and D its thread's files, each
+// after y.
 func (pv *projectView) libraryKey(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	switch k.String() {
 	case "/":
@@ -321,6 +329,11 @@ func (pv *projectView) libraryKey(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	case "t":
 		if chips := libChips(pv.library, pv.libFilter, pv.libPick); chips != nil {
 			pv.narrowLib(pv.libFilter, libNextKind(chips, libPicked(pv.library, pv.libPick)))
+		}
+		return nil
+	case "v":
+		if r, ok := pv.libStackRow(); ok {
+			pv.switchLib(r)
 		}
 		return nil
 	}
@@ -412,6 +425,11 @@ type textView struct {
 	image *imagePreview
 	open  func(m *dash) tea.Cmd
 
+	// switchTo, on a stack's file, reads its other file instead, and
+	// switchWord says which that is.
+	switchTo   func(m *dash) tea.Cmd
+	switchWord string
+
 	// keep, on a paired server's file, looks whether it may still show: ""
 	// while it may, else the words to put in its place. kept is when it
 	// last looked. Nil for all else (viewerWatch).
@@ -466,6 +484,15 @@ func (m *dash) openLibFile(pv *projectView, f thread.LibFile) tea.Cmd {
 		tv.title = oneLine(f.Name) + " · " + sizeWords(f.Size) + " · from " + f.Peer
 	}
 	tv.open = func(m *dash) tea.Cmd { return m.openLibCopy(pv.slug, id, f.Name) }
+	if r, ok := pv.libStackOf(f); ok {
+		// v switches here too: comparing is what a stack is for.
+		tv.switchWord = r.otherWord()
+		tv.switchTo = func(m *dash) tea.Cmd {
+			pv.switchLib(r)
+			m.pop()
+			return m.openLibFile(pv, r.otherFile())
+		}
+	}
 	if previewable() && thumb.Supported(f.Name) {
 		key := thumbKey(f)
 		img, known := pv.thumbs[key]
@@ -602,6 +629,9 @@ func (tv *textView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	if s == "o" && tv.open != nil {
 		return tv.open(m)
 	}
+	if s == "v" && tv.switchTo != nil {
+		return tv.switchTo(m)
+	}
 	if s == "esc" || s == "q" && tv.quit {
 		m.pop()
 	}
@@ -618,6 +648,9 @@ func (tv *textView) keyHints() string {
 	}
 	if tv.open != nil {
 		keys = "o open · " + keys
+	}
+	if tv.switchTo != nil {
+		keys = "v " + tv.switchWord + " · " + keys
 	}
 	return keys
 }
