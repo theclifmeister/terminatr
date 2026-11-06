@@ -82,7 +82,7 @@ var notControl = map[string]bool{
 	proto.MethodPeerPanes: true, proto.MethodPeerName: true, proto.MethodPeerMessage: true, proto.MethodPeerPopup: true,
 	proto.MethodPeerFileFetch: true, proto.MethodPeerTranscript: true,
 	proto.MethodPeerNeeds: true, proto.MethodPeerNonce: true, proto.MethodPeerAct: true,
-	proto.MethodPeerPages: true, proto.MethodPeerPagesLibrary: true, proto.MethodPeerPagesLibraryRead: true, proto.MethodPeerPagesLibraryThumbnail: true, proto.MethodPeerPagesDesigns: true,
+	proto.MethodPeerPages: true, proto.MethodPeerPagesLibrary: true, proto.MethodPeerPagesLibraryRead: true, proto.MethodPeerPagesLibraryThumbnail: true, proto.MethodPeerPagesDesigns: true, proto.MethodPeerPagesHistory: true,
 	proto.MethodPeerWorktreeRepos: true, proto.MethodPeerWorktreeList: true, proto.MethodPeerWorktreeRead: true, proto.MethodPeerWorktreeStamp: true, proto.MethodPeerWorktreeDiff: true,
 }
 

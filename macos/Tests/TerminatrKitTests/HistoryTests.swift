@@ -27,12 +27,11 @@ import Testing
 
 @Test func historyIsReadAgainOnlyWhenTheDoneCountChanges() {
     var reads = HistoryReads()
-    #expect(reads.needsRead("web", done: 3))
-    #expect(!reads.needsRead("web", done: 3))
-    #expect(reads.needsRead("api", done: 3))
-    #expect(reads.needsRead("web", done: 4))
+    let asked = [("web", 3), ("web", 3), ("api", 3), ("web", 4)].map { reads.needsRead($0.0, done: $0.1) }
+    #expect(asked == [true, false, true, true])
     reads.forget("web")
-    #expect(reads.needsRead("web", done: 4))
+    let again = reads.needsRead("web", done: 4)
+    #expect(again)
 }
 
 @Test func historyDecodesAnEmptyProject() throws {
