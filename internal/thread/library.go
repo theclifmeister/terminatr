@@ -28,12 +28,15 @@ import (
 // The library (docs/SPEC.md §7.2, §4 Project popup): the files threads
 // attached to their reports, threads/<id>/library/, of every thread of
 // a project, the resolved and archived ones too (an archived thread's
-// files are in its tarball).
+// files are in its tarball), and the coordinator's own (seatlibrary.go).
 
 // LibFile is one file of a thread's library. It never carries a path:
 // the thread and the name say where it is. A file a linked project sent
 // (docs/SPEC.md §16.13) has no thread: Peer is that project and Message
-// the message it came with (link.LibraryFiles).
+// the message it came with (link.LibraryFiles). A seat's own file has
+// SeatID for its thread. In a program's listing (the director's Files
+// view) Project is the member project it is in, Server that project's
+// paired server, both empty for the director's own.
 type LibFile struct {
 	Thread string `json:"thread"`
 	Task   string `json:"task,omitempty"`
@@ -52,15 +55,21 @@ type LibFile struct {
 	Time    time.Time `json:"time"`
 	Peer    string    `json:"peer,omitempty"`
 	Message string    `json:"message,omitempty"`
+	Project string    `json:"project,omitempty"`
+	Server  string    `json:"server,omitempty"`
 }
 
 // Group is the Library tab's group of f: its thread, or the linked
-// project it came from.
+// project it came from, in its project when a program lists it.
 func (f LibFile) Group() string {
+	g := f.Thread
 	if f.Peer != "" {
-		return "@" + f.Peer
+		g = "@" + f.Peer
 	}
-	return f.Thread
+	if f.Project != "" {
+		return f.Server + "/" + f.Project + "/" + g
+	}
+	return g
 }
 
 // Library lists every file in the library of every thread of p, newest
@@ -109,6 +118,7 @@ func Library(p *project.Project) ([]LibFile, error) {
 			out = append(out, f)
 		}
 	}
+	out = append(out, SeatLibrary(&p.Folder)...)
 	sort.SliceStable(out, func(i, j int) bool {
 		a, b := out[i], out[j]
 		if !a.Time.Equal(b.Time) {
@@ -241,6 +251,10 @@ func checkLibName(name string) error {
 // folder or, for an archived thread, from the tarball. truncated says
 // the file was longer.
 func ReadLibraryFile(p *project.Project, id, name string, max int64) (data []byte, truncated bool, err error) {
+	if id == SeatID {
+		data, size, _, err := ReadSeatChunk(&p.Folder, name, 0, max)
+		return data, size > max, err
+	}
 	if !ValidID(id) {
 		return nil, false, refuse("unknown-thread", "%q is not a thread id like t-0003", id)
 	}
@@ -288,6 +302,9 @@ func ReadLibraryFile(p *project.Project, id, name string, max int64) (data []byt
 // tarball's listing, kept while the tarball is unchanged, so it doesn't
 // unpack the thread.
 func LibraryFileInfo(p *project.Project, id, name string) (size int64, mod time.Time, err error) {
+	if id == SeatID {
+		return SeatFileInfo(&p.Folder, name)
+	}
 	if !ValidID(id) {
 		return 0, time.Time{}, refuse("unknown-thread", "%q is not a thread id like t-0003", id)
 	}
@@ -315,6 +332,9 @@ func LibraryFileInfo(p *project.Project, id, name string) (size int64, mod time.
 // from the folder (never through a link) or, for an archived thread,
 // from the tarball, and says the file's size and modification time.
 func ReadLibraryChunk(p *project.Project, id, name string, off, n int64) (data []byte, size int64, mod time.Time, err error) {
+	if id == SeatID {
+		return ReadSeatChunk(&p.Folder, name, off, n)
+	}
 	if !ValidID(id) {
 		return nil, 0, time.Time{}, refuse("unknown-thread", "%q is not a thread id like t-0003", id)
 	}
@@ -375,6 +395,9 @@ func readChunk(r io.Reader, size, off, n int64) ([]byte, error) {
 // returns how many it removed. A resolved thread's archive is rewritten
 // without them.
 func RemoveLibrary(p *project.Project, c caller.Caller, id, name string) (int, error) {
+	if id == SeatID {
+		return RemoveSeatFiles(&p.Folder, c, name)
+	}
 	if !ValidID(id) {
 		return 0, refuse("unknown-thread", "%q is not a thread id like t-0003", id)
 	}

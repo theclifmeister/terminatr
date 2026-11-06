@@ -133,6 +133,7 @@ const (
 	hitFileRow              // a row of the Files view (task: its index)
 	hitFilesRepo            // the Files view's repo line: its picker opens or closes
 	hitFilesRepoRow         // a repo of that picker (task: its index)
+	hitFilesChip            // a line of the Files view's kind chips (task: its index)
 )
 
 // prURL is the thread's PR's address: the ticker's, else its report's.

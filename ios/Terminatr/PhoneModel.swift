@@ -1035,7 +1035,7 @@ final class PhoneModel {
 
     /// The project's library, newest first (library.list).
     func library(_ project: String) async throws -> [AppAPI.LibraryFile] {
-        try await connected().call(AppAPI.Methods.libraryList, AppAPI.ProjectParams(project: project)).files
+        try await connected().call(AppAPI.Methods.libraryList, AppAPI.LibraryListParams(project: project)).files
     }
 
     /// A library file's bytes (library.read, a chunk at a time).

@@ -491,3 +491,30 @@ func TestLibraryFilesByName(t *testing.T) {
 		t.Errorf("deleted file: %q", got)
 	}
 }
+
+// TestSeatLibrary: a seat's own library is indexed as a thread's is, text by
+// its words and any file by its name, in a project's folder and a program's.
+func TestSeatLibrary(t *testing.T) {
+	for _, kind := range []project.Kind{project.KindProject, project.KindProgram} {
+		dir := t.TempDir()
+		write(t, dir, "library/page.html", "<html><body><p>The quince plan</p></body></html>")
+		write(t, dir, "library/shot.png", "\x89PNG")
+		x := OpenFolder(&project.Folder{Slug: "s", Dir: dir, Kind: kind}, t.TempDir())
+		if _, err := x.Update(); err != nil {
+			t.Fatal(err)
+		}
+		if got := search(t, x, Query{Words: "quince"}); !slices.Equal(got, []string{"lib:seat/page.html"}) {
+			t.Errorf("%q by its words: %q", kind, got)
+		}
+		if got := search(t, x, Query{Words: "shot.png"}); !slices.Equal(got, []string{"lib:seat/shot.png"}) {
+			t.Errorf("%q by its name: %q", kind, got)
+		}
+		os.Remove(filepath.Join(dir, "library/page.html"))
+		if _, err := x.Update(); err != nil {
+			t.Fatal(err)
+		}
+		if got := search(t, x, Query{Words: "quince"}); len(got) != 0 {
+			t.Errorf("%q deleted: %q", kind, got)
+		}
+	}
+}

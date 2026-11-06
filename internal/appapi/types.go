@@ -1660,22 +1660,46 @@ type (
 		Project string `json:"project"`
 		Path    string `json:"path"`
 	}
-	// LibraryReadParams are library.read's: the file of thread (or
-	// message) ID named Name, the chunk from Offset.
-	LibraryReadParams struct {
-		Project string `json:"project"`
-		ID      string `json:"id"`
-		Name    string `json:"name"`
-		Offset  int64  `json:"offset,omitempty"`
+	// LibraryProgram names a program in library.list, library.read and
+	// library.thumbnail (app API 59), in place of a project; absent
+	// from an app that doesn't ask, so a tm that doesn't know it isn't
+	// sent it. A tagged struct because a bare field would go out empty.
+	LibraryProgram struct {
+		Slug string `json:"slug"`
 	}
-	// LibraryThumbnailParams are library.thumbnail's: the file of thread
-	// (or message) ID named Name.
+	// LibraryListParams are library.list's: a project's library, or
+	// Program's: its director's own files, then its members'.
+	LibraryListParams struct {
+		Project string          `json:"project"`
+		Program *LibraryProgram `json:"program,omitempty"`
+	}
+	// LibraryReadParams are library.read's: the file of thread (or
+	// message, or SeatID for the seat's own) ID named Name, the chunk from
+	// Offset. Program for its director's own file.
+	LibraryReadParams struct {
+		Project string          `json:"project"`
+		Program *LibraryProgram `json:"program,omitempty"`
+		ID      string          `json:"id"`
+		Name    string          `json:"name"`
+		Offset  int64           `json:"offset,omitempty"`
+	}
+	// LibraryThumbnailParams are library.thumbnail's: the file library.read
+	// would name.
 	LibraryThumbnailParams struct {
-		Project string `json:"project"`
-		ID      string `json:"id"`
-		Name    string `json:"name"`
+		Project string          `json:"project"`
+		Program *LibraryProgram `json:"program,omitempty"`
+		ID      string          `json:"id"`
+		Name    string          `json:"name"`
 	}
 )
+
+// slug is the program named, "" for none.
+func (p *LibraryProgram) slug() string {
+	if p == nil {
+		return ""
+	}
+	return p.Slug
+}
 
 // MemoryFiles are memory.list's result: CONTEXT.md and MEMORY.md when
 // they are there, then the notes by title.
@@ -1701,9 +1725,12 @@ type MemoryText struct {
 	Truncated bool   `json:"truncated,omitempty"`
 }
 
-// Library is library.list's result, newest file first.
+// Library is library.list's result, newest file first; a program's in its
+// order (the director's own, then each member's), with what it leaves out
+// for now in Note (app API 59).
 type Library struct {
 	Files []LibraryFile `json:"files"`
+	Note  string        `json:"note,omitempty"`
 }
 
 // LibraryFile is a file a thread's report attached (Thread, with its
@@ -1712,8 +1739,10 @@ type Library struct {
 // the status of the thread's task, "" for none (app API 55; the Library's
 // heading says it). Repo is the folder name of the thread's repository in
 // a project with several (app API 53; the Library's filter finds by it and
-// its heading names it). library.read names it by
-// Thread, else Message, and Name.
+// its heading names it). A coordinator's or director's own file has "seat"
+// for its Thread (app API 59). In a program's listing Project is the member
+// it is in and Server that member's paired server, both empty for the
+// director's own. library.read names it by Thread, else Message, and Name.
 type LibraryFile struct {
 	Thread     string    `json:"thread,omitempty"`
 	Task       string    `json:"task,omitempty"`
@@ -1726,6 +1755,8 @@ type LibraryFile struct {
 	Time       time.Time `json:"time"`
 	Peer       string    `json:"peer,omitempty"`
 	Message    string    `json:"message,omitempty"`
+	Project    string    `json:"project,omitempty"`
+	Server     string    `json:"server,omitempty"`
 }
 
 // LibraryChunk is library.read's result: Data from Offset (at most
@@ -1752,10 +1783,10 @@ func memoryTextOf(r proto.MemoryReadResult) MemoryText {
 }
 
 func libraryOf(r proto.LibraryListResult) Library {
-	out := Library{Files: []LibraryFile{}}
+	out := Library{Files: []LibraryFile{}, Note: r.Note}
 	for _, f := range r.Files {
 		out.Files = append(out.Files, LibraryFile{Thread: f.Thread, Task: f.Task, TaskStatus: f.TaskStatus, Title: f.Title, Repo: f.Repo, State: f.State,
-			Name: f.Name, Size: f.Size, Time: f.Time, Peer: f.Peer, Message: f.Message})
+			Name: f.Name, Size: f.Size, Time: f.Time, Peer: f.Peer, Message: f.Message, Project: f.Project, Server: f.Server})
 	}
 	return out
 }

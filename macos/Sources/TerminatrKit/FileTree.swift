@@ -49,20 +49,20 @@ public struct FilesPlace: Hashable, Sendable {
     /// Whether a mentioned path is relative: the thread's agent works in
     /// its worktree, a coordinator elsewhere.
     public let relativeMention: Bool
+    /// A program's: project is its slug, and only Attached shows, its
+    /// director's own files and then its members'. A director has no repo.
+    public var isProgram = false
 
-    /// What the selection may browse, or nil when Files stays off: a
-    /// program or a director, which have no repo, nothing selected, or a
-    /// tm without a Library.
-    public static func of(_ selection: Selection?, sessionID: String?, threadDone: Bool, task: String? = nil, readsWorktree: Bool, hasLibrary: Bool) -> FilesPlace? {
+    /// What the selection may browse, or nil when Files stays off: nothing
+    /// selected, a tm without a Library, or a program or a director with a
+    /// tm that has no program form of it.
+    public static func of(_ selection: Selection?, sessionID: String?, threadDone: Bool, task: String? = nil, readsWorktree: Bool, hasLibrary: Bool, readsProgramLibrary: Bool = false) -> FilesPlace? {
         guard let selection, hasLibrary else { return nil }
         let project = selection.project, server = selection.server
-        switch selection {
-        case .program:
-            return nil
-        case .session(let ref) where ref.director:
-            return nil
-        case .project, .session:
-            break
+        if selection.isProgram {
+            guard readsProgramLibrary else { return nil }
+            return FilesPlace(project: project, server: "", thread: nil, session: nil, why: nil, stopped: "", label: "",
+                              mentions: nil, relativeMention: false, isProgram: true)
         }
         var thread: String?
         var label = ""
@@ -214,7 +214,7 @@ public struct OpenedFile: Hashable, Sendable, Identifiable {
     public var id: String {
         switch source {
         case .worktree(let e, _): "w:" + (repo.map { $0.path + ":" } ?? "") + e.path
-        case .attached(let f): "a:" + LibraryPage.id(f) + "/" + f.name
+        case .attached(let f): "a:" + LibraryPage.place(f) + LibraryPage.id(f) + "/" + f.name
         }
     }
 
