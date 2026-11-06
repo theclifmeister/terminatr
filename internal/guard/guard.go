@@ -3009,7 +3009,8 @@ func inPlaceFiles(cmd string, args []string) []string {
 // tmAgentMod are the tm mod subcommands an agent may run; the others,
 // tm project's tmProjectWrites (and repo add), tm access's
 // tmAccessWrites, tm peer's and tm device's but their reads, tm server's
-// tmServerWrites, tm app bridge and the dashboard write tm's settings in the tm process itself
+// tmServerWrites, tm doctor but its reads, tm app bridge and the dashboard
+// write tm's settings in the tm process itself
 // or act for the human, theirs alone: an agent past its sandbox (yolo)
 // that runs one with its session's variables unset and out of its
 // session's process tree would pass for the human (internal/cli: Run,
@@ -3022,7 +3023,53 @@ var (
 	tmPeerReads     = setOf("list requests")
 	tmDeviceReads   = setOf("list reports report")
 	tmServerWrites  = setOf("stop restart service")
+	// The flags of tm doctor and tm update that only read, and those of tm
+	// update a coordinator may add: a new flag starts out refused.
+	tmDoctorReads   = setOf("json yes h help")
+	tmUpdateReads   = setOf("check json h help")
+	tmUpdateInstall = setOf("check json yes force app h help")
 )
+
+// tmFlagsIn: every one of a tm command's args is a flag named in set.
+func tmFlagsIn(args []string, set map[string]bool) bool {
+	return !slices.ContainsFunc(unredirected(args), func(a string) bool {
+		name, _, _ := strings.Cut(strings.TrimLeft(a, "-"), "=")
+		return !strings.HasPrefix(a, "-") || !set[name]
+	})
+}
+
+// tmUpdateActs is what tm update with args (after tm's name) does that
+// role may not ("tm update", "tm update --restart"), or "". A thread or a
+// director only checks (--check or the help); a coordinator installs too,
+// with no restart, which is the human's. A scratch home doesn't lift this
+// as it does tmWritesSettings: tm update replaces the binary it runs.
+func tmUpdateActs(role string, args []string) string {
+	i := 0
+	for i < len(args) && strings.HasPrefix(args[i], "-") {
+		if args[i] == "-h" || args[i] == "--help" || args[i] == "--version" {
+			return ""
+		}
+		i++
+	}
+	if i == len(args) || args[i] != "update" {
+		return ""
+	}
+	flags := args[i+1:]
+	if role == "coordinator" {
+		if tmFlagsIn(flags, tmUpdateInstall) {
+			return ""
+		}
+		return "tm update --restart"
+	}
+	checks := slices.ContainsFunc(flags, func(a string) bool {
+		name := strings.TrimLeft(a, "-")
+		return strings.HasPrefix(a, "-") && (name == "check" || name == "h" || name == "help")
+	})
+	if checks && tmFlagsIn(flags, tmUpdateReads) {
+		return ""
+	}
+	return "tm update"
+}
 
 // tmWritesSettings is which of those tm with args (after its name) is
 // ("tm mod enable", "tm app bridge", "tm (the dashboard)"), or "".
@@ -3036,6 +3083,9 @@ func tmWritesSettings(args []string) string {
 	}
 	if i == len(args) {
 		return "tm (the dashboard)"
+	}
+	if args[i] == "doctor" && !tmFlagsIn(args[i+1:], tmDoctorReads) {
+		return "tm doctor --fix"
 	}
 	var pos []string
 	for _, a := range args[i+1:] {
@@ -4321,6 +4371,11 @@ func (r Rules) judgeNoWrite(cmd string, args, words []string) *Denial {
 			d := r.deny(RuleTMFiles, what, "")
 			d.Message = "terminatr guard (" + RuleTMFiles + "): " + what + " changes tm's settings or acts for the user, which is the user's alone. Run tm's read-only commands instead (tm --version, tm --help, tm project list), or ask the user to run it in their own terminal (a ! command in an agent's pane runs as the agent). " +
 				"On a scratch tm of your own, give this command its own home and socket in your worktree or temp folder: env -u TERMINATR_SESSION TERMINATR_HOME=$TMPDIR/tm TERMINATR_SOCKET=$TMPDIR/tm.sock tm … (any program named tm, a wrapper or a build, counts as tm)."
+			return floor(d)
+		}
+		if what := tmUpdateActs(r.Role, args); what != "" {
+			d := r.deny(RuleTMFiles, what, "")
+			d.Message = "terminatr guard (" + RuleTMFiles + "): " + what + " is not yours: installing a release is the coordinator's or the user's, restarting the server the user's alone. tm update --check says whether a release is out; tell the coordinator or the user."
 			return floor(d)
 		}
 	}

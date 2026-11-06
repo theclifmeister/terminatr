@@ -20,6 +20,9 @@ final class SessionModel {
     /// Why the transcript stream broke or was refused.
     private(set) var transcriptFailure: String?
     var tab = SessionTab.conversation
+    /// The composer's files: kept here, so a file a dropped link failed still
+    /// says so, and can go again, once a paired session's composer is back.
+    let tray = ComposerTray()
     /// The user picked the tab: the window no longer switches it.
     var tabPicked = false
     /// Repaints asked for from View › Repaint Terminal: the shown
@@ -42,6 +45,11 @@ final class SessionModel {
 
     init(ref: SessionRef) {
         self.ref = ref
+        tray.call = { [weak self] p in
+            guard let self else { throw ActError.notConnected }
+            return try await self.upload(p)
+        }
+        if ref.isRemote { tray.atOnce = Compatibility.remoteFilesAtOnce }
     }
 
     /// Follows the session app names for ref: a new one restarts the

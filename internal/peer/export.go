@@ -70,6 +70,9 @@ type dispatcher struct {
 	worktrees func(project string) bool
 	// worktreeLimit is this peer's rate on them.
 	worktreeLimit worktreeRate
+	// uploads says whether this server's pane switch for the peer is write
+	// now, read at each request; nil where sessions take no files.
+	uploads func() bool
 	// nonces are the nonces given the peer for its acts (peer.nonce).
 	nonces nonces
 	// panesHere takes the peer's switches for this server, which it
@@ -92,7 +95,9 @@ type dispatcher struct {
 // its alias (§16.8); peer.act acts on one of this server's needs only
 // while the needs switch is answer, as the peer's user (§16.16);
 // peer.worktree.* read a shared project's folders only while the files
-// switch lets the peer.
+// switch lets the peer; peer.session-upload stores a file for a shared
+// session's prompt, and peer.session-files names such files, only while the
+// pane switch is write.
 func (d *dispatcher) methods() map[string]handler {
 	if d == nil || (d.ex == nil && d.msgs == nil && d.panes == nil && d.files == nil && d.transcripts == nil && d.panesHere == nil && d.named == nil) {
 		return nil
@@ -115,6 +120,7 @@ func (d *dispatcher) methods() map[string]handler {
 		d.designsMethods(m)
 		d.historyMethods(m)
 		d.worktreeMethods(m)
+		d.uploadMethods(m)
 	}
 	if d.msgs != nil {
 		m[proto.MethodPeerMessage] = d.message

@@ -109,7 +109,7 @@ struct Sidebar: View {
                     .font(theme.sized(15, .medium))
                     .lineLimit(1)
                 Spacer(minLength: 4)
-                IconButton(symbol: "magnifyingglass", name: "Search", help: "Search projects, threads, tasks and needs (⌘K)") { app.palette.toggle() }
+                IconButton(symbol: "magnifyingglass", name: "Search", help: "Search projects, threads, tasks and needs (⌘K)") { app.togglePalette() }
                     .padding(.trailing, 5)
                 IconButton(symbol: "sidebar.left", name: "Hide the sidebar", help: "Hide the sidebar (⌃⌘S)") { app.toggleSidebar() }
                     .padding(.trailing, 16)

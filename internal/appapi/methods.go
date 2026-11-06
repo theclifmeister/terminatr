@@ -120,7 +120,7 @@ func init() {
 		// its build in after order. This server's projects only.
 		unary(proto.MethodDesignList, false, designListParams, designsOf),
 
-		// A project's daily numbers (app API 55; the server's caps say
+		// A project's daily numbers (app API 56; the server's caps say
 		// history), and a paired server's (caps peer-history): done per
 		// day and the facts, from tm's records. Read again when the
 		// board's done count changes.

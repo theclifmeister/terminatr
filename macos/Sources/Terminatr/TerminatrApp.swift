@@ -288,7 +288,7 @@ struct GoCommands: Commands {
                 .keyboardShortcut("/")
         }
         CommandMenu("Go") {
-            Button("Command Palette…") { model.palette.toggle() }
+            Button("Command Palette…") { model.togglePalette() }
                 .keyboardShortcut("k")
             Divider()
             Button("Next Need") { model.stepNeed(1) }

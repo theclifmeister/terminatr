@@ -28,6 +28,10 @@ type peerExport struct {
 	act func(c caller.Caller, n proto.PeerNeed, p proto.PeerAct) (proto.PeerActResult, *proto.Error)
 	// worktrees is what the folders paired servers read keep (peerworktree.go).
 	worktrees *peerWorktrees
+	// uploads takes what paired servers attach, sessionInfo finds a session
+	// for them (peerupload.go).
+	uploads     *Server
+	sessionInfo func(id string) (proto.SessionInfo, bool)
 }
 
 // peerExport is the server's peer.Exporter.
@@ -42,6 +46,14 @@ func (s *Server) peerExport() peerExport {
 		approval:  s.peerApproval,
 		act:       s.peerAct,
 		worktrees: &peerWorktrees{logf: s.log.Printf},
+		uploads:   s,
+		sessionInfo: func(id string) (proto.SessionInfo, bool) {
+			sess, perr := s.session(id)
+			if perr != nil {
+				return proto.SessionInfo{}, false
+			}
+			return sess.Info(), true
+		},
 	}
 }
 

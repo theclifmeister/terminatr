@@ -1,0 +1,32 @@
+{
+  "name": "a row says 'after T1' while a link is unmet and '2 wait' on the task they wait for, in its last cell, muted; more than two links fold into +N; a task with neither says nothing",
+  "answers": [
+    { "method": "tasks.list", "params": { "slug": "demo" },
+      "result": [
+        { "id": "T1", "title": "Schema", "status": "ready", "waiters": 2, "steps_done": 0, "steps_total": 0, "steps": [] },
+        { "id": "T2", "title": "API", "status": "ready", "waits_for": ["T1"], "waiters": 1, "steps_done": 1, "steps_total": 2, "steps": [] },
+        { "id": "T3", "title": "UI", "status": "ready", "waits_for": ["T1", "acme-api/T12", "T2", "T9"], "steps_done": 0, "steps_total": 0, "steps": [] },
+        { "id": "T4", "title": "Docs", "status": "ready", "steps_done": 0, "steps_total": 0, "steps": [] }
+      ] }
+  ],
+  "events": [
+    { "name": "view.opened", "project": "demo",
+      "data": { "view": "tasks", "slot": "project.tab", "project": "demo", "width": 70, "height": 20 } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "tasks.list", "params": { "slug": "demo" } },
+      { "method": "ui.view.set", "params": { "view": "tasks",
+          "widget": { "kind": "stack", "children": [
+            { "kind": "table", "rows": [
+              { "id": "g:on-deck", "head": true },
+              { "id": "T1", "cells": [[{ "text": "T1" }], [{ "text": "Schema" }], [{ "icon": "idle" }, { "text": " ready" }], [{ "text": "2 wait", "role": "faint" }]] },
+              { "id": "T2", "cells": [[{ "text": "T2" }], [{ "text": "API" }], [{ "icon": "idle" }, { "text": " ready" }], [{ "text": "after T1 · 1 wait", "role": "faint" }, { "text": "  1/2", "role": "faint" }]] },
+              { "id": "T3", "cells": [[{ "text": "T3" }], [{ "text": "UI" }], [{ "icon": "idle" }, { "text": " ready" }], [{ "text": "after T1, acme-api/T12 +2", "role": "faint" }]] },
+              { "id": "T4", "cells": [[{ "text": "T4" }], [{ "text": "Docs" }], [{ "icon": "idle" }, { "text": " ready" }], []] }
+            ] },
+            { "kind": "keys" }
+          ] } } }
+    ]
+  }
+}

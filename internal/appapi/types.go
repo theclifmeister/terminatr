@@ -438,6 +438,13 @@ type Task struct {
 	// this board's and other projects', with another program member's
 	// dependency state while programs are on.
 	After []TaskDep `json:"after,omitempty"`
+	// WaitsFor (app API 55; the board's tasks, projects.watch with
+	// detail) are the tasks it still comes after ("T10", or another
+	// project's "acme-api/T12"): none once they are done, dropped or
+	// archived. Waiters are the open tasks of the board that come after
+	// it. Both come from the after field.
+	WaitsFor []string `json:"waits_for,omitempty"`
+	Waiters  int      `json:"waiters,omitempty"`
 }
 
 // Step is one step of a task.
@@ -699,6 +706,10 @@ type Peer struct {
 	// (PeerNeedActParams.Picks); without, such a question is answered
 	// in its pane there.
 	Picks bool `json:"picks,omitempty"`
+	// Uploads: its sessions take files for a prompt (session.upload,
+	// session.prompt's files) while Panes is write; without, the composer
+	// offers none. An older tm here doesn't say it either.
+	Uploads bool `json:"uploads,omitempty"`
 	// Version and RTT (T1032) are its tm's release, as far as known, and
 	// the link's last ping in milliseconds while up; a change of RTT
 	// alone doesn't change Gen.
@@ -951,7 +962,7 @@ func projectOf(p server.SideProject) Project {
 
 func taskOf(t server.SideTask) Task {
 	out := Task{ID: t.ID, Ref: (&tasks.Task{ID: t.ID}).Ref(), Title: t.Title, Status: string(t.Status), Priority: string(t.Priority), Notes: t.Notes,
-		Thread: t.Thread, Owner: t.Owner, Created: t.Created, Updated: t.Updated, DoneAt: t.DoneAt}
+		Thread: t.Thread, Owner: t.Owner, Created: t.Created, Updated: t.Updated, DoneAt: t.DoneAt, WaitsFor: t.WaitsFor, Waiters: t.Waiters}
 	for _, s := range t.Steps {
 		out.Steps = append(out.Steps, Step{N: s.N, Text: s.Text, Done: s.Done})
 	}
@@ -1032,7 +1043,7 @@ func peerListOf(l proto.PeerList) PeerList {
 	for _, p := range l.Peers {
 		peer := Peer{Alias: p.Alias, Name: p.Name, ID: p.ID, State: p.State, Reason: p.Reason, Since: p.Since,
 			Projects: make([]PeerProject, 0, len(p.Projects)), ShareWaits: proto.ShareWaits([]proto.PeerMirror{p}),
-			Pane: p.Pane, Panes: p.Panes, Transcript: p.Transcript, Conversations: p.Conversations, Needs: p.Needs, Picks: p.NeedPicks,
+			Pane: p.Pane, Panes: p.Panes, Transcript: p.Transcript, Conversations: p.Conversations, Needs: p.Needs, Picks: p.NeedPicks, Uploads: p.Uploads,
 			Version: textsafe.Line(p.Version, 40), RTT: p.RTT}
 		for _, q := range p.Shares {
 			if !q.Out && q.Pending() {
