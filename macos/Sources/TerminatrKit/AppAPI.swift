@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 65
+    public static let version = 67
 
     public struct AdoptRequestParams: Codable, Sendable, Hashable {
         public var id: String
@@ -686,17 +686,43 @@ public enum AppAPI {
         }
     }
 
+    public struct DoneMark: Codable, Sendable, Hashable {
+        public var at: String
+        public var title: String
+        public var group: Int
+        public var rows: Int
+        public var between: Bool
+
+        public init(at: String, title: String, group: Int, rows: Int = 0, between: Bool = false) {
+            self.at = at
+            self.title = title
+            self.group = group
+            self.rows = rows
+            self.between = between
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case at
+            case title
+            case group
+            case rows
+            case between
+        }
+    }
+
     public struct DoneTasks: Codable, Sendable, Hashable {
         public var tasks: [Task]
         public var groups: [DoneGroup]
         public var total: Int
         public var next: Int
+        public var mark: DoneMark?
 
-        public init(tasks: [Task] = [], groups: [DoneGroup] = [], total: Int = 0, next: Int = 0) {
+        public init(tasks: [Task] = [], groups: [DoneGroup] = [], total: Int = 0, next: Int = 0, mark: DoneMark? = nil) {
             self.tasks = tasks
             self.groups = groups
             self.total = total
             self.next = next
+            self.mark = mark
         }
 
         enum CodingKeys: String, CodingKey {
@@ -704,6 +730,7 @@ public enum AppAPI {
             case groups
             case total
             case next
+            case mark
         }
     }
 
@@ -5674,6 +5701,17 @@ extension AppAPI.DoneGroup {
     }
 }
 
+extension AppAPI.DoneMark {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.at = try c.decode(String.self, forKey: .at)
+        self.title = try c.decode(String.self, forKey: .title)
+        self.group = try c.decode(Int.self, forKey: .group)
+        self.rows = try c.decodeIfPresent(Int.self, forKey: .rows) ?? 0
+        self.between = try c.decodeIfPresent(Bool.self, forKey: .between) ?? false
+    }
+}
+
 extension AppAPI.DoneTasks {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -5681,6 +5719,7 @@ extension AppAPI.DoneTasks {
         self.groups = try c.decodeIfPresent([AppAPI.DoneGroup].self, forKey: .groups) ?? []
         self.total = try c.decodeIfPresent(Int.self, forKey: .total) ?? 0
         self.next = try c.decodeIfPresent(Int.self, forKey: .next) ?? 0
+        self.mark = try c.decodeIfPresent(AppAPI.DoneMark.self, forKey: .mark)
     }
 }
 

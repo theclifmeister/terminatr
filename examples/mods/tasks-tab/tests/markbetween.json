@@ -1,0 +1,155 @@
+{
+  "name": "a quiet project: an action on a day no group holds stands between two headings",
+  "answers": [
+    {
+      "method": "tasks.list",
+      "params": {
+        "slug": "demo"
+      },
+      "result": []
+    },
+    {
+      "method": "tasks.done",
+      "params": {
+        "slug": "demo",
+        "options": {
+          "groups": true,
+          "reveal": ""
+        }
+      },
+      "result": {
+        "tasks": [],
+        "total": 2,
+        "next": 0,
+        "groups": [
+          {
+            "kind": "day",
+            "title": "Sun 1 Nov",
+            "from": "2026-11-01",
+            "to": "2026-11-01",
+            "count": 1,
+            "archived": 0,
+            "open": true,
+            "tasks": [
+              {
+                "id": "T3",
+                "title": "Task 3",
+                "status": "done",
+                "steps_done": 0,
+                "steps_total": 0,
+                "steps": [],
+                "updated": "2026-11-01",
+                "done_at": "2026-11-01T10:00:00Z",
+                "done_label": "1 Nov 10:00"
+              }
+            ],
+            "next": 0
+          },
+          {
+            "kind": "day",
+            "title": "Wed 1 Jul",
+            "from": "2026-07-01",
+            "to": "2026-07-01",
+            "count": 1,
+            "archived": 0,
+            "open": true,
+            "tasks": [
+              {
+                "id": "T2",
+                "title": "Task 2",
+                "status": "done",
+                "steps_done": 0,
+                "steps_total": 0,
+                "steps": [],
+                "updated": "2026-07-01",
+                "done_at": "2026-07-01T10:00:00Z",
+                "done_label": "1 Jul 10:00"
+              }
+            ],
+            "next": 0
+          }
+        ],
+        "mark": {
+          "at": "2026-09-01T08:00:00Z",
+          "title": "you last acted 1 May 08:00",
+          "group": 1,
+          "rows": 0,
+          "between": true
+        }
+      }
+    }
+  ],
+  "events": [
+    {
+      "name": "view.opened",
+      "project": "demo",
+      "data": {
+        "view": "tasks",
+        "slot": "project.tab",
+        "project": "demo",
+        "width": 70,
+        "height": 20
+      }
+    },
+    {
+      "name": "ui.key",
+      "project": "demo",
+      "data": {
+        "view": "tasks",
+        "widget": "tasks",
+        "key": "b",
+        "target": {
+          "project": "demo"
+        }
+      }
+    }
+  ],
+  "expect": {
+    "calls": [
+      {
+        "method": "ui.view.set",
+        "params": {
+          "view": "tasks",
+          "widget": {
+            "kind": "stack",
+            "children": [
+              {
+                "kind": "table",
+                "rows": [
+                  {
+                    "id": "g:done"
+                  },
+                  {
+                    "id": "f:2026-11-01:2026-11-01"
+                  },
+                  {
+                    "id": "T3"
+                  },
+                  {
+                    "id": "y:mark",
+                    "head": true,
+                    "spans": [
+                      {
+                        "text": "── you last acted 1 May 08:00",
+                        "role": "accent"
+                      }
+                    ]
+                  },
+                  {
+                    "id": "f:2026-07-01:2026-07-01"
+                  },
+                  {
+                    "id": "T2"
+                  }
+                ]
+              },
+              {
+                "kind": "keys"
+              }
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

@@ -194,12 +194,28 @@ type DoneOptions struct {
 
 // DoneTasks is $.tasks.done's answer (mod API 1.16): the page and how
 // many tasks the range holds, next the offset to read on from (0 at the
-// end); with groups, the headings and how many tasks they hold.
+// end); with groups, the headings and how many tasks they hold, and (mod
+// API 1.21) mark, the line at the human's last action when work has
+// finished since.
 type DoneTasks struct {
 	Tasks  []Task      `json:"tasks"`
 	Groups []DoneGroup `json:"groups"`
 	Total  int         `json:"total"`
 	Next   int         `json:"next"`
+	Mark   *DoneMark   `json:"mark,omitempty"`
+}
+
+// DoneMark is the line in Done at the human's last action (mod API 1.21):
+// at, its time; title, its words. It stands in groups[group], below rows
+// of its tasks; or, with between, above that group's heading (group is
+// groups.length when that is below them all). The group holding the line
+// comes open.
+type DoneMark struct {
+	At      string `json:"at"`
+	Title   string `json:"title"`
+	Group   int    `json:"group"`
+	Rows    int    `json:"rows"`
+	Between bool   `json:"between"`
 }
 
 // DoneGroup is one heading of Done (mod API 1.16): kind day, week, month
@@ -391,7 +407,7 @@ var Methods = []Method{
 	{Name: "tasks.list", Params: []Param{{Name: "slug", Type: typ[string]()}}, Result: typ[[]Task](), Needs: mod.PermProjectRead,
 		Doc: "A project's tasks, in board order."},
 	{Name: "tasks.done", Params: []Param{{Name: "slug", Type: typ[string]()}, {Name: "options", Type: typ[DoneOptions](), Optional: true}}, Result: typ[DoneTasks](), Needs: mod.PermProjectRead,
-		Doc: "A project's done tasks, newest first (mod API 1.16), from tm's task records only, no git, in the server's time zone: with options.groups Done's headings, the newest 7 days with work (at most 30 rows open), then older work by week, then by month, the archive's tasks counted; empty spans have no heading. Otherwise a page of the tasks, by days from options.from to options.to, the archive's too with options.archived, only those with each word of options.query in their id, title or status (mod API 1.20), whatever its case and accents."},
+		Doc: "A project's done tasks, newest first (mod API 1.16), from tm's task records only, no git, in the server's time zone: with options.groups Done's headings, the newest 7 days with work (at most 30 rows open), then older work by week, then by month, the archive's tasks counted; empty spans have no heading; and mark (mod API 1.21), the line at the human's last action in the journal, when work has finished since. Otherwise a page of the tasks, by days from options.from to options.to, the archive's too with options.archived, only those with each word of options.query in their id, title or status (mod API 1.20), whatever its case and accents."},
 	{Name: "designs.list", Params: []Param{{Name: "slug", Type: typ[string]()}}, Result: typ[[]Design](), Needs: mod.PermProjectRead,
 		Doc: "A project's designs (mod API 1.10), by name: those tm design set recorded and those a task names (archived tasks too), each with its status from its build tasks, its design task, page, decided answers and open questions. A task's design and after (tasks.list) say which tasks build which."},
 	{Name: "history.get", Params: []Param{{Name: "slug", Type: typ[string]()}}, Result: typ[proto.History](), Needs: mod.PermProjectRead,
