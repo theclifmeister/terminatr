@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/caller"
+	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/update"
 	"github.com/theclifmeister/terminatr/internal/vault"
@@ -163,6 +165,11 @@ func updateCmd(e *Env, args []string, u *updater) error {
 	if err != nil || len(pos) > 0 || *asJSON && !*check {
 		return srvUsage("update", updateUsage)
 	}
+	if !*check {
+		if err := e.updateAllowed(*restart); err != nil {
+			return err
+		}
+	}
 	in := update.Detect(u.Exe, u.Channel)
 	res := updateCheck{Install: in, Current: u.Version}
 
@@ -222,6 +229,22 @@ func updateCmd(e *Env, args []string, u *updater) error {
 		return nil
 	}
 	return u.updateApp(e, in, rel, opts)
+}
+
+// updateAllowed: installing a release is the human's and a coordinator's
+// (the user has it update the Mac after a release), restarting the server
+// the human's alone. --check stays open to every caller.
+func (e *Env) updateAllowed(restart bool) error {
+	e.identify()
+	switch {
+	case !e.Caller.IsAgent():
+		return nil
+	case e.Caller.Kind != caller.Coordinator:
+		return &project.Error{Code: "coordinator-only", Msg: "installing a release is the coordinator's or the user's: say so in your report (tm update --check says whether one is out)"}
+	case restart:
+		return &project.Error{Code: "human-only", Msg: "restarting the server is the user's, in their own terminal: run tm update --yes without --restart and tell them"}
+	}
+	return nil
 }
 
 // updateTM updates tm itself.
@@ -351,6 +374,10 @@ func (u *updater) afterUpdate(e *Env, bin, newVersion string, restart bool) erro
 	fmt.Fprintln(e.Stdout, "Restarting stops every session: agents are resumed but lose the turn they are in, shells are lost.")
 	code := ExitOK
 	switch {
+	case e.Caller.IsAgent():
+		// updateAllowed refused --restart, and an agent's pane is a terminal
+		// too: the question is not for it.
+		fmt.Fprintln(e.Stdout, "The restart is the user's: tell them to run tm server restart in their own terminal.")
 	case restart:
 		code = u.Restart(bin, true)
 	case u.TTY && ask(e, "Restart the server now? [y/N] "):

@@ -111,6 +111,21 @@ func Commands() []string {
 // variables unset, is still narrowed to the agent the server sees.
 var checked = map[string]bool{"mod": true, "skill": true, "access": true, "search": true, "program": true}
 
+// identify narrows the caller to what the server sees, for a command that
+// only some of its runs are checked (tm doctor --fix, tm update's install)
+// and so isn't in checked: its reads need no server. With no server to
+// answer the environment's caller stands, so the user's own terminal can
+// still fix or update while the server is down or of another protocol.
+func (e *Env) identify() {
+	if e.Identify == nil || e.Identified {
+		return
+	}
+	if c, ok := e.Identify(); ok {
+		e.Caller = caller.Narrower(e.Caller, c)
+		e.Identified = true
+	}
+}
+
 // Run dispatches args (without the program name).
 func (e *Env) Run(args []string) (code int, handled bool) {
 	if len(args) == 0 || len(args) == 1 && args[0] == "--own" {
@@ -120,11 +135,8 @@ func (e *Env) Run(args []string) (code int, handled bool) {
 	if !ok {
 		return 0, false
 	}
-	if (checked[args[0]] || forwarded[args[0]]) && e.Identify != nil {
-		if c, ok := e.Identify(); ok {
-			e.Caller = caller.Narrower(e.Caller, c)
-			e.Identified = true
-		}
+	if checked[args[0]] || forwarded[args[0]] {
+		e.identify()
 	}
 	err := cmd(e, args[1:])
 	if isHelp(err) {
