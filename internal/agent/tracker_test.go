@@ -424,3 +424,82 @@ func TestIdentifyUnwrapped(t *testing.T) {
 		t.Error("claude not identified through node")
 	}
 }
+
+// TestTrackerBackgroundRun: a thread's Bash call in the background keeps
+// it working past Stop, until the transcript tells of its end, and prompts
+// can still be delivered (T1100). The lines are as Claude 2.1.319 wrote
+// them.
+func TestTrackerBackgroundRun(t *testing.T) {
+	bg := func(id string) map[string]any {
+		return map[string]any{"tool_name": "Bash", "tool_use_id": id,
+			"tool_input":    map[string]any{"command": "make e2e", "run_in_background": true},
+			"tool_response": map[string]any{"stdout": "", "backgroundTaskId": "bx" + id}}
+	}
+	end := func(r *rig, id string) {
+		r.t.Helper()
+		line := `{"type":"queue-operation","operation":"enqueue","content":"<task-notification>\n<task-id>bx</task-id>\n<tool-use-id>` + id + `</tool-use-id>\n<status>completed</status>\n</task-notification>"}`
+		sig, ok := r.a.Sources().JSONLTail.Line([]byte(line))
+		if !ok || sig.Counter != "-run" || sig.CounterKey != id {
+			r.t.Fatalf("tail line: %+v %v", sig, ok)
+		}
+		r.tr.Tail(sig)
+	}
+	r := newRig(t)
+	r.tr.CountRuns()
+	r.hook("UserPromptSubmit", nil)
+	r.hook("PostToolUse", map[string]any{"tool_name": "Bash", "tool_use_id": "plain", "tool_response": map[string]any{"stdout": "x"}})
+	r.hook("Stop", nil)
+	r.want(StateIdle, "", "hooks")
+	r.hook("UserPromptSubmit", nil)
+	r.hook("PostToolUse", bg("a"))
+	r.hook("PostToolUse", bg("b"))
+	r.hook("Stop", nil)
+	r.want(StateWorking, ReasonBackgroundRun, "hooks+counters")
+	if !r.tr.State().AtPrompt() {
+		t.Fatal("not at its prompt")
+	}
+	end(r, "a")
+	r.want(StateWorking, ReasonBackgroundRun, "")
+	end(r, "b")
+	r.want(StateIdle, "", "hooks")
+
+	// One whose end goes unseen stops counting after an hour.
+	r.hook("PostToolUse", bg("c"))
+	r.hook("Stop", nil)
+	r.want(StateWorking, ReasonBackgroundRun, "")
+	r.tick(backgroundRunMax)
+	r.want(StateIdle, "", "hooks")
+
+	// A new conversation drops them: their ends are told in the old one.
+	r.hook("PostToolUse", bg("d"))
+	r.hook("Stop", nil)
+	r.want(StateWorking, ReasonBackgroundRun, "")
+	r.hook("SessionStart", map[string]any{"session_id": "sid-2", "source": "clear"})
+	r.want(StateIdle, "", "")
+
+	// A coordinator's doesn't count: its nudges wait for idle.
+	r = newRig(t)
+	r.hook("PostToolUse", bg("e"))
+	r.hook("Stop", nil)
+	r.want(StateIdle, "", "hooks")
+	if !r.tr.State().AtPrompt() {
+		t.Fatal("idle is at its prompt")
+	}
+}
+
+func TestTailRuleCounterValidate(t *testing.T) {
+	for _, c := range []struct {
+		r  TailRule
+		ok bool
+	}{
+		{TailRule{Counter: "-run", KeyPattern: "<id>(.+)</id>"}, true},
+		{TailRule{Counter: "run", KeyPattern: "(.+)"}, false},
+		{TailRule{Counter: "-run"}, false},
+		{TailRule{Counter: "-run", KeyPattern: "no group"}, false},
+		{TailRule{Counter: "-run", KeyPattern: "("}, false},
+	} {
+		if err := c.r.validateCounter(); (err == nil) != c.ok {
+			t.Errorf("%+v: %v", c.r, err)
+		}
+	}
+}

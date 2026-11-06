@@ -715,7 +715,11 @@ func (m *Manifest) validate() error {
 			}
 		}
 		for i, r := range t.Rules {
-			if !valid[r.State] || r.State == "" {
+			if r.Counter != "" {
+				if err := r.validateCounter(); err != nil {
+					errs = append(errs, fmt.Errorf("jsonl_tail.rules[%d]: %w", i, err))
+				}
+			} else if !valid[r.State] || r.State == "" {
 				errs = append(errs, fmt.Errorf("jsonl_tail.rules[%d]: unknown state %q", i, r.State))
 			}
 		}

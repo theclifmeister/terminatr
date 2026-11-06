@@ -1025,6 +1025,7 @@ func (s *Server) commitLaunchLocked(p *preparedLaunch) (*session.Session, *proto
 		RemoteControl: r.RemoteControl, RemoteHeld: r.RemoteHeld,
 		Agent: &session.AgentConfig{
 			Agent: a, AgentSID: p.agentSID, Kickoff: p.kickoff, Home: p.home,
+			CountRuns:      r.Thread != "",
 			Context:        s.hookContextOf(r.ID),
 			Guard:          s.hookGuardOf(r.ID),
 			Command:        s.hookCommandOf(r.ID),
