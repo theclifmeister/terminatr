@@ -110,7 +110,7 @@ func TestChunkIDs(t *testing.T) {
 		"design:recall#answers",
 		"inbox:20261030T090000Z-blocked-t-0007", "inbox:20261031T100000Z-report-t-0007",
 		"j:20261030T090000Z", "j:20261030T090000Z-2", "j:20261031T110000Z",
-		"lib:t-0007/notes.md", "lib:t-0007/page.html",
+		"lib:t-0007/notes.md", "lib:t-0007/page.html", "lib:t-0007/shot.png",
 		"note:decisions#decided", "note:decisions#ruled-out", "note:secret#decided",
 		"project#test-vms",
 		"t-0007/brief",
@@ -422,5 +422,72 @@ func TestChunkSplitsLongSections(t *testing.T) {
 	fenced := "# Title\n\n```\n# not a heading\n```\n"
 	if ps := markdown(fenced, 0, 3, "b", "", Chunk{}); len(ps) != 1 {
 		t.Errorf("fenced: %d pieces", len(ps))
+	}
+}
+
+// A library file of any kind is found by its name and its task's title;
+// the same once the thread is packed, and a deleted file drops out.
+func TestLibraryFilesByName(t *testing.T) {
+	dir := fixture(t)
+	x := Open(dir, t.TempDir())
+	if _, err := x.Update(); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"lib:t-0007/shot.png"}
+	if got := search(t, x, Query{Words: "shot.png"}); !slices.Equal(got, want) {
+		t.Errorf("by name: %q", got)
+	}
+	if got := search(t, x, Query{Words: "pomegranate"}); len(got) != 0 {
+		t.Errorf("an image's bytes are not text: %q", got)
+	}
+	if got := search(t, x, Query{Words: "shot flaky"}); len(got) == 0 || got[0] != want[0] {
+		t.Errorf("by name and task title: %q", got)
+	}
+	c, text, err := x.Text(want[0], false)
+	if err != nil || text != "shot.png" || c.Kind != KindLibrary || c.Thread != "t-0007" || c.Task != "T12" {
+		t.Errorf("text = %+v %q %v", c, text, err)
+	}
+
+	var buf bytes.Buffer
+	zw := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(zw)
+	root := filepath.Join(dir, "threads", "t-0007")
+	if err := filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		data, _ := os.ReadFile(p)
+		rel, _ := filepath.Rel(filepath.Join(dir, "threads"), p)
+		tw.WriteHeader(&tar.Header{Name: filepath.ToSlash(rel), Mode: 0o644, Size: int64(len(data)), Typeflag: tar.TypeReg, ModTime: time.Now()})
+		_, err = tw.Write(data)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	tw.Close()
+	zw.Close()
+	write(t, dir, "threads/archive/t-0007.tar.gz", buf.String())
+	if err := os.RemoveAll(root); err != nil {
+		t.Fatal(err)
+	}
+	if st, err := x.Update(); err != nil || len(st.Errors) > 0 {
+		t.Fatal(err, st.Errors)
+	}
+	if got := search(t, x, Query{Words: "shot.png"}); !slices.Equal(got, want) {
+		t.Errorf("packed: %q", got)
+	}
+	if _, text, err := x.Text(want[0], false); err != nil || text != "shot.png" {
+		t.Errorf("packed text = %q %v", text, err)
+	}
+
+	// Another thread's file, then deleted.
+	write(t, dir, "threads/t-0008/thread.toml", "id = \"t-0008\"\ntitle = \"Make a diagram\"\ntask = \"T14\"\n")
+	write(t, dir, "threads/t-0008/library/diagram.zip", "PK")
+	if got := search(t, x, Query{Words: "diagram"}); !slices.Equal(got, []string{"lib:t-0008/diagram.zip"}) {
+		t.Errorf("zip: %q", got)
+	}
+	os.Remove(filepath.Join(dir, "threads/t-0008/library/diagram.zip"))
+	if got := search(t, x, Query{Words: "diagram.zip"}); len(got) != 0 {
+		t.Errorf("deleted file: %q", got)
 	}
 }
