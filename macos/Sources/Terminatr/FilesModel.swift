@@ -192,6 +192,8 @@ final class FilesModel {
                 // The Library's, a few stats: less often than a stamp.
                 if beats % 5 == 0 { await loadLibrary(app) }
             } else if let session = place?.session, let b = app.bridge {
+                // The project's list moves without the folder's stamp moving.
+                await loadRepos(session, b)
                 let folders = searching ? [""] : FileTree.folders(dirs: dirs, open: open)
                 let now = try? await b.call(AppAPI.Methods.filesStamp, AppAPI.FilesStampParams(session: session, repo: chosen, folders: folders))
                 if now?.stamp != stamp { await refresh(app) }
@@ -273,7 +275,7 @@ final class FilesModel {
     private func loadRepos(_ session: String, _ b: Bridge) async {
         guard place?.thread == nil,
               let r = try? await b.call(AppAPI.Methods.filesRepos, AppAPI.FilesReposParams(session: session)) else { return }
-        repos = r.repos
+        if repos != r.repos { repos = r.repos }
         if let c = chosen, !r.repos.contains(where: { $0.path == c.path }) {
             chosen = nil
             resetTree()

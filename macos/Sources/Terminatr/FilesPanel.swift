@@ -71,6 +71,7 @@ struct FilesPanel: View {
             .foregroundStyle(theme.muted)
         Text("Files")
             .font(theme.sized(13, .medium))
+            .fixedSize()
         if !place.label.isEmpty {
             Text(place.label)
                 .font(.system(size: 13 * theme.scale, design: .monospaced))
@@ -127,10 +128,12 @@ struct FilesPanel: View {
             .menuStyle(.button)
             .buttonStyle(.plain)
             .menuIndicator(.hidden)
-            .help("Chooses which of the project's repos shows")
+            .help("\(r.name): chooses which of the project's repos shows")
             .accessibilityLabel("Repo, \(r.name), main checkout")
+            .layoutPriority(1)
         } else {
             repoName(r)
+                .layoutPriority(1)
         }
         Text("main checkout")
             .font(theme.sized(12.5))
@@ -141,9 +144,10 @@ struct FilesPanel: View {
 
     private func repoName(_ r: AppAPI.FilesRepo) -> some View {
         Text(r.name)
-            .font(.system(size: 13 * theme.scale, design: .monospaced))
+            .font(theme.sized(13))
             .lineLimit(1)
             .truncationMode(.middle)
+            .help(r.name)
     }
 
     // MARK: the tabs, the filter and the toggles

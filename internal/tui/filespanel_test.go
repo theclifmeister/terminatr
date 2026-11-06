@@ -32,6 +32,7 @@ type fakeFiles struct {
 	noRepos bool // a server without files.repos
 	stamped []proto.FilesStampParams
 	read    []proto.FilesReadParams
+	diffed  []proto.FilesDiffParams
 	diffs   map[string]proto.FilesDiffResult
 }
 
@@ -71,6 +72,7 @@ func (f *fakeFiles) install(t *testing.T) {
 			}
 			*res.(*proto.FilesReadResult) = r
 		case proto.FilesDiffParams:
+			f.diffed = append(f.diffed, p)
 			*res.(*proto.FilesDiffResult) = f.diffs[p.Path]
 		default:
 			t.Fatalf("method %s", method)
@@ -569,7 +571,8 @@ func TestFilesRepoLabel(t *testing.T) {
 // names it, nothing of the last tree stays; esc changes nothing; a repo off
 // the list falls back to the first; one that can't open says why and stays.
 func TestFilesRepoPicker(t *testing.T) {
-	f := &fakeFiles{dirs: sampleTree(), repos: []proto.FileRepo{{Name: "app", Path: "/r/app"}, {Name: "site", Path: "/r/site"}}}
+	f := &fakeFiles{dirs: sampleTree(), repos: []proto.FileRepo{{Name: "app", Path: "/r/app"}, {Name: "site", Path: "/r/site"}},
+		texts: map[string]proto.FilesReadResult{"a": {Name: "a", Path: "a", Size: 2, Data: []byte("x\n")}}}
 	fv, show := repoView(t, f)
 	fv.open["internal"], fv.sel = true, 3
 	if f.seen[0].Repo != "" || f.stamped[0].Repo != "" {
@@ -601,6 +604,14 @@ func TestFilesRepoPicker(t *testing.T) {
 	}
 	if tv := worktreeViewer(tmclient.Paths{}, fv.session, fv.repo, proto.FileEntry{Name: "a", Path: "a"}, false); tv == nil || f.read[0].Repo != "/r/site" {
 		t.Errorf("a read names it: %+v", f.read)
+	}
+	if len(f.diffed) == 0 || f.diffed[0].Repo != "/r/site" {
+		t.Errorf("a diff names it: %+v", f.diffed)
+	}
+	f.diffed = nil
+	worktreeViewer(tmclient.Paths{}, fv.session, fv.repo, proto.FileEntry{Name: "a", Path: "a", Status: proto.FileDeleted}, false)
+	if len(f.diffed) == 0 || f.diffed[0].Repo != "/r/site" {
+		t.Errorf("a deleted file's diff names it: %+v", f.diffed)
 	}
 
 	// A repo that can't open: it says why, stays chosen, and the choice
@@ -783,5 +794,25 @@ func TestMergeDiff(t *testing.T) {
 	}
 	if got := mergeDiff("", proto.FilesDiffResult{Status: "A"}); len(got) != 0 {
 		t.Errorf("an empty new file: %v", got)
+	}
+}
+
+// TestFilesRepoListMoves: a repo added while the view shows comes in on the
+// poll, though nothing in the folder changed.
+func TestFilesRepoListMoves(t *testing.T) {
+	c, f := filesClient(t)
+	fv := c.info.files
+	fv.thread = ""
+	f.repos = []proto.FileRepo{{Name: "app", Path: "/r/app"}, {Name: "site", Path: "/r/site"}}
+	fv.polled = time.Time{}
+	c.filesPoll()
+	if len(fv.repos) != 2 {
+		t.Errorf("the list after a poll: %+v", fv.repos)
+	}
+	lists := f.lists.Load()
+	fv.polled = time.Time{}
+	c.filesPoll()
+	if f.lists.Load() != lists {
+		t.Error("a poll with nothing changed listed the folder again")
 	}
 }

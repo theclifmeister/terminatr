@@ -559,10 +559,19 @@ func (c *client) filesPoll() {
 	}
 	fv.polled = time.Now()
 	session, repo, folders, paths, attached, had := fv.session, fv.repo, fv.filesFolders(), c.paths, fv.attached, fv.stamp
+	coordinator, repos := fv.thread == "", fv.repos
 	c.mu.Unlock()
 	if attached {
 		c.filesFetch() // the Library's, a few stats
 		return
+	}
+	if coordinator {
+		// The project's list moves without the folder's stamp moving.
+		var rs proto.FilesReposResult
+		if filesCall(paths, proto.MethodFilesRepos, proto.FilesReposParams{Session: session}, &rs) == nil && !slices.Equal(rs.Repos, repos) {
+			c.filesFetch()
+			return
+		}
 	}
 	var st proto.FilesStampResult
 	if filesCall(paths, proto.MethodFilesStamp, proto.FilesStampParams{Session: session, Repo: repo, Folders: folders}, &st) != nil {
