@@ -32,6 +32,7 @@ type fakeFiles struct {
 	noRepos bool // a server without files.repos
 	stamped []proto.FilesStampParams
 	read    []proto.FilesReadParams
+	diffs   map[string]proto.FilesDiffResult
 }
 
 func (f *fakeFiles) install(t *testing.T) {
@@ -69,6 +70,8 @@ func (f *fakeFiles) install(t *testing.T) {
 				return proto.Errorf(proto.ErrFileGone, "no longer there: %s", p.Path)
 			}
 			*res.(*proto.FilesReadResult) = r
+		case proto.FilesDiffParams:
+			*res.(*proto.FilesDiffResult) = f.diffs[p.Path]
 		default:
 			t.Fatalf("method %s", method)
 		}
@@ -405,7 +408,7 @@ func TestFilesViewerOver(t *testing.T) {
 		c.infoLayout()
 		c.mu.Unlock()
 	}
-	for id, want := range map[string]string{"out": "doesn't open", "gone.go": "deleted"} {
+	for id, want := range map[string]string{"out": "doesn't open"} {
 		selectRow(id)
 		filesPress(c, "enter")
 		if !strings.Contains(c.flash, want) || c.over != nil {
@@ -652,5 +655,133 @@ func TestFilesRepoKeys(t *testing.T) {
 	press("enter")
 	if fv.picking || fv.repo != "/r/site" {
 		t.Errorf("down, enter: %+v", fv)
+	}
+}
+
+// TestFilesDiffGolden: how the viewer shows each kind of file's changes, as
+// testdata/files-diff.golden has them (-update rewrites it): no changes, a
+// change and a rename, a new file, a deleted one, binary, over-size, and a
+// server without the method.
+func TestFilesDiffGolden(t *testing.T) {
+	freshConsole(t)
+	f := &fakeFiles{}
+	f.install(t)
+	f.texts = map[string]proto.FilesReadResult{
+		"same.go":  {Name: "same.go", Path: "same.go", Size: 8, Data: []byte("a\nb\nc\n")},
+		"edit.go":  {Name: "edit.go", Path: "edit.go", Size: 12, Data: []byte("one\nTWO\nthree\nsix\n" + strings.Repeat("y", 50) + "\n")},
+		"moved.go": {Name: "moved.go", Path: "moved.go", Size: 4, Data: []byte("a\nB\n")},
+		"new.go":   {Name: "new.go", Path: "new.go", Size: 8, Data: []byte("package new\n\nfunc N() {}\n")},
+		"pic.png":  {Name: "pic.png", Path: "pic.png", Size: 900, Binary: true},
+		"big.go":   {Name: "big.go", Path: "big.go", Size: 3 << 20, Truncated: false, Data: []byte(strings.Repeat("big\n", proto.LibraryChunk/4))},
+	}
+	for name, r := range f.texts {
+		if name != "big.go" && !r.Binary {
+			r.Size = int64(len(r.Data))
+			f.texts[name] = r
+		}
+	}
+	f.diffs = map[string]proto.FilesDiffResult{
+		"edit.go": {Status: "M", Base: "origin/main", Added: 2, Deleted: 3, Hunks: []proto.FilesHunk{
+			{Old: 2, New: 2, Added: 1, Removed: []string{"two"}},
+			{Old: 4, New: 4, Removed: []string{"four", "five"}},
+			{Old: 8, New: 5, Added: 1},
+		}},
+		"moved.go": {Status: "M", From: "old.go", Base: "origin/main", Added: 1, Deleted: 1, Hunks: []proto.FilesHunk{{Old: 2, New: 2, Added: 1, Removed: []string{"b"}}}},
+		"new.go":   {Status: "A", Base: "origin/main", Added: 3},
+		"gone.go":  {Status: "D", Base: "origin/main", Size: 20, Deleted: 2, Hunks: []proto.FilesHunk{{Old: 1, New: 1, Removed: []string{"package gone", "func G() {}"}}}},
+		"gone.png": {Status: "D", Base: "origin/main", Size: 900, Binary: true},
+		"gone.log": {Status: "D", Base: "origin/main", Size: 3 << 20, Deleted: 9000, TooBig: true},
+		"pic.png":  {Status: "M", Base: "origin/main", Binary: true},
+		"big.go":   {Status: "M", Base: "origin/main", Added: 12, Deleted: 3, TooBig: true},
+	}
+	var b strings.Builder
+	show := func(what, path, status string) {
+		tv := worktreeViewer(tmclient.Paths{}, "s-4", "", proto.FileEntry{Name: path, Path: path, Status: status}, false)
+		fmt.Fprintf(&b, "%s: %s\n", what, tv.title)
+		lines := tv.lines(40)
+		for _, l := range lines[:min(len(lines), 12)] {
+			b.WriteString("│" + strings.TrimRight(ansi.Strip(l), " ") + "\n")
+		}
+		if len(lines) > 12 {
+			fmt.Fprintf(&b, "│… %s\n", ansi.Strip(lines[len(lines)-1]))
+		}
+		fmt.Fprintf(&b, "opens at row %d\n\n", tv.changeAt)
+	}
+	show("no changes", "same.go", "")
+	show("modified", "edit.go", "M")
+	show("renamed", "moved.go", "A")
+	show("new", "new.go", "A")
+	show("deleted", "gone.go", "D")
+	show("deleted, binary", "gone.png", "D")
+	show("deleted, over-size", "gone.log", "D")
+	show("binary", "pic.png", "M")
+	show("over-size", "big.go", "M")
+	path := filepath.Join("testdata", "files-diff.golden")
+	if *updateGolden {
+		if err := os.WriteFile(path, []byte(b.String()), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.String() != string(want) {
+		t.Errorf("the viewer differs from %s:\n%s", path, b.String())
+	}
+}
+
+// TestFilesDiffOpensAtChange: the viewer opens at the first change, a few
+// lines above it, and scrolls on from there; colour goes on changed lines
+// only, and a JSON file with changes isn't reindented under its hunks.
+func TestFilesDiffOpensAtChange(t *testing.T) {
+	var body strings.Builder
+	for i := range 200 {
+		fmt.Fprintf(&body, "line %d\n", i+1)
+	}
+	tv := &textView{title: "f", body: body.String()}
+	tv.mark(proto.FilesDiffResult{Status: "M", Hunks: []proto.FilesHunk{{Old: 100, New: 100, Added: 1}}})
+	src := &fakeSource{data: testData()}
+	m := newDash(DashOptions{Source: src, Width: 100, Height: 30, Over: &Over{Session: "s-4", Screen: []string{"", "row"}, Viewer: tv}})
+	m.setData(src.data)
+	tv.render(m)
+	if tv.scroll != 99-diffLeadIn {
+		t.Errorf("opens at %d", tv.scroll)
+	}
+	before := tv.scroll
+	tv.key(m, arrow(1))
+	tv.render(m)
+	if tv.scroll != before+1 {
+		t.Errorf("scrolled to %d", tv.scroll)
+	}
+
+	f := &fakeFiles{}
+	f.install(t)
+	f.texts = map[string]proto.FilesReadResult{"a.json": {Name: "a.json", Path: "a.json", Size: 7, Data: []byte(`{"a":1}`)}}
+	f.diffs = map[string]proto.FilesDiffResult{"a.json": {Status: "M", Hunks: []proto.FilesHunk{{Old: 1, New: 1, Added: 1}}}}
+	got := worktreeViewer(tmclient.Paths{}, "s", "", proto.FileEntry{Name: "a.json", Path: "a.json"}, false)
+	if len(got.diff) != 1 || got.diff[0] != (diffLine{lineAdded, `{"a":1}`}) {
+		t.Errorf("%+v", got.diff)
+	}
+	f.diffs = nil
+	if got = worktreeViewer(tmclient.Paths{}, "s", "", proto.FileEntry{Name: "a.json", Path: "a.json"}, false); got.diff != nil || !strings.Contains(got.body, "  \"a\"") {
+		t.Errorf("no changes, indented as before: %q %+v", got.body, got.diff)
+	}
+}
+
+// TestMergeDiff: hunks in the text, at its ends and past them.
+func TestMergeDiff(t *testing.T) {
+	d := proto.FilesDiffResult{Status: "M", Hunks: []proto.FilesHunk{
+		{Old: 1, New: 1, Removed: []string{"gone"}},
+		{Old: 3, New: 2, Added: 1},
+		{Old: 9, New: 9, Added: 2, Removed: []string{"past"}},
+	}}
+	got := mergeDiff("a\nb\nc\n", d)
+	want := []diffLine{{lineRemoved, "gone"}, {lineSame, "a"}, {lineAdded, "b"}, {lineSame, "c"}, {lineRemoved, "past"}}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("%v, want %v", got, want)
+	}
+	if got := mergeDiff("", proto.FilesDiffResult{Status: "A"}); len(got) != 0 {
+		t.Errorf("an empty new file: %v", got)
 	}
 }

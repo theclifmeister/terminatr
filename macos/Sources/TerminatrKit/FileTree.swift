@@ -363,6 +363,106 @@ public enum FileText {
     }
 }
 
+/// A file's text with its changes laid over it (files.diff): its lines in
+/// order, the removed ones where they went. The TUI's viewer does the same
+/// (mergeDiff in internal/tui/filesdiff.go).
+public struct FileMarks: Equatable, Sendable {
+    public enum Kind: UInt8, Sendable {
+        case same
+        case added
+        case removed
+    }
+
+    /// What shows, one line a row.
+    public let text: String
+    public let kinds: [Kind]
+    /// Each row's number: the file's own, a removed line's in the base.
+    public let numbers: [Int]
+    /// The row the first change is on.
+    public var firstChange: Int? { kinds.firstIndex { $0 != .same } }
+
+    /// The marks of a file's text, nil when nothing shows as changed: no
+    /// change, or one with no lines to mark. A hunk past the text's end (it
+    /// changed since it was read) marks what there is.
+    public static func of(_ text: String, _ diff: AppAPI.FilesDiff) -> FileMarks? {
+        guard diff.status == "A" || !diff.hunks.isEmpty, !diff.binary, !diff.tooBig else { return nil }
+        var file = text.split(separator: "\n", omittingEmptySubsequences: false)
+        if file.last?.isEmpty == true { file.removeLast() }
+        var rows: [Substring] = []
+        var kinds: [Kind] = []
+        var numbers: [Int] = []
+        rows.reserveCapacity(file.count)
+        var at = 0
+        func take(to end: Int, as kind: Kind) {
+            while at < min(end, file.count) {
+                rows.append(file[at])
+                kinds.append(kind)
+                at += 1
+                numbers.append(at)
+            }
+        }
+        if diff.status == "A" {
+            take(to: file.count, as: .added)
+        } else {
+            for h in diff.hunks {
+                take(to: h.new - 1, as: .same)
+                for (i, line) in h.removed.enumerated() {
+                    rows.append(Substring(line))
+                    kinds.append(.removed)
+                    numbers.append(h.old + i)
+                }
+                take(to: h.new - 1 + h.added, as: .added)
+            }
+            take(to: file.count, as: .same)
+        }
+        guard !rows.isEmpty else { return nil }
+        return FileMarks(text: rows.joined(separator: "\n"), kinds: kinds, numbers: numbers)
+    }
+}
+
+/// What the line above a changed file's text says.
+public enum FileChange {
+    public struct Words: Equatable, Sendable {
+        /// What's first: New, Deleted, Renamed from a path, or nil.
+        public let lead: String?
+        public let added: Int?
+        public let deleted: Int?
+        /// Since which ref, nil when it has no name.
+        public let since: String?
+    }
+
+    /// Nil for a file with no change.
+    public static func words(_ d: AppAPI.FilesDiff) -> Words? {
+        var lead: String?
+        var added: Int? = d.added > 0 ? d.added : nil
+        var deleted: Int? = d.deleted > 0 ? d.deleted : nil
+        switch d.status {
+        case "A":
+            lead = "New"
+            deleted = nil
+        case "D":
+            lead = "Deleted"
+            added = nil
+        case "M":
+            if !d.from.isEmpty {
+                lead = "Renamed from \(d.from)"
+            } else if added == nil, deleted == nil {
+                lead = "Changed"
+            }
+        default:
+            return nil
+        }
+        return Words(lead: lead, added: added, deleted: deleted, since: d.base.isEmpty ? nil : "since \(d.base)")
+    }
+
+    /// What a deleted file with no lines to show says instead.
+    public static func deleted(_ name: String, _ d: AppAPI.FilesDiff) -> String? {
+        if d.binary { return "\(name) · \(Attachment.size(d.size)) is deleted in this worktree. It wasn't text, so nothing shows." }
+        if d.tooBig { return "\(name) · \(Attachment.size(d.size)) is deleted in this worktree, and it's too big to show what it held." }
+        return nil
+    }
+}
+
 /// What a worktree file's read came to.
 public enum WorktreeRead {
     public typealias Fetch = @Sendable (AppAPI.FilesReadParams) async throws -> AppAPI.FilesChunk

@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 51
+    public static let version = 52
 
     public struct AdoptRequestParams: Codable, Sendable, Hashable {
         public var id: String
@@ -752,6 +752,96 @@ public enum AppAPI {
             case binary
             case truncated
             case data
+        }
+    }
+
+    public struct FilesDiff: Codable, Sendable, Hashable {
+        public var name: String
+        public var path: String
+        public var status: String
+        public var from: String
+        public var base: String
+        public var size: Int
+        public var mtime: Date?
+        public var added: Int
+        public var deleted: Int
+        public var binary: Bool
+        public var tooBig: Bool
+        public var truncated: Bool
+        public var hunks: [FilesHunk]
+
+        public init(name: String, path: String, status: String = "", from: String = "", base: String = "", size: Int = 0, mtime: Date? = nil, added: Int = 0, deleted: Int = 0, binary: Bool = false, tooBig: Bool = false, truncated: Bool = false, hunks: [FilesHunk] = []) {
+            self.name = name
+            self.path = path
+            self.status = status
+            self.from = from
+            self.base = base
+            self.size = size
+            self.mtime = mtime
+            self.added = added
+            self.deleted = deleted
+            self.binary = binary
+            self.tooBig = tooBig
+            self.truncated = truncated
+            self.hunks = hunks
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case name
+            case path
+            case status
+            case from
+            case base
+            case size
+            case mtime
+            case added
+            case deleted
+            case binary
+            case tooBig = "too_big"
+            case truncated
+            case hunks
+        }
+    }
+
+    public struct FilesDiffParams: Codable, Sendable, Hashable {
+        public var session: String
+        public var repo: FilesRepoRef?
+        public var path: String
+        public var ignored: Bool
+
+        public init(session: String, repo: FilesRepoRef? = nil, path: String, ignored: Bool = false) {
+            self.session = session
+            self.repo = repo
+            self.path = path
+            self.ignored = ignored
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case session
+            case repo
+            case path
+            case ignored
+        }
+    }
+
+    public struct FilesHunk: Codable, Sendable, Hashable {
+        public var old: Int
+        public var new: Int
+        public var added: Int
+        public var removed: [String]
+
+        public init(old: Int, new: Int, added: Int = 0, removed: [String] = []) {
+            self.old = old
+            self.new = new
+            self.added = added
+            self.removed = removed
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case old
+            case new
+            case added
+            case removed
         }
     }
 
@@ -4789,6 +4879,7 @@ public enum AppAPI {
         public static let devicePairAnswer = Call<DevicePairAnswerParams, DevicePaired>("device.pair.answer", write: true)
         public static let devicePairWait = Call<DevicePairingParams, DeviceOffer>("device.pair.wait", write: true)
         public static let deviceRemove = Call<DeviceParams, Empty>("device.remove", write: true)
+        public static let filesDiff = Call<FilesDiffParams, FilesDiff>("files.diff", write: false)
         public static let filesList = Call<FilesListParams, FilesList>("files.list", write: false)
         public static let filesRead = Call<FilesReadParams, FilesChunk>("files.read", write: false)
         public static let filesRepos = Call<FilesReposParams, FilesRepos>("files.repos", write: false)
@@ -5220,6 +5311,45 @@ extension AppAPI.FilesChunk {
         self.binary = try c.decodeIfPresent(Bool.self, forKey: .binary) ?? false
         self.truncated = try c.decodeIfPresent(Bool.self, forKey: .truncated) ?? false
         self.data = try c.decodeIfPresent(Data.self, forKey: .data) ?? Data()
+    }
+}
+
+extension AppAPI.FilesDiff {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.name = try c.decode(String.self, forKey: .name)
+        self.path = try c.decode(String.self, forKey: .path)
+        self.status = try c.decodeIfPresent(String.self, forKey: .status) ?? ""
+        self.from = try c.decodeIfPresent(String.self, forKey: .from) ?? ""
+        self.base = try c.decodeIfPresent(String.self, forKey: .base) ?? ""
+        self.size = try c.decodeIfPresent(Int.self, forKey: .size) ?? 0
+        self.mtime = try c.decodeIfPresent(Date.self, forKey: .mtime)
+        self.added = try c.decodeIfPresent(Int.self, forKey: .added) ?? 0
+        self.deleted = try c.decodeIfPresent(Int.self, forKey: .deleted) ?? 0
+        self.binary = try c.decodeIfPresent(Bool.self, forKey: .binary) ?? false
+        self.tooBig = try c.decodeIfPresent(Bool.self, forKey: .tooBig) ?? false
+        self.truncated = try c.decodeIfPresent(Bool.self, forKey: .truncated) ?? false
+        self.hunks = try c.decodeIfPresent([AppAPI.FilesHunk].self, forKey: .hunks) ?? []
+    }
+}
+
+extension AppAPI.FilesDiffParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.session = try c.decode(String.self, forKey: .session)
+        self.repo = try c.decodeIfPresent(AppAPI.FilesRepoRef.self, forKey: .repo)
+        self.path = try c.decode(String.self, forKey: .path)
+        self.ignored = try c.decodeIfPresent(Bool.self, forKey: .ignored) ?? false
+    }
+}
+
+extension AppAPI.FilesHunk {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.old = try c.decode(Int.self, forKey: .old)
+        self.new = try c.decode(Int.self, forKey: .new)
+        self.added = try c.decodeIfPresent(Int.self, forKey: .added) ?? 0
+        self.removed = try c.decodeIfPresent([String].self, forKey: .removed) ?? []
     }
 }
 

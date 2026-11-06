@@ -27,7 +27,8 @@ import (
 // view says, with a picker when the project has more than one;
 // Attached is the Library's files of that thread, of the whole project
 // beside a coordinator. Enter reads a file in the Library's viewer,
-// drawn over the session. Everything a folder holds is data: names go
+// drawn over the session, with its changes since the base marked
+// (files.diff; filesdiff.go). Everything a folder holds is data: names go
 // through oneLine and text through libText and textsafe, so no control
 // character reaches the terminal, and the panel's draw takes styles only
 // (plainUnder).
@@ -869,8 +870,6 @@ func (c *client) filesRead(r fileRow) {
 	case r.lib != nil:
 	case r.e.LinkOut:
 		flash = oneLine(r.e.Name) + " is a link that doesn't open: it leads out of the folder, or nowhere"
-	case r.e.Status == proto.FileDeleted:
-		flash = oneLine(r.e.Name) + " is deleted"
 	case r.e.Kind != proto.FileKindFile:
 		flash = oneLine(r.e.Name) + " is no file to read"
 	}
@@ -917,9 +916,14 @@ func attachedViewer(slug string, f thread.LibFile) *textView {
 	return tv
 }
 
-// worktreeViewer is the viewer on a file of the session's folder.
+// worktreeViewer is the viewer on a file of the session's folder, its
+// changes marked; a deleted file shows what it held.
 func worktreeViewer(paths tmclient.Paths, session, repo string, e proto.FileEntry, ignored bool) *textView {
 	tv := &textView{title: oneLine(e.Path)}
+	if e.Status == proto.FileDeleted {
+		deletedViewer(tv, paths, session, repo, e, ignored)
+		return tv
+	}
 	var data []byte
 	truncated := false
 	for {
@@ -933,6 +937,9 @@ func worktreeViewer(paths tmclient.Paths, session, repo string, e proto.FileEntr
 		tv.title = oneLine(e.Path) + " · " + sizeWords(res.Size)
 		if res.Binary {
 			tv.note = "not text: only its name and size show"
+			if d := fileDiff(paths, session, repo, e.Path, ignored); d.Status != "" {
+				tv.title += " · " + changeWords(d)
+			}
 			return tv
 		}
 		data = append(data, res.Data...)
@@ -944,8 +951,14 @@ func worktreeViewer(paths tmclient.Paths, session, repo string, e proto.FileEntr
 			break
 		}
 	}
-	tv.body, tv.note = libText(e.Name, data, truncated)
+	d := fileDiff(paths, session, repo, e.Path, ignored)
+	name := e.Name
+	if len(d.Hunks) > 0 {
+		name = "" // as it is: its lines are what the hunks count
+	}
+	tv.body, tv.note = libText(name, data, truncated)
 	tv.body = textsafe.Text(tv.body)
+	tv.mark(d)
 	if c := fileCaution(e); c != "" && tv.body != "" {
 		tv.title += " · " + c
 	}

@@ -103,8 +103,9 @@ func init() {
 		// and a stamp to tell a change. The Mac app's alone (macOnly).
 		unary(proto.MethodFilesList, false, filesListParams, filesListOf),
 		unary(proto.MethodFilesRead, false, filesReadParams, filesChunkOf),
+		unary(proto.MethodFilesDiff, false, filesDiffParams, filesDiffOf),
 		unary(proto.MethodFilesStamp, false, filesStampParams, filesStampOf),
-		// The repos a coordinator's Files view chooses from (app API 51).
+		// The repos a coordinator's Files view chooses from (app API 52).
 		unary(proto.MethodFilesRepos, false, filesReposParams, filesReposOf),
 
 		// A project's designs, read only (app API 31; the server's caps
@@ -602,6 +603,10 @@ func filesListParams(p FilesListParams) proto.FilesListParams {
 
 func filesReadParams(p FilesReadParams) proto.FilesReadParams {
 	return proto.FilesReadParams{Session: p.Session, Repo: p.Repo.path(), Path: p.Path, Offset: p.Offset, Ignored: p.Ignored, Binary: p.Binary}
+}
+
+func filesDiffParams(p FilesDiffParams) proto.FilesDiffParams {
+	return proto.FilesDiffParams{Session: p.Session, Repo: p.Repo.path(), Path: p.Path, Ignored: p.Ignored}
 }
 
 func filesStampParams(p FilesStampParams) proto.FilesStampParams {

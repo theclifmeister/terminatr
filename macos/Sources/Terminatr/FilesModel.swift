@@ -22,6 +22,11 @@ final class FilesModel {
         var body: WorktreeRead.Body?
         /// It was there when read, and isn't now: what shows is old.
         var deleted = false
+        /// Its change since the base, nil from a tm that can't say or for
+        /// an attached file.
+        var diff: AppAPI.FilesDiff?
+        /// Its lines with that change laid over them, when there are any.
+        var marks: FileMarks?
     }
 
     private(set) var scope = Scope.worktree
@@ -312,22 +317,34 @@ final class FilesModel {
     }
 
     private func read(_ f: OpenedFile, _ app: AppModel) async {
-        let body: WorktreeRead.Body
         switch f.source {
         case .worktree(let e, let ignored):
             if e.linkOut || e.kind == "other" {
-                body = .unavailable("\(e.name) is a link that doesn't open: it leads out of the worktree, or nowhere.")
-            } else if e.status == "D" {
-                body = .unavailable("\(e.name) is deleted in this worktree.")
+                shown[f.id] = Shown(body: .unavailable("\(e.name) is a link that doesn't open: it leads out of the worktree, or nowhere."))
             } else if let session = place?.session, let b = app.bridge {
-                body = await WorktreeRead.body({ p in try await b.call(AppAPI.Methods.filesRead, p) }, session: session, repo: f.repo, path: e.path, ignored: ignored)
+                shown[f.id] = await worktreeFile(e, ignored: ignored, repo: f.repo, session: session, b)
             } else {
-                body = .unavailable(place?.why ?? "Not connected to terminatr.")
+                shown[f.id] = Shown(body: .unavailable(place?.why ?? "Not connected to terminatr."))
             }
         case .attached(let a):
-            body = WorktreeRead.body(attached: await attachedBytes(a, app))
+            shown[f.id] = Shown(body: WorktreeRead.body(attached: await attachedBytes(a, app)))
         }
-        shown[f.id] = Shown(body: body)
+    }
+
+    /// A worktree file's text and what changed in it. The change is asked
+    /// first: a row's mark is as old as the listing, and a deleted file has
+    /// no text to read. A tm that can't say gets the text alone.
+    private func worktreeFile(_ e: AppAPI.FileEntry, ignored: Bool, repo: AppAPI.FilesRepoRef?, session: String, _ b: Bridge) async -> Shown {
+        let diff = try? await b.call(AppAPI.Methods.filesDiff, AppAPI.FilesDiffParams(session: session, repo: repo, path: e.path, ignored: ignored))
+        if diff?.status == "D" || (diff == nil && e.status == "D") {
+            guard let diff else { return Shown(body: .unavailable("\(e.name) is deleted in this worktree.")) }
+            if let why = FileChange.deleted(e.name, diff) { return Shown(body: .unavailable(why), diff: diff) }
+            return Shown(body: .text("", size: diff.size, shown: diff.size, mtime: nil), deleted: true, diff: diff, marks: FileMarks.of("", diff))
+        }
+        let body = await WorktreeRead.body({ p in try await b.call(AppAPI.Methods.filesRead, p) }, session: session, repo: repo, path: e.path, ignored: ignored)
+        var marks: FileMarks?
+        if case .text(let text, _, _, _) = body, let diff { marks = FileMarks.of(text, diff) }
+        return Shown(body: body, diff: diff, marks: marks)
     }
 
     /// A shown file again, when it changed; what's gone stays and says so.

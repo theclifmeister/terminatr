@@ -121,6 +121,19 @@ func TestFilesScope(t *testing.T) {
 			t.Errorf("read %s: %v, want %s", path, perr, want)
 		}
 	}
+	got, perr = s.filesDiff(proto.FilesDiffParams{Session: "s-t", Path: "new.txt"})
+	if d, ok := got.(proto.FilesDiffResult); perr != nil || !ok || d.Status != proto.FileAdded || d.Added != 1 || d.Base == "" {
+		t.Errorf("diff: %+v %v", got, perr)
+	}
+	got, perr = s.filesDiff(proto.FilesDiffParams{Session: "s-c", Path: "README.md"})
+	if d, ok := got.(proto.FilesDiffResult); perr != nil || !ok || d.Status != "" {
+		t.Errorf("the coordinator's, unchanged: %+v %v", got, perr)
+	}
+	for path, want := range map[string]string{"../x": proto.ErrInvalidPath, ".git/config": proto.ErrInvalidPath, "nope": proto.ErrFileGone} {
+		if _, perr := s.filesDiff(proto.FilesDiffParams{Session: "s-t", Path: path}); code(perr) != want {
+			t.Errorf("diff %s: %v, want %s", path, perr, want)
+		}
+	}
 	a, perr := s.filesStamp(proto.FilesStampParams{Session: "s-t", Folders: []string{""}})
 	if perr != nil {
 		t.Fatal(perr)
@@ -314,6 +327,13 @@ func TestFilesRepoChoice(t *testing.T) {
 	if perr != nil || string(chunk.(proto.FilesReadResult).Data) != "x\n" {
 		t.Errorf("read from the second repo: %+v %v", chunk, perr)
 	}
+	d, perr := s.filesDiff(proto.FilesDiffParams{Session: "s-c", Repo: two, Path: "new.txt"})
+	if perr != nil || d.(proto.FilesDiffResult).Status != proto.FileAdded {
+		t.Errorf("a diff in the second repo: %+v %v", d, perr)
+	}
+	if d, perr := s.filesDiff(proto.FilesDiffParams{Session: "s-c", Path: "new.txt"}); perr == nil && d.(proto.FilesDiffResult).Status == proto.FileAdded {
+		t.Errorf("no choice read the second repo's diff: %+v", d)
+	}
 	a, perr := s.filesStamp(proto.FilesStampParams{Session: "s-c", Folders: []string{""}})
 	if perr != nil {
 		t.Fatal(perr)
@@ -333,6 +353,9 @@ func TestFilesRepoChoice(t *testing.T) {
 		}
 		if _, perr := s.filesStamp(proto.FilesStampParams{Session: "s-c", Repo: bad}); perr == nil || perr.Code != proto.ErrNoFiles {
 			t.Errorf("stamp %q: %v", bad, perr)
+		}
+		if _, perr := s.filesDiff(proto.FilesDiffParams{Session: "s-c", Repo: bad, Path: "off.txt"}); perr == nil || perr.Code != proto.ErrNoFiles {
+			t.Errorf("diff %q: %v", bad, perr)
 		}
 	}
 	// A thread keeps its one worktree, even naming a repo on the list.

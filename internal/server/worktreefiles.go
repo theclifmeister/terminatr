@@ -15,7 +15,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
-// files.list, files.read and files.stamp (proto.CapWorktreeFiles): a
+// files.list, files.read, files.stamp and files.diff (proto.CapWorktreeFiles): a
 // session's folder, read only. A session names its folder here, the
 // caller never does: a thread's worktree, a coordinator's project's repo
 // at its main checkout. The caller's one say is which repo of that
@@ -201,6 +201,24 @@ func (s *Server) filesRead(p proto.FilesReadParams) (any, *proto.Error) {
 		read = sc.ReadBytes
 	}
 	res, err := read(ctx, p.Path, p.Offset, p.Ignored)
+	if err != nil {
+		return nil, filesError(err)
+	}
+	return res, nil
+}
+
+func (s *Server) filesDiff(p proto.FilesDiffParams) (any, *proto.Error) {
+	ctx, cancel := context.WithTimeout(context.Background(), changes.Timeout)
+	defer cancel()
+	sc, perr := s.filesScope(ctx, p.Session, p.Repo)
+	if perr != nil {
+		return nil, perr
+	}
+	cs, err := s.filesSeen.Changes(ctx, sc)
+	if err != nil {
+		return nil, proto.Errorf(proto.ErrInternal, "%v", err)
+	}
+	res, err := sc.Diff(ctx, p.Path, p.Ignored, cs)
 	if err != nil {
 		return nil, filesError(err)
 	}

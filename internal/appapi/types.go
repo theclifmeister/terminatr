@@ -1703,6 +1703,14 @@ type (
 		Ignored bool          `json:"ignored,omitempty"`
 		Binary  bool          `json:"binary,omitempty"`
 	}
+	// FilesDiffParams are files.diff's: file Path, a deleted one too
+	// (app API 51).
+	FilesDiffParams struct {
+		Session string        `json:"session"`
+		Repo    *FilesRepoRef `json:"repo,omitempty"`
+		Path    string        `json:"path"`
+		Ignored bool          `json:"ignored,omitempty"`
+	}
 	// FilesStampParams are files.stamp's: the folders shown.
 	FilesStampParams struct {
 		Session string        `json:"session"`
@@ -1710,7 +1718,7 @@ type (
 		Folders []string      `json:"folders,omitempty"`
 	}
 	// FilesRepoRef is a coordinator's choice among files.repos, on the
-	// methods above (app API 51): a FilesRepo's Path. A struct behind a
+	// methods above (app API 52): a FilesRepo's Path. A struct behind a
 	// pointer because the app then leaves it out when there's none, which
 	// an older bridge, decoding strictly, needs; none is the first repo.
 	FilesRepoRef struct {
@@ -1781,7 +1789,7 @@ type FilesStamp struct {
 	Stamp string `json:"stamp"`
 }
 
-// FilesRepos is files.repos's result (app API 51): what a coordinator's
+// FilesRepos is files.repos's result (app API 52): what a coordinator's
 // Files view chooses from, the first the default; none for anything else.
 type FilesRepos struct {
 	Repos []FilesRepo `json:"repos"`
@@ -1802,6 +1810,37 @@ func filesReposOf(r proto.FilesReposResult) FilesRepos {
 	return out
 }
 
+// FilesHunk is a place in a file that changed: Removed went, numbered from
+// Old in the base's version, before line New of the file, and Added lines of
+// the file from New are new (app API 51).
+type FilesHunk struct {
+	Old     int      `json:"old"`
+	New     int      `json:"new"`
+	Added   int      `json:"added,omitempty"`
+	Removed []string `json:"removed,omitempty"`
+}
+
+// FilesDiff is files.diff's result: a file's change against Base. Status
+// "" for none, M with Hunks, A all its lines added, D all its lines the
+// Hunks' (Size its size at the base). From: renamed from that path. Binary
+// and TooBig (over 1 MiB) have no Hunks; Truncated: they stop short of the
+// file's end (app API 51).
+type FilesDiff struct {
+	Name      string      `json:"name"`
+	Path      string      `json:"path"`
+	Status    string      `json:"status,omitempty"`
+	From      string      `json:"from,omitempty"`
+	Base      string      `json:"base,omitempty"`
+	Size      int64       `json:"size,omitempty"`
+	MTime     time.Time   `json:"mtime,omitzero"`
+	Added     int         `json:"added,omitempty"`
+	Deleted   int         `json:"deleted,omitempty"`
+	Binary    bool        `json:"binary,omitempty"`
+	TooBig    bool        `json:"too_big,omitempty"`
+	Truncated bool        `json:"truncated,omitempty"`
+	Hunks     []FilesHunk `json:"hunks,omitempty"`
+}
+
 func filesListOf(r proto.FilesListResult) FilesList {
 	out := FilesList{Root: r.Root, Path: r.Path, Git: r.Git, Files: r.Files, Added: r.Added, Deleted: r.Deleted,
 		Entries: make([]FileEntry, 0, len(r.Entries)), Truncated: r.Truncated}
@@ -1815,6 +1854,15 @@ func filesListOf(r proto.FilesListResult) FilesList {
 func filesChunkOf(r proto.FilesReadResult) FilesChunk {
 	return FilesChunk{Name: r.Name, Path: r.Path, Size: r.Size, MTime: r.MTime, Offset: r.Offset, Binary: r.Binary,
 		Truncated: r.Truncated, Data: r.Data}
+}
+
+func filesDiffOf(r proto.FilesDiffResult) FilesDiff {
+	out := FilesDiff{Name: r.Name, Path: r.Path, Status: r.Status, From: r.From, Base: r.Base, Size: r.Size, MTime: r.MTime,
+		Added: r.Added, Deleted: r.Deleted, Binary: r.Binary, TooBig: r.TooBig, Truncated: r.Truncated}
+	for _, h := range r.Hunks {
+		out.Hunks = append(out.Hunks, FilesHunk{Old: h.Old, New: h.New, Added: h.Added, Removed: h.Removed})
+	}
+	return out
 }
 
 func filesStampOf(r proto.FilesStampResult) FilesStamp { return FilesStamp{Stamp: r.Stamp} }
