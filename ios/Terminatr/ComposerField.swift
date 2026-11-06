@@ -43,7 +43,7 @@ struct ComposerField: UIViewRepresentable {
         v.textColor = UIColor(theme.ink)
         v.tintColor = UIColor(theme.action)
         v.placeholder.text = placeholder
-        v.placeholder.font = font
+        v.placeholder.font = .systemFont(ofSize: Flat.text * theme.scale)
         v.placeholder.textColor = UIColor(theme.faint)
         v.accessibilityLabel = placeholder
         v.files = files

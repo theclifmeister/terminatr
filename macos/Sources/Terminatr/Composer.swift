@@ -110,7 +110,7 @@ struct Composer: View {
             ZStack(alignment: .topLeading) {
                 if text.isEmpty {
                     Text(placeholder)
-                        .font(theme.conversation)
+                        .font(theme.sized(13))
                         .foregroundStyle(theme.faint)
                         .lineLimit(1)
                         .frame(height: 18)

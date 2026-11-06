@@ -172,6 +172,7 @@ public struct Theme: Sendable {
         var t = Theme(name, colours: colours.increasedContrast())
         t.scale = scale
         t.titleGrowth = titleGrowth
+        t.boldText = boldText
         return t
     }
 
