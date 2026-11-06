@@ -70,7 +70,7 @@ private let tree: [String: [AppAPI.FileEntry]] = [
 @Test func aPairedServersFilesAreAttachedOnly() throws {
     let p = try #require(FilesPlace.of(.session(SessionRef(project: "web", thread: "t-1", server: "mini")), sessionID: "mini/s-1", threadDone: false, readsWorktree: true, hasLibrary: true))
     #expect(p.session == nil)
-    #expect(p.why?.contains("mini's worktrees stay on mini") == true)
+    #expect(p.why == "mini's worktrees can't be browsed from here. The Attached tab shows what this thread attached, when mini shares the project's pages.")
     #expect(p.mentions == nil)
 }
 

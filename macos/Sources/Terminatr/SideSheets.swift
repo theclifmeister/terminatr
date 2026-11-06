@@ -19,19 +19,17 @@ struct NewProjectSheet: View {
     @FocusState private var nameFocused: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 11) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("New Project")
-                    .font(theme.title(.title, .heavy))
-                Text("Its name becomes a lower-case slug. Its coordinator starts once you open it.")
-                    .font(theme.body(.subheadline))
-                    .foregroundStyle(theme.muted)
-            }
-            Form {
-                TextField("Name", text: $form.name, prompt: Text("demo-app"))
-                    .focused($nameFocused)
-                LabeledContent("Repo") {
-                    HStack {
+        FlatSheet(width: 480) {
+            SheetTitle("New Project", detail: "Its name becomes a lower-case slug. Its coordinator starts once you open it.")
+        } content: {
+            SheetBody {
+                SheetField("Name") {
+                    TextField("Name", text: $form.name, prompt: Text("demo-app"))
+                        .sheetField()
+                        .focused($nameFocused)
+                }
+                SheetField("Repo") {
+                    HStack(spacing: 8) {
                         Text(form.repo.isEmpty ? "None" : (form.repo as NSString).abbreviatingWithTildeInPath)
                             .foregroundStyle(form.repo.isEmpty ? theme.muted : theme.ink)
                             .lineLimit(1)
@@ -43,31 +41,26 @@ struct NewProjectSheet: View {
                         Button("Choose…") { picking = true }
                     }
                 }
-            }
-            .formStyle(.grouped)
-            .scrollDisabled(true)
-            if let error {
-                Text(error)
-                    .font(theme.body(.subheadline))
-                    .foregroundStyle(theme.attention)
-            } else if let made {
-                Label(made, systemImage: "checkmark.circle.fill")
-                    .font(theme.body(.subheadline, .medium))
-                    .foregroundStyle(theme.good)
-            }
-            HStack {
-                Spacer()
-                Button(made == nil ? "Cancel" : "Done") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                if made == nil {
-                    Button("Create Project") { make() }
-                        .keyboardShortcut(.defaultAction)
-                        .disabled(!form.canMake || busy)
+                if let error {
+                    Text(error)
+                        .font(theme.sized(Flat.label))
+                        .foregroundStyle(theme.attention)
+                } else if let made {
+                    Label(made, systemImage: "checkmark.circle.fill")
+                        .font(theme.sized(Flat.label, .medium))
+                        .foregroundStyle(theme.good)
                 }
             }
+        } footer: {
+            Button(made == nil ? "Cancel" : "Done") { dismiss() }
+                .keyboardShortcut(.cancelAction)
+            if made == nil {
+                Button("Create Project") { make() }
+                    .buttonStyle(.flatPrimary)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!form.canMake || busy)
+            }
         }
-        .padding(18)
-        .frame(width: 480)
         .onAppear { nameFocused = true }
         .fileImporter(isPresented: $picking, allowedContentTypes: [.folder]) { result in
             if case .success(let url) = result { form.repo = url.path }
@@ -107,42 +100,38 @@ struct LinkMessageSheet: View {
 
     var body: some View {
         let links = app.project(project).map { LinkMessageForm.writable($0) } ?? []
-        VStack(alignment: .leading, spacing: 11) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Write to a Linked Project")
-                    .font(theme.title(.title, .heavy))
-                Text("Sent as you for \(project).")
-                    .font(theme.body(.subheadline))
-                    .foregroundStyle(theme.muted)
-            }
-            Form {
-                Picker("To", selection: $form.peer) {
-                    ForEach(links, id: \.peer) { l in
-                        Text(l.shown.isEmpty ? l.peer : l.shown).tag(l.peer)
+        FlatSheet(width: 480) {
+            SheetTitle("Write to a Linked Project", detail: "Sent as you for \(project).")
+        } content: {
+            SheetBody {
+                SheetField("To") {
+                    let peer = links.first { $0.peer == form.peer }
+                    SheetPicker(label: "To", shown: (peer?.shown.isEmpty == false ? peer?.shown : peer?.peer) ?? form.peer, selection: $form.peer) {
+                        ForEach(links, id: \.peer) { l in
+                            Text(l.shown.isEmpty ? l.peer : l.shown).tag(l.peer)
+                        }
                     }
                 }
-                TextField("Message", text: $form.text, prompt: Text("Your message"), axis: .vertical)
-                    .lineLimit(4...10)
-                    .focused($textFocused)
+                SheetField("Message") {
+                    TextField("Message", text: $form.text, prompt: Text("Your message"), axis: .vertical)
+                        .lineLimit(4...10)
+                        .sheetField()
+                        .focused($textFocused)
+                }
+                if let error {
+                    Text(error)
+                        .font(theme.sized(Flat.label))
+                        .foregroundStyle(theme.attention)
+                }
             }
-            .formStyle(.grouped)
-            .scrollDisabled(true)
-            if let error {
-                Text(error)
-                    .font(theme.body(.subheadline))
-                    .foregroundStyle(theme.attention)
-            }
-            HStack {
-                Spacer()
-                Button("Cancel") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Button("Send") { send() }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(!form.canSend || busy)
-            }
+        } footer: {
+            Button("Cancel") { dismiss() }
+                .keyboardShortcut(.cancelAction)
+            Button("Send") { send() }
+                .buttonStyle(.flatPrimary)
+                .keyboardShortcut(.defaultAction)
+                .disabled(!form.canSend || busy)
         }
-        .padding(18)
-        .frame(width: 480)
         .onAppear { textFocused = true }
     }
 

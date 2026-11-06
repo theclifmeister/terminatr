@@ -3,6 +3,7 @@ import CoreImage
 import CoreImage.CIFilterBuiltins
 import SwiftUI
 import TerminatrKit
+import TerminatrUI
 
 /// Settings › Devices (T790, app API 26): the phones paired with this
 /// server, each with its link and level, Rename…, Remove… (asked first)
@@ -311,6 +312,7 @@ struct PairPhoneSheet: View {
 
 /// The sheet's content for a step, apart from the bridge.
 struct PairContent: View {
+    @Environment(\.theme) private var theme
     let step: PairStep
     @Binding var relay: String
     @Binding var name: String
@@ -321,65 +323,104 @@ struct PairContent: View {
     let done: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Pair iPhone")
-                .font(.title2.weight(.semibold))
-            content
+        FlatSheet(width: 440) {
+            SheetTitle("Pair iPhone")
+        } content: {
+            SheetBody { content }
+        } footer: {
+            footer
         }
-        .padding(24)
-        .frame(width: 440)
     }
 
     @ViewBuilder private var content: some View {
         switch step {
         case .starting:
-            HStack(spacing: 8) {
-                ProgressView().controlSize(.small)
-                Text("Making a code…").foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, minHeight: 120)
-            buttons { Button("Cancel", role: .cancel, action: cancel).keyboardShortcut(.cancelAction) }
+            busy("Making a code…")
         case .needsRelay:
             Text("The phone and this Mac meet on a relay, and none is set up yet. Give its address, as tm device pair --relay takes it.")
                 .fixedSize(horizontal: false, vertical: true)
             TextField("Relay", text: $relay, prompt: Text("wss://relay.example.com"))
-                .textFieldStyle(.roundedBorder)
+                .sheetField()
                 .onSubmit(start)
-            buttons {
-                Button("Cancel", role: .cancel, action: cancel).keyboardShortcut(.cancelAction)
-                Button("Make Code", action: start)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(relay.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
         case .waiting(let p):
             waiting(p)
         case .offer(_, let o):
             offer(o)
         case .adding:
-            HStack(spacing: 8) {
-                ProgressView().controlSize(.small)
-                Text("Adding it…").foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, minHeight: 120)
+            busy("Adding it…")
         case .paired(let d):
             Label("Paired “\(d.name)”, device id \(d.short).", systemImage: "checkmark.circle.fill")
-                .symbolRenderingMode(.multicolor)
-                .font(.headline)
+                .foregroundStyle(theme.good)
+                .font(theme.sized(Flat.text, .medium))
             Text(d.writeKey
                 ? "It can view now. To let it answer questions and approvals, choose Answer in the list."
                 : "It can view. Its app has no write key, so it can't answer: pair it again from an app that has one.")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(theme.muted)
                 .fixedSize(horizontal: false, vertical: true)
-            buttons { Button("Done", action: done).keyboardShortcut(.defaultAction) }
         case .failed(let why):
             Label(why, systemImage: "exclamationmark.triangle")
-                .foregroundStyle(.red)
+                .foregroundStyle(theme.attention)
                 .fixedSize(horizontal: false, vertical: true)
-            buttons {
-                Button("Close", role: .cancel, action: cancel).keyboardShortcut(.cancelAction)
-                Button("New Code", action: start).keyboardShortcut(.defaultAction)
-            }
         }
+    }
+
+    /// The buttons for a step, in the sheet's footer.
+    @ViewBuilder private var footer: some View {
+        switch step {
+        case .starting:
+            cancelButton("Cancel")
+        case .needsRelay:
+            cancelButton("Cancel")
+            Button("Make Code", action: start)
+                .buttonStyle(.flatPrimary)
+                .keyboardShortcut(.defaultAction)
+                .disabled(relay.trimmingCharacters(in: .whitespaces).isEmpty)
+        case .waiting(let p):
+            cancelButton("Cancel")
+            // Shows when the code's time runs out.
+            TimelineView(.periodic(from: .now, by: 1)) { ctx in
+                if ctx.date >= p.expires {
+                    newCode
+                }
+            }
+            .fixedSize()
+        case .offer:
+            cancelButton("Don't Add")
+            Button("Add", action: add)
+                .buttonStyle(.flatPrimary)
+                .keyboardShortcut(.defaultAction)
+                .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+        case .adding:
+            Button("Add") {}
+                .disabled(true)
+        case .paired:
+            SheetEscape(close: done)
+            Button("Done", action: done)
+                .buttonStyle(.flatPrimary)
+                .keyboardShortcut(.defaultAction)
+        case .failed:
+            cancelButton("Close")
+            newCode
+        }
+    }
+
+    private var newCode: some View {
+        Button("New Code", action: start)
+            .buttonStyle(.flatPrimary)
+            .keyboardShortcut(.defaultAction)
+    }
+
+    private func cancelButton(_ words: String) -> some View {
+        Button(words, role: .cancel, action: cancel)
+            .keyboardShortcut(.cancelAction)
+    }
+
+    private func busy(_ words: String) -> some View {
+        HStack(spacing: 8) {
+            ProgressView().controlSize(.small)
+            Text(words).foregroundStyle(theme.muted)
+        }
+        .frame(maxWidth: .infinity, minHeight: 120)
     }
 
     private func waiting(_ p: AppAPI.DevicePairing) -> some View {
@@ -393,43 +434,37 @@ struct PairContent: View {
                         .accessibilityLabel("Pairing code")
                     VStack(alignment: .leading, spacing: 10) {
                         Text("Scan this with the terminatr app on the iPhone.")
-                            .font(.headline)
+                            .font(theme.sized(Flat.text, .medium))
                             .fixedSize(horizontal: false, vertical: true)
                         Text("It works once. You confirm the phone here before it is added.")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(theme.muted)
                             .fixedSize(horizontal: false, vertical: true)
                         Spacer(minLength: 0)
                         if expired {
                             Text("The code's time ran out.")
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(theme.muted)
                         } else {
                             HStack(spacing: 6) {
                                 ProgressView().controlSize(.small)
                                 Text("Waiting for the phone…")
                             }
                             Text("Works for \(DeviceWords.countdown(to: p.expires, now: ctx.date))")
-                                .font(.callout.monospacedDigit())
-                                .foregroundStyle(.secondary)
+                                .font(theme.sized(Flat.label).monospacedDigit())
+                                .foregroundStyle(theme.muted)
                         }
                     }
                     .frame(maxHeight: .infinity, alignment: .top)
                 }
                 .frame(height: 200)
                 Text("This Mac: \(p.name), server id \(p.server), through \(p.relay).")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(theme.sized(Flat.label))
+                    .foregroundStyle(theme.muted)
                     .textSelection(.enabled)
                 if !p.note.isEmpty {
                     Label(p.note, systemImage: "info.circle")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(theme.sized(Flat.label))
+                        .foregroundStyle(theme.muted)
                         .fixedSize(horizontal: false, vertical: true)
-                }
-                buttons {
-                    Button("Cancel", role: .cancel, action: cancel).keyboardShortcut(.cancelAction)
-                    if expired {
-                        Button("New Code", action: start).keyboardShortcut(.defaultAction)
-                    }
                 }
             }
         }
@@ -439,39 +474,26 @@ struct PairContent: View {
         TimelineView(.periodic(from: .now, by: 1)) { ctx in
             VStack(alignment: .leading, spacing: 12) {
                 Label("A phone joined", systemImage: "iphone.radiowaves.left.and.right")
-                    .font(.headline)
+                    .font(theme.sized(Flat.text, .medium))
                 ForEach(DeviceWords.offer(o), id: \.self) { line in
                     Text(line)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 TextField("Add it as", text: $name)
-                    .textFieldStyle(.roundedBorder)
+                    .sheetField()
                     .onSubmit(add)
                 if let nameError {
                     Text(nameError)
-                        .font(.caption)
-                        .foregroundStyle(.red)
+                        .font(theme.sized(Flat.label))
+                        .foregroundStyle(theme.attention)
                 }
                 Text(DeviceWords.question(name: name.trimmingCharacters(in: .whitespaces), level: o.level))
-                    .font(.headline)
+                    .font(theme.sized(Flat.text, .medium))
                     .fixedSize(horizontal: false, vertical: true)
                 Text("Only a device you just scanned the code with. Answer within \(DeviceWords.countdown(to: o.answerBy, now: ctx.date)).")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-                buttons {
-                    Button("Don't Add", role: .cancel, action: cancel).keyboardShortcut(.cancelAction)
-                    Button("Add", action: add)
-                        .keyboardShortcut(.defaultAction)
-                        .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
-                }
+                    .font(theme.sized(Flat.label).monospacedDigit())
+                    .foregroundStyle(theme.muted)
             }
-        }
-    }
-
-    private func buttons(@ViewBuilder _ b: () -> some View) -> some View {
-        HStack {
-            Spacer()
-            b()
         }
     }
 }
@@ -480,6 +502,7 @@ struct PairContent: View {
 /// correction tm device pair's code has): dark on light whatever the
 /// appearance, with its quiet zone, as a camera reads it best.
 struct QRCodeView: View {
+    @Environment(\.theme) private var theme
     let text: String
 
     var body: some View {
@@ -492,7 +515,7 @@ struct QRCodeView: View {
                 .background(.white, in: RoundedRectangle(cornerRadius: 8))
         } else {
             Text("The code can't be drawn.")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(theme.muted)
         }
     }
 

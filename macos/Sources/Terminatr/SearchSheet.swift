@@ -14,6 +14,7 @@ struct SearchSheet: View {
     @Environment(\.theme) private var theme
     @Bindable var model: SearchModel
     @State private var layer: Layer = .text
+    @State private var listWidth = 340.0
     @FocusState private var fieldFocused: Bool
 
     enum Layer: String, CaseIterable {
@@ -22,28 +23,23 @@ struct SearchSheet: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        FlatSheet {
             bar
-            theme.line.frame(height: 1)
-            HSplitView {
+        } content: {
+            PickSplit(width: $listWidth, range: 280...440) {
                 hits
-                    .frame(minWidth: 280, idealWidth: 340, maxWidth: 440)
+            } detail: {
                 detail
-                    .frame(minWidth: 360, maxWidth: .infinity)
             }
-            theme.line.frame(height: 1)
-            HStack {
-                Text("Searches \(model.project)'s notes, tasks, threads, journal, designs, library and inbox")
-                    .font(theme.body(.footnote))
-                    .foregroundStyle(theme.muted)
-                Spacer()
-                Button("Close") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
+            .frame(minWidth: 760, idealWidth: 920, maxWidth: .infinity, minHeight: 480, idealHeight: 620, maxHeight: .infinity)
+        } footer: {
+            Text("Searches \(model.project)'s notes, tasks, threads, journal, designs, library and inbox")
+                .font(theme.sized(Flat.label))
+                .foregroundStyle(theme.muted)
+            Spacer()
+            Button("Close") { dismiss() }
+                .keyboardShortcut(.cancelAction)
         }
-        .frame(minWidth: 760, idealWidth: 920, minHeight: 480, idealHeight: 620)
         .onAppear { fieldFocused = true }
     }
 
@@ -51,40 +47,32 @@ struct SearchSheet: View {
 
     private var bar: some View {
         HStack(spacing: 10) {
-            Picker("Project", selection: Binding(get: { model.project }, set: { model.switchProject($0) })) {
+            SheetPicker(label: "Project", shown: model.project, selection: Binding(get: { model.project }, set: { model.switchProject($0) })) {
                 ForEach(app.activeProjects + app.inactiveProjects, id: \.slug) { Text($0.slug).tag($0.slug) }
             }
-            .labelsHidden()
-            .fixedSize()
             .help("The project whose history to search")
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(theme.muted)
                 TextField("Search \(model.project)'s history", text: $model.words)
-                    .textFieldStyle(.plain)
-                    .font(theme.body(.title3))
                     .focused($fieldFocused)
                     .onSubmit { Task { await model.search() } }
                 if model.searching {
                     ProgressView().controlSize(.small)
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(theme.pane, in: RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(theme.line, lineWidth: 1))
-            Picker("Kind", selection: $model.kind) {
+            .sheetField()
+            SheetPicker(label: "Kind", shown: Search.kinds.first { $0.id == model.kind }?.label ?? "All kinds", selection: $model.kind) {
                 Text("All kinds").tag("")
                 Divider()
                 ForEach(Search.kinds) { Label($0.label, systemImage: $0.symbol).tag($0.id) }
             }
-            .labelsHidden()
-            .fixedSize()
             .help("Only hits of this kind")
             .onChange(of: model.kind) {
                 if model.result != nil { Task { await model.search() } }
             }
             Button("Search") { Task { await model.search() } }
+                .buttonStyle(.flatPrimary)
                 .keyboardShortcut(.defaultAction)
                 .disabled(!model.canSearch || model.searching)
         }
@@ -102,23 +90,24 @@ struct SearchSheet: View {
                 Spacer()
             } else if let r = model.result {
                 Text(Search.summary(r))
-                    .font(theme.mono(.caption))
+                    .font(theme.monoSized(Flat.label))
                     .foregroundStyle(theme.muted)
                     .padding(.horizontal, 16)
                     .padding(.top, 10)
                     .padding(.bottom, 4)
-                List(selection: Binding(get: { model.shown?.id },
-                                        set: { id in if let h = r.hits.first(where: { $0.id == id }) { open(h) } })) {
-                    ForEach(r.hits) { SearchHitRow($0).tag($0.id) }
+                let picked = Binding(get: { model.shown?.id },
+                                     set: { id in if let h = r.hits.first(where: { $0.id == id }) { open(h) } })
+                PickList(selection: picked, order: r.hits.map(\.id), name: "Hits") {
+                    ForEach(r.hits) { h in
+                        PickRow(id: h.id, selection: picked) { SearchHitRow(h) }
+                    }
                 }
-                .listStyle(.sidebar)
-                .scrollContentBackground(.hidden)
             } else {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(model.searching ? "Searching…" : "Words to find, then Return.")
                         .foregroundStyle(theme.muted)
                     Text("A first search builds the project's index: it can take a few seconds.")
-                        .font(theme.body(.footnote))
+                        .font(theme.sized(Flat.label))
                         .foregroundStyle(theme.muted)
                 }
                 .padding(16)
@@ -142,12 +131,11 @@ struct SearchSheet: View {
                                 .help(help(t))
                         }
                         Spacer()
-                        Picker("Layer", selection: $layer) {
-                            ForEach(Layer.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                        ForEach(Layer.allCases, id: \.self) { l in
+                            Button(l.rawValue) { layer = l }
+                                .buttonStyle(FlatButtonStyle(primary: layer == l))
+                                .accessibilityAddTraits(layer == l ? .isSelected : [])
                         }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                        .fixedSize()
                     }
                 }
                 .padding(16)
@@ -179,7 +167,7 @@ struct SearchSheet: View {
                             .textSelection(.enabled)
                         if t.cut {
                             Text("Cut at \(t.text.utf8.count) of \(t.bytes) bytes: open it for the rest.")
-                                .font(theme.body(.footnote))
+                                .font(theme.sized(Flat.label))
                                 .foregroundStyle(theme.muted)
                         }
                     }
@@ -196,23 +184,29 @@ struct SearchSheet: View {
     @ViewBuilder
     private func timeline(_ hit: AppAPI.SearchHit) -> some View {
         if let tl = model.timeline, tl.at.id == hit.id {
-            List {
-                Section {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 2) {
+                    PaneLabel("Its task's and thread's history around it, in time order")
+                        .padding(.horizontal, 8)
+                        .padding(.bottom, 6)
                     ForEach(Search.rows(tl)) { row in
                         Button {
                             if !row.at { open(row.hit, keep: .timeline) }
                         } label: {
                             SearchHitRow(row.hit, at: row.at)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 6)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(row.at ? theme.selection : .clear, in: RoundedRectangle(cornerRadius: Radius.row))
+                                .contentShape(RoundedRectangle(cornerRadius: Radius.row))
                         }
                         .buttonStyle(.plain)
-                        .listRowBackground(row.at ? theme.pane : Color.clear)
                     }
-                } header: {
-                    Text("Its task's and thread's history around it, in time order")
-                        .font(theme.body(.footnote))
                 }
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .scrollContentBackground(.hidden)
+            .scrollEdges()
         } else if model.shownFailure != nil {
             Text("No timeline for this hit.")
                 .foregroundStyle(theme.muted)

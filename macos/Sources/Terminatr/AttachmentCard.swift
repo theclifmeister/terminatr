@@ -222,25 +222,11 @@ struct FilePreview: View {
     @State private var data: FileOutcome?
 
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 10) {
-                Text(file.name)
-                    .font(theme.title(.headline, .semibold))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Spacer()
-                if case .data(let d, _) = data {
-                    Button("Copy") { FileActs.copy(d, file) }
-                        .keyboardShortcut("c")
-                    Button("Save As…") { Task { await FileActs.saveAs(app, session, file) } }
-                        .keyboardShortcut("s")
-                    Button("Open in Preview") { Task { await FileActs.open(app, session, file, in: "com.apple.Preview") } }
-                }
-                Button("Done") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-            }
-            .padding(12)
-            Divider()
+        FlatSheet {
+            SheetTitle(file.name)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        } content: {
             Group {
                 switch data {
                 case nil:
@@ -265,9 +251,19 @@ struct FilePreview: View {
                     }
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(minWidth: 520, idealWidth: 900, maxWidth: .infinity, minHeight: 380, idealHeight: 700, maxHeight: .infinity)
+        } footer: {
+            if case .data(let d, _) = data {
+                Button("Copy") { FileActs.copy(d, file) }
+                    .keyboardShortcut("c")
+                Button("Save As…") { Task { await FileActs.saveAs(app, session, file) } }
+                    .keyboardShortcut("s")
+                Button("Open in Preview") { Task { await FileActs.open(app, session, file, in: "com.apple.Preview") } }
+            }
+            Spacer()
+            Button("Done") { dismiss() }
+                .keyboardShortcut(.cancelAction)
         }
-        .frame(minWidth: 520, idealWidth: 900, minHeight: 380, idealHeight: 700)
         .task {
             guard let store = app.files, let session else {
                 data = .unavailable("this tm doesn't send files to the app")
@@ -285,6 +281,7 @@ struct PDFPages: NSViewRepresentable {
     func makeNSView(context: Context) -> PDFView {
         let v = PDFView()
         v.autoScales = true
+        v.backgroundColor = .clear
         v.document = PDFDocument(data: data)
         return v
     }

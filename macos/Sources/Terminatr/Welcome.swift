@@ -16,56 +16,48 @@ struct FirstRunSheet: View {
 
     var body: some View {
         let tm = Result { try TMLocator(configured: tmPath).locate() }
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Welcome to terminatr")
-                    .font(theme.title(.sheetTitle, .heavy))
-                Text("The app shows the projects, coordinators and threads of the tm server on this Mac, and tells you when an agent needs you.")
-                    .foregroundStyle(theme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            switch tm {
-            case .success(let url):
-                Step(mark: .done, title: "tm is installed") {
-                    Text(url.path)
-                        .font(theme.mono(.subheadline))
-                        .foregroundStyle(theme.muted)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .textSelection(.enabled)
-                }
-            case .failure:
-                Step(mark: .problem, title: "Install tm first") {
-                    Text("The app runs the tm on this Mac. Install it with Homebrew:")
-                        .foregroundStyle(theme.muted)
-                    CommandText(FirstRun.homebrew)
-                    Text("or with the install script, into ~/.local/bin:")
-                        .foregroundStyle(theme.muted)
-                    CommandText(FirstRun.script)
-                    HStack {
-                        Button("Look Again") { app.connect() }
-                        SettingsLink { Text("Set Its Path…") }
+        FlatSheet(width: 600) {
+            SheetTitle("Welcome to terminatr", detail: "The app shows the projects, coordinators and threads of the tm server on this Mac, and tells you when an agent needs you.")
+        } content: {
+            SheetBody {
+                switch tm {
+                case .success(let url):
+                    Step(mark: .done, title: "tm is installed") {
+                        Text(url.path)
+                            .font(theme.monoSized(Flat.label))
+                            .foregroundStyle(theme.muted)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .textSelection(.enabled)
+                    }
+                case .failure:
+                    Step(mark: .problem, title: "Install tm first") {
+                        Text("The app runs the tm on this Mac. Install it with Homebrew:")
+                            .foregroundStyle(theme.muted)
+                        CommandText(FirstRun.homebrew)
+                        Text("or with the install script, into ~/.local/bin:")
+                            .foregroundStyle(theme.muted)
+                        CommandText(FirstRun.script)
+                        HStack {
+                            Button("Look Again") { app.connect() }
+                            SettingsLink { Text("Set Its Path…") }
+                        }
                     }
                 }
+                server(tmFound: (try? tm.get()) != nil)
+                Step(mark: .info, title: "Notifications") {
+                    Text("terminatr tells you when an agent asks or needs approval, a task waits for review or is blocked, or a PR's checks fail: the project and the kind of need, not the agent's words. Settings chooses which.")
+                        .foregroundStyle(theme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                    NotificationPermission()
+                }
             }
-            server(tmFound: (try? tm.get()) != nil)
-            Step(mark: .info, title: "Notifications") {
-                Text("terminatr tells you when an agent asks or needs approval, a task waits for review or is blocked, or a PR's checks fail: the project and the kind of need, not the agent's words. Settings chooses which.")
-                    .foregroundStyle(theme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-                NotificationPermission()
-            }
-            HStack {
-                Spacer()
-                Button("Get Started") { dismiss() }
-                    .keyboardShortcut(.defaultAction)
-                    .buttonStyle(.borderedProminent)
-                    .tint(theme.action)
-            }
+        } footer: {
+            SheetEscape { dismiss() }
+            Button("Get Started") { dismiss() }
+                .buttonStyle(.flatPrimary)
+                .keyboardShortcut(.defaultAction)
         }
-        .font(theme.body(.body))
-        .padding(18)
-        .frame(width: 600)
         .onDisappear { UserDefaults.standard.set(true, forKey: FirstRun.doneKey) }
     }
 
@@ -75,7 +67,7 @@ struct FirstRunSheet: View {
         case .connected(let h):
             Step(mark: .done, title: "The server is running") {
                 Text("tm \(h.tm)" + (h.server.map { " · server \($0.version)" } ?? ""))
-                    .font(theme.mono(.subheadline))
+                    .font(theme.monoSized(Flat.label))
                     .foregroundStyle(theme.muted)
             }
         case .connecting:
@@ -115,7 +107,7 @@ private struct Step<Content: View>: View {
                 .accessibilityLabel(markWord)
             VStack(alignment: .leading, spacing: 6) {
                 Text(title)
-                    .font(theme.title(.headline, .bold))
+                    .font(theme.sized(Flat.text, .medium))
                 content
             }
             .frame(maxWidth: .infinity, alignment: .leading)
