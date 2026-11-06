@@ -89,7 +89,7 @@ public struct ToolLine: View {
             FlatIcon(.tool, side: 13)
                 .foregroundStyle(theme.muted)
             Text(entry.tool == "Bash" ? entry.text : "\(entry.tool.isEmpty ? "tool" : entry.tool) \(entry.text)")
-                .font(.system(size: 12.5 * theme.scale, design: .monospaced))
+                .font(theme.monoSized(12.5))
                 .foregroundStyle(theme.muted)
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -98,13 +98,13 @@ public struct ToolLine: View {
             if let r = entry.result {
                 if r.error {
                     Text(summary(r))
-                        .font(.system(size: 12.5 * theme.scale, design: .monospaced))
+                        .font(theme.monoSized(12.5))
                         .foregroundStyle(theme.attention)
                         .lineLimit(1)
                 }
             } else if entry.asksUser {
                 Text("· Waiting for your answer")
-                    .font(.system(size: 12.5 * theme.scale, design: .monospaced))
+                    .font(theme.monoSized(12.5))
                     .foregroundStyle(theme.question)
                     .lineLimit(1)
             } else {

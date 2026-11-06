@@ -177,7 +177,7 @@ public struct LeadRow<Accessory: View>: View {
                     TimelineView(.periodic(from: .now, by: 1)) { tl in
                         if let t = busy.elapsed(now: tl.date) {
                             Text(t)
-                                .font(.system(size: LeadSize.end * theme.scale, design: .monospaced))
+                                .font(theme.monoSized(LeadSize.end))
                                 .foregroundStyle(selected ? theme.ink : theme.muted)
                                 .monospacedDigit()
                                 .lineLimit(1)

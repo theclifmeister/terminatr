@@ -80,7 +80,7 @@ struct NeedCard: View {
                 HStack(spacing: 6) {
                     Dot(colour: theme.colour(need.kind))
                     Text(line)
-                        .font(.system(size: 12 * theme.scale, design: .monospaced))
+                        .font(theme.monoSized(12))
                         .foregroundStyle(theme.muted)
                         .lineLimit(2)
                 }

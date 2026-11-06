@@ -38,7 +38,7 @@ struct ComposerField: UIViewRepresentable {
 
     func updateUIView(_ v: FieldView, context: Context) {
         context.coordinator.parent = self
-        let font = UIFont.systemFont(ofSize: Flat.text * theme.scale)
+        let font = theme.conversationFont
         if v.font != font { v.font = font }
         v.textColor = UIColor(theme.ink)
         v.tintColor = UIColor(theme.action)

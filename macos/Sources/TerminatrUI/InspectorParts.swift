@@ -93,7 +93,7 @@ public struct FactRow: View {
                 .foregroundStyle(theme.muted)
                 .frame(minWidth: 62 * theme.scale, alignment: .leading)
             Text(value)
-                .font(mono ? .system(size: 12 * theme.scale, design: .monospaced) : theme.sized(13))
+                .font(mono ? theme.monoSized(12) : theme.sized(13))
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .textSelection(.enabled)

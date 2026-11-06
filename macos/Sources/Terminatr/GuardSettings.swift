@@ -130,7 +130,7 @@ private struct RefusalRow: View {
             .foregroundStyle(.secondary)
             ScrollView(.vertical) {
                 Text(refusal.subject)
-                    .font(.system(.callout, design: .monospaced))
+                    .font(JetBrainsMono.swiftUI(size: 12))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(6)

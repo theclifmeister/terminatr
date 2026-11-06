@@ -60,7 +60,7 @@ struct CodeView: NSViewRepresentable {
         let sameFile = c.id == id
         guard c.text != text || !sameFile || c.look != look else { return }
         let keep = s.contentView.bounds.origin
-        let font = NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
+        let font = JetBrainsMono.font(size: size)
         let lines = NSMutableParagraphStyle()
         lines.minimumLineHeight = ceil(size * 1.5)
         lines.maximumLineHeight = ceil(size * 1.5)
@@ -69,7 +69,7 @@ struct CodeView: NSViewRepresentable {
         v.textStorage?.setAttributedString(NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: NSColor(theme.ink), .paragraphStyle: lines]))
         v.insertionPointColor = NSColor(theme.ink)
         v.selectedTextAttributes = [.backgroundColor: NSColor(theme.selection)]
-        ruler.update(text: text, font: NSFont.monospacedDigitSystemFont(ofSize: size - 1, weight: .regular), ink: NSColor(theme.faint))
+        ruler.update(text: text, font: JetBrainsMono.font(size: size - 1), ink: NSColor(theme.faint))
         v.sizeToFit()
         if sameFile {
             s.contentView.scroll(to: keep)
@@ -85,7 +85,7 @@ struct CodeView: NSViewRepresentable {
 private final class LineNumbers: NSRulerView {
     private weak var text: NSTextView?
     private var starts = [0]
-    private var numberFont = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+    private var numberFont = JetBrainsMono.font(size: 11)
     private var ink = NSColor.secondaryLabelColor
 
     init(scrollView: NSScrollView, text: NSTextView) {

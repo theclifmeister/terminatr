@@ -196,7 +196,7 @@ enum LinkConfirm {
 /// program that takes the swipe (PaneScroll.swipe) gets it instead
 /// past the screen's edges, as wheel ticks or arrow keys.
 final class PhonePaneHost: UIScrollView, UIScrollViewDelegate {
-    let terminal = PhoneMirrorView(frame: .zero, font: UIFont.monospacedSystemFont(ofSize: PaneZoom.largest, weight: .regular))
+    let terminal = PhoneMirrorView(frame: .zero, font: JetBrainsMono.font(size: PaneZoom.largest))
     private var pane: (cols: Int, rows: Int)?
     /// The pinch's scale on the fitted font.
     private var zoom: CGFloat = 1
@@ -354,10 +354,10 @@ final class PhonePaneHost: UIScrollView, UIScrollViewDelegate {
         place()
     }
 
-    /// A cell's width per point of font size: the system's monospaced
-    /// font's, as SwiftTerm measures a cell.
+    /// A cell's width per point of font size: JetBrains Mono's, as SwiftTerm
+    /// measures a cell.
     static let advance: CGFloat = {
-        let f = UIFont.monospacedSystemFont(ofSize: 100, weight: .regular)
+        let f = JetBrainsMono.font(size: 100)
         return ("W" as NSString).size(withAttributes: [.font: f]).width / 100
     }()
 
@@ -536,7 +536,7 @@ final class PhoneMirrorView: TerminalView {
             // stays.
             let origin = frame.origin
             frame.size = .zero
-            font = UIFont.monospacedSystemFont(ofSize: fontSize, weight: .regular)
+            font = JetBrainsMono.font(size: fontSize)
             frame.origin = origin
         }
         let t = getTerminal()

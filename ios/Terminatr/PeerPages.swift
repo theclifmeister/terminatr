@@ -280,7 +280,7 @@ private struct PeerBoardPage: View {
                 ListRow {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(t.ref)
-                            .font(.system(size: 12.5 * theme.scale, design: .monospaced))
+                            .font(theme.monoSized(12.5))
                             .foregroundStyle(theme.muted)
                             .frame(minWidth: 34 * theme.scale, alignment: .leading)
                         Text(t.title)
@@ -290,7 +290,7 @@ private struct PeerBoardPage: View {
                         Spacer(minLength: 4)
                         if !t.steps.isEmpty {
                             Text("\(t.steps.filter(\.done).count)/\(t.steps.count)")
-                                .font(.system(size: 12.5 * theme.scale, design: .monospaced))
+                                .font(theme.monoSized(12.5))
                                 .foregroundStyle(theme.muted)
                         }
                     }
