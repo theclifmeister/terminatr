@@ -17,8 +17,10 @@
 //
 // A scope OpenFar opened answers a paired server, and holds more back: text
 // only, never what is git-ignored, and no contents under a name that holds
-// secrets or in a nested checkout (withheld.go), where a link leads as well
-// as by its name.
+// secrets, in a nested checkout, of a file with other names or of a private
+// key (withheld.go), where a link leads as well as by its name. A path answers
+// only as the file system spells it, and an ignored one the same whether it is
+// there or not.
 package filetree
 
 import (
@@ -78,6 +80,8 @@ type Scope struct {
 	far bool
 	// beforeOpen stands in a test for a link swapped after the gate.
 	beforeOpen func()
+	// gitRan stands in a test to count git's runs.
+	gitRan func(args []string)
 }
 
 // handlePath is fsx.HandlePath; a test takes it away, as on a system with
@@ -184,6 +188,9 @@ func (s *Scope) resolve(rel string) (string, error) {
 func (s *Scope) git(ctx context.Context, o gitx.Opts, args ...string) (string, bool, error) {
 	o.Tree = s.tree
 	o.Config = append(o.Config, "core.quotepath=off")
+	if s.gitRan != nil {
+		s.gitRan(args)
+	}
 	return gitx.Output(ctx, "", o, args...)
 }
 
@@ -277,7 +284,7 @@ func (s *Scope) read(ctx context.Context, rel string, offset int64, ignored, bin
 	if offset < 0 {
 		return res, fmt.Errorf("%w: offset %d", ErrPath, offset)
 	}
-	if err := s.farName(rel); err != nil {
+	if err := s.farGate(ctx, rel); err != nil {
 		return res, err
 	}
 	binary = binary && !s.far
@@ -308,6 +315,17 @@ func (s *Scope) read(ctx context.Context, rel string, offset int64, ignored, bin
 		res.Binary = true
 		if !binary {
 			return res, nil
+		}
+	}
+	if s.far {
+		// All a chunk could come from: a chunk from inside a key shows no mark.
+		all := make([]byte, min(fi.Size(), most))
+		n, err := f.ReadAt(all, 0)
+		if err != nil && err != io.EOF {
+			return res, fmt.Errorf("%w: %s: %v", ErrGone, rel, err)
+		}
+		if holdsPrivateKey(all[:n]) {
+			return proto.FilesReadResult{}, fmt.Errorf("%w: %s", ErrWithheld, rel)
 		}
 	}
 	want := min(fi.Size(), most) - offset
@@ -358,7 +376,14 @@ func (s *Scope) openGated(ctx context.Context, rel string, ignored bool) (*os.Fi
 		return nil, nil, err
 	}
 	at, err := s.openedAt(f, fi, rel)
-	if err == nil && at != rel {
+	switch {
+	case err != nil:
+	case s.far && fileLinked(f, fi):
+		err = fmt.Errorf("%w: %s", ErrWithheld, rel)
+	case s.far && at != rel:
+		// Swapped since, or another spelling of it: either way, not there.
+		err = fmt.Errorf("%w: %s", ErrGone, rel)
+	case at != rel:
 		err = s.gate(ctx, at, ignored)
 	}
 	if err != nil {
@@ -389,6 +414,9 @@ func (s *Scope) openedAt(f *os.File, fi fs.FileInfo, rel string) (string, error)
 		name = "."
 	}
 	if now, err := r.Stat(name); err != nil || !os.SameFile(fi, now) {
+		return "", fmt.Errorf("%w: %s", ErrGone, rel)
+	}
+	if s.far && !spelledAsStored(r, at) {
 		return "", fmt.Errorf("%w: %s", ErrGone, rel)
 	}
 	return at, nil
@@ -450,7 +478,7 @@ func (s *Scope) List(ctx context.Context, rel string, o Options, cs *changes.Cha
 	}
 	if s.far {
 		o.Ignored = false
-		if err := s.farName(rel); err != nil {
+		if err := s.farGate(ctx, rel); err != nil {
 			return res, err
 		}
 	}
@@ -782,8 +810,9 @@ func (s *Scope) stamp(fp string, folders []string, ign map[string]bool) string {
 
 // stampFolder writes folder rel's entries, sorted by the file system or
 // not as it reads them, into w: names, sizes, times and modes. To a far
-// scope an ignored or withheld folder doesn't answer, an ignored entry
-// doesn't count and a withheld one counts by its name.
+// scope an ignored or withheld folder, or one spelled other than the file
+// system does, doesn't answer, an ignored entry doesn't count and a withheld
+// one counts by its name.
 func (s *Scope) stampFolder(w io.Writer, rel string, ign map[string]bool) {
 	rel, err := CleanPath(rel)
 	if err != nil || s.farName(rel) != nil {
@@ -804,6 +833,11 @@ func (s *Scope) stampFolder(w io.Writer, rel string, ign map[string]bool) {
 	if !fi.IsDir() {
 		return
 	}
+	if s.far {
+		if at, err := s.openedAt(f, fi, real); err != nil || at != real {
+			return
+		}
+	}
 	ents, _ := f.ReadDir(maxScan)
 	slices.SortFunc(ents, func(a, b fs.DirEntry) int { return strings.Compare(a.Name(), b.Name()) })
 	for _, e := range ents {
@@ -815,6 +849,10 @@ func (s *Scope) stampFolder(w io.Writer, rel string, ign map[string]bool) {
 				continue
 			}
 			if withheldName(e.Name()) {
+				fmt.Fprintf(w, "%s\x00", e.Name())
+				continue
+			}
+			if fi, err := e.Info(); err == nil && fi.Mode().IsRegular() && fsx.Links(fi) > 1 {
 				fmt.Fprintf(w, "%s\x00", e.Name())
 				continue
 			}

@@ -301,7 +301,7 @@ func TestRemoteFilesWords(t *testing.T) {
 	for code, want := range map[string]string{
 		proto.ErrFilesOff:       "mini doesn't share web's files",
 		proto.ErrNotShared:      "mini doesn't share web any more",
-		proto.ErrWithheld:       "its name says it may hold secrets, so it stays on mini",
+		proto.ErrWithheld:       "it may hold secrets, so it stays on mini",
 		proto.ErrIgnored:        "git-ignored files stay on mini",
 		proto.ErrRateLimited:    "mini is slow to answer",
 		proto.ErrRefused:        "mini's answer doesn't add up",

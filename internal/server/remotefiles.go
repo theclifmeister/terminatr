@@ -63,7 +63,7 @@ func remoteFilesError(alias, slug string, err error) *proto.Error {
 	case proto.ErrNotShared:
 		return proto.Errorf(proto.ErrNotShared, "%s doesn't share %s any more", alias, slug)
 	case proto.ErrWithheld:
-		return proto.Errorf(proto.ErrWithheld, "its name says it may hold secrets, so it stays on %s", alias)
+		return proto.Errorf(proto.ErrWithheld, "it may hold secrets, so it stays on %s", alias)
 	case proto.ErrIgnored:
 		return proto.Errorf(proto.ErrIgnored, "git-ignored files stay on %s", alias)
 	case proto.ErrRefused:

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -57,6 +58,13 @@ func TestWithheldNames(t *testing.T) {
 		".ssh": {false, true}, ".AWS": {false, true}, ".gnupg": {false, true}, ".kube": {false, true},
 		"terraform.tfstate": {false, true}, "terraform.tfstate.backup": {false, true},
 		"main.go": {false, false}, "environment": {false, false}, "README.md": {false, false},
+		".envrc": {false, true}, ".dev.vars": {false, true}, ".secrets": {false, true}, "secrets": {false, true}, "SECRETS": {false, true},
+		"prod.tfvars": {false, true}, "prod.tfvars.json": {false, true}, ".pgpass": {false, true}, ".docker": {false, true}, ".htpasswd": {false, true},
+		"key.p8": {false, true}, "key.ppk": {false, true}, ".vault-token": {false, true}, ".boto": {false, true}, ".s3cfg": {false, true},
+		"_netrc": {false, true}, ".mcp.json": {false, true}, "settings.local.json": {false, true}, "service-account.json": {false, true},
+		"application_default_credentials.json": {false, true}, "token.json": {false, true}, "auth.json": {false, true}, ".azure": {false, true},
+		".gcloud": {false, true}, "id_rsa.pub": {false, true}, "id_work": {false, true}, "prod.env": {false, true}, "Prod.ENV.": {false, true},
+		"settings.json": {false, false}, "authors.json": {false, false}, "secretary.go": {false, false}, "idle.go": {false, false}, "my.env.example": {false, false},
 	} {
 		if got := SecretName(name); got != want[0] {
 			t.Errorf("SecretName(%q) = %v", name, got)
@@ -108,7 +116,7 @@ func TestFarRead(t *testing.T) {
 }
 
 // TestFarReadSwapped: a link to a withheld file swapped in after the gate
-// reads nothing.
+// reads nothing, nor a hard link to one.
 func TestFarReadSwapped(t *testing.T) {
 	if _, ok := handlePathWorks(t); !ok {
 		t.Skip("this system has none")
@@ -117,8 +125,14 @@ func TestFarReadSwapped(t *testing.T) {
 	link := filepath.Join(s.Root, "swap")
 	write(t, s.Root, "swap", "plain\n")
 	s.beforeOpen = func() { os.Remove(link); os.Symlink(".env", link) }
-	if res, err := s.Read(context.Background(), "swap", 0, false); !errors.Is(err, ErrWithheld) {
+	if res, err := s.Read(context.Background(), "swap", 0, false); !errors.Is(err, ErrGone) {
 		t.Errorf("through a swapped link: %q %v", res.Data, err)
+	}
+	os.Remove(link)
+	write(t, s.Root, "swap", "plain\n")
+	s.beforeOpen = func() { os.Remove(link); os.Link(filepath.Join(s.Root, ".env"), link) }
+	if res, err := s.Read(context.Background(), "swap", 0, false); !errors.Is(err, ErrWithheld) {
+		t.Errorf("through a swapped hard link: %q %v", res.Data, err)
 	}
 }
 
@@ -331,5 +345,275 @@ func TestFarStamp(t *testing.T) {
 	touch("build/new3.txt")
 	if c.Stamp(ctx, s, []string{""}) != f1 {
 		t.Error("a cached far stamp moved for an ignored file")
+	}
+}
+
+// TestFarHardLink: a file with another name, in the root or out of it, says
+// its name alone and opens for nothing; a near scope reads on.
+func TestFarHardLink(t *testing.T) {
+	s := far(t)
+	ctx := context.Background()
+	if err := os.Link(filepath.Join(s.Root, ".env"), filepath.Join(s.Root, "plain.txt")); err != nil {
+		t.Fatal(err)
+	}
+	outside := filepath.Join(filepath.Dir(s.Root), "secret.txt")
+	if err := os.Link(outside, filepath.Join(s.Root, "outside.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("plain.txt", filepath.Join(s.Root, "tolinked")); err != nil {
+		t.Fatal(err)
+	}
+	cs := marksFor(t, s)
+	for _, p := range []string{"plain.txt", "outside.txt", "tolinked"} {
+		if res, err := s.Read(ctx, p, 0, false); !errors.Is(err, ErrWithheld) || res.Data != nil {
+			t.Errorf("read %s: %q %v", p, res.Data, err)
+		}
+		if res, err := s.Diff(ctx, p, false, cs); !errors.Is(err, ErrWithheld) {
+			t.Errorf("diff %s: %+v %v", p, res, err)
+		}
+	}
+	res, err := s.List(ctx, "", Options{}, cs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := 0
+	for _, e := range res.Entries {
+		switch e.Name {
+		case "plain.txt", "outside.txt", "tolinked":
+			seen++
+			if !e.Withheld || e.Size != 0 || !e.MTime.IsZero() {
+				t.Errorf("%+v, want its name alone", e)
+			}
+		case "README.md":
+			if e.Withheld {
+				t.Errorf("%+v", e)
+			}
+		}
+	}
+	if seen != 3 {
+		t.Errorf("listed %d of them: %s", seen, names(res.Entries))
+	}
+	was := s.stamp("", []string{""}, s.farIgnored(ctx))
+	if err := os.WriteFile(outside, []byte("the outside, and more\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if s.stamp("", []string{""}, s.farIgnored(ctx)) != was {
+		t.Error("the stamp moved for what a file with another name holds")
+	}
+	near, err := Open(ctx, s.Root, s.Root, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res, err := near.Read(ctx, "plain.txt", 0, false); err != nil || len(res.Data) == 0 {
+		t.Errorf("near: %q %v", res.Data, err)
+	}
+}
+
+// aKey is a private key's block as it stands in a file, not as this one says it.
+func aKey(end string) string {
+	return "-----BEGIN OPENSSH " + "PRIVATE KEY-----" + end + "b3BlbnNzaC1rZXktdjEAAAAABG5vbmU" + end + "-----END OPENSSH " + "PRIVATE KEY-----" + end
+}
+
+// TestFarReadKey: a private key's block under a plain name doesn't cross from
+// any offset, nor as lines a diff removed; what only names the mark does, and
+// a near scope reads on.
+func TestFarReadKey(t *testing.T) {
+	s := far(t)
+	ctx := context.Background()
+	for name, text := range map[string]string{
+		"plain.txt":  "intro\n" + aKey("\n"),
+		"crlf.txt":   aKey("\r\n"),
+		"gcp.txt":    `{"key": "` + aKey(`\n`) + `"}`,
+		"late.txt":   strings.Repeat("a line\n", 40000) + aKey("\n"),
+		"pgp.txt":    "-----BEGIN PGP " + "PRIVATE KEY BLOCK-----\n\nlQOYBF0aaaaaaaaaaaaaaaaaaaaaa\n",
+		"locked.txt": "-----BEGIN RSA " + "PRIVATE KEY-----\nProc-Type: 4,ENCRYPTED\n",
+	} {
+		write(t, s.Root, name, text)
+		for _, at := range []int64{0, 30, int64(len(text)) - 5} {
+			if res, err := s.Read(ctx, name, at, false); !errors.Is(err, ErrWithheld) || res.Data != nil {
+				t.Errorf("%s at %d: %q %v", name, at, res.Data, err)
+			}
+		}
+	}
+	write(t, s.Root, "names.go", `const mark = "-----BEGIN `+`PRIVATE KEY-----"`+"\nfunc f() {}\n")
+	if res, err := s.Read(ctx, "names.go", 0, false); err != nil || len(res.Data) == 0 {
+		t.Errorf("a program naming the mark: %q %v", res.Data, err)
+	}
+	near, err := Open(ctx, s.Root, s.Root, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res, err := near.Read(ctx, "plain.txt", 0, false); err != nil || len(res.Data) == 0 {
+		t.Errorf("near: %q %v", res.Data, err)
+	}
+
+	write(t, s.Root, "was.txt", "keep\n"+aKey("\n"))
+	gittest.Run(t, s.Root, "add", "was.txt")
+	gittest.Run(t, s.Root, "commit", "-q", "-m", "x")
+	write(t, s.Root, "was.txt", "keep\n")
+	cs := marksFor(t, s)
+	if res, err := s.Diff(ctx, "was.txt", false, cs); !errors.Is(err, ErrWithheld) || res.Hunks != nil {
+		t.Errorf("a removed key: %+v %v", res, err)
+	}
+	if res, err := near.Diff(ctx, "was.txt", false, cs); err != nil || len(res.Hunks) == 0 {
+		t.Errorf("near: %+v %v", res, err)
+	}
+}
+
+// TestFarSpellings: a path answers only as the file system spells it. Another
+// spelling lists nothing and moves no stamp, also where the system can't say
+// from the open file; a link in another spelling says its name alone.
+func TestFarSpellings(t *testing.T) {
+	for _, withHandle := range []bool{true, false} {
+		s := far(t)
+		ctx := context.Background()
+		if _, err := os.Lstat(filepath.Join(s.Root, "SRC")); err != nil {
+			t.Skip("this file system tells case")
+		}
+		if !withHandle {
+			was := handlePath
+			handlePath = func(*os.File) (string, bool) { return "", false }
+			t.Cleanup(func() { handlePath = was })
+		}
+		// Git needn't fold as the file system does.
+		gittest.Run(t, s.Root, "config", "core.ignorecase", "false")
+		write(t, s.Root, "src/kept.log", "SECRET\n")
+		write(t, s.Root, "folded/kept.log", "SECRET\n")
+		cs := marksFor(t, s)
+		for _, p := range []string{"SRC", "\u017frc", "BUILD", "Folded"} {
+			if res, err := s.List(ctx, p, Options{}, cs); !errors.Is(err, ErrGone) && !errors.Is(err, ErrIgnored) {
+				t.Errorf("list %q: %s %v", p, names(res.Entries), err)
+			}
+			was := s.stamp("", []string{p}, s.farIgnored(ctx))
+			write(t, s.Root, strings.ToLower(strings.ReplaceAll(p, "\u017f", "s"))+"/moved.txt", "more\n")
+			if s.stamp("", []string{p}, s.farIgnored(ctx)) != was {
+				t.Errorf("the stamp of %q moved", p)
+			}
+		}
+		res, err := s.List(ctx, "src", Options{}, marksFor(t, s))
+		if err != nil || !strings.Contains(names(res.Entries), "main.go") || strings.Contains(names(res.Entries), "kept.log") {
+			t.Errorf("as it is spelled: %s %v", names(res.Entries), err)
+		}
+		// Whether it's there or not, another spelling of an ignored file
+		// answers the same.
+		_, there := s.Read(ctx, "X.LOG", 0, false)
+		_, absent := s.Read(ctx, "ABSENT.LOG", 0, false)
+		for _, want := range []error{ErrGone, ErrIgnored} {
+			if errors.Is(there, want) != errors.Is(absent, want) {
+				t.Errorf("there: %v, absent: %v", there, absent)
+			}
+		}
+		if err := os.Symlink("BUILD/out.txt", filepath.Join(s.Root, "tospelled")); err != nil {
+			t.Fatal(err)
+		}
+		if res, err = s.List(ctx, "", Options{}, marksFor(t, s)); err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range res.Entries {
+			if e.Name == "tospelled" && (!e.Withheld || e.Size != 0 || !e.MTime.IsZero()) {
+				t.Errorf("a link in another spelling: %+v", e)
+			}
+		}
+	}
+}
+
+// TestFarIgnoredSays: an ignored path answers the same whether it is there or
+// not, read or listed, also through a link; what is tracked or isn't ignored
+// answers as ever, and a link's target is still looked at.
+func TestFarIgnoredSays(t *testing.T) {
+	s := far(t)
+	ctx := context.Background()
+	write(t, s.Root, ".gitignore", "build/\n*.log\nonlydir/\n")
+	write(t, s.Root, "onlydir/x", "SECRET\n")
+	write(t, s.Root, "src/there.log", "SECRET\n")
+	write(t, s.Root, "old.log", "kept\n")
+	gittest.Run(t, s.Root, "add", "-f", "old.log")
+	if err := os.Symlink("src", filepath.Join(s.Root, "lnk")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("absent-target", filepath.Join(s.Root, "dangling")); err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range []string{"build", "build/out.txt", "build/absent", "x.log", "absent.log", "x.log/under", "absent.log/under",
+		"onlydir", "onlydir/x", "onlydir/absent", "lnk/there.log", "lnk/absent.log", "tolog"} {
+		if res, err := s.Read(ctx, p, 0, false); !errors.Is(err, ErrIgnored) {
+			t.Errorf("read %s: %q %v", p, res.Data, err)
+		}
+		if res, err := s.List(ctx, p, Options{}, nil); !errors.Is(err, ErrIgnored) {
+			t.Errorf("list %s: %s %v", p, names(res.Entries), err)
+		}
+	}
+	for _, p := range []string{"absent.txt", "src/absent.txt", "lnk/absent.txt", "dangling"} {
+		if res, err := s.Read(ctx, p, 0, false); !errors.Is(err, ErrGone) {
+			t.Errorf("read %s: %q %v", p, res.Data, err)
+		}
+	}
+	for p, want := range map[string]string{"old.log": "kept\n", "lnk/main.go": "package main\n"} {
+		if res, err := s.Read(ctx, p, 0, false); err != nil || string(res.Data) != want {
+			t.Errorf("read %s: %q %v", p, res.Data, err)
+		}
+	}
+	if res, err := s.Read(ctx, "nested/absent", 0, false); !errors.Is(err, ErrWithheld) {
+		t.Errorf("in a nested checkout: %q %v", res.Data, err)
+	}
+	if res, err := s.Read(ctx, "src", 0, false); !errors.Is(err, ErrNotFile) {
+		t.Errorf("a folder: %q %v", res.Data, err)
+	}
+}
+
+// TestFarListOneGit: however many links a listing has, git is asked once for
+// all of them, each still answers for what it leads to, and git that can't say
+// holds them all back.
+func TestFarListOneGit(t *testing.T) {
+	s := far(t)
+	ctx := context.Background()
+	for _, name := range []string{"plain", ":colon", "with space", "star*", "é"} {
+		write(t, s.Root, "data/"+name, "text\n")
+	}
+	write(t, s.Root, "data/hidden.log", "SECRET\n")
+	dir := filepath.Join(s.Root, "many")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for i, to := range []string{"plain", ":colon", "with space", "star*", "é", "hidden.log"} {
+		if err := os.Symlink("../data/"+to, filepath.Join(dir, "l"+string(rune('a'+i)))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := range 200 {
+		if err := os.Symlink("../README.md", filepath.Join(dir, "r"+strings.Repeat("x", i))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink("..", filepath.Join(dir, "totop")); err != nil {
+		t.Fatal(err)
+	}
+	asked := 0
+	s.gitRan = func(args []string) {
+		if slices.Contains(args, "check-ignore") {
+			asked++
+		}
+	}
+	res, err := s.List(ctx, "many", Options{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if asked != 3 { // the folder's own two gates, and all its links
+		t.Errorf("check-ignore ran %d times", asked)
+	}
+	if len(res.Entries) != 207 {
+		t.Fatalf("%d entries", len(res.Entries))
+	}
+	for _, e := range res.Entries {
+		if want := e.Name == "lf"; e.Withheld != want {
+			t.Errorf("%+v", e)
+		}
+	}
+	s.tree.Dir = filepath.Join(s.Root, "absent")
+	s.holdBack(ctx, &res)
+	for _, e := range res.Entries {
+		if !e.Withheld && e.Name != "totop" {
+			t.Errorf("git can't say: %+v", e)
+		}
 	}
 }

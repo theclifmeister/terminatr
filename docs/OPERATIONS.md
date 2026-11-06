@@ -696,12 +696,12 @@ A paired server sees a shared project's state, not its code. To let `studio` rea
 
 ```
 $ tm peer files studio acme-api on
-Files on for studio on acme-api: it reads the project's worktrees and repos, read-only, not git-ignored files or files named like secrets.
+Files on for studio on acme-api: it reads the project's worktrees and repos, read-only, not git-ignored files or files with common secret names.
 ```
 
 Or in the Network popup (`N`), in the paired server's details: `files` asks first, and says what that means. `studio` can then read every thread's worktree of the project and every repo on its list at its main checkout, uncommitted work included, now and as the list grows: `F` on the session in the TUI, the Files panel on its Mac. It reads text only, up to 1 MiB of a file; a binary file shows its name and size. It can't change anything, and what it has read can't be called back.
 
-Git-ignored files stay here, and there is no way to ask for them. So do the contents of files named like secrets (`.env`, keys and credentials, `.ssh/`, `.aws/`, `*.tfstate` and the like), which list by name and don't open. A secret committed under another name does not stay: if a project's tracked files hold one, leave this off.
+Git-ignored files stay here, and there is no way to ask for them. So do the contents of files with common secret names (`.env`, keys and credentials, `.ssh/`, `.aws/`, `*.tfstate` and the like), which list by name and don't open. A secret committed under another name does not stay: if a project's tracked files hold one, leave this off.
 
 `tm peer files studio acme-api off` turns it off at once: its next read is refused, and the tree and text leave its screens within seconds. Turning off sharing, or archiving, deleting or renaming the project, turns it off too, and sharing again doesn't bring it back. Each change is in the project's journal; the details say when it last read something.
 

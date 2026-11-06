@@ -579,7 +579,7 @@ func withheldWords(e proto.FileEntry, far string) string {
 	if e.Kind == proto.FileKindDir {
 		return "it may hold secrets, or be a checkout of its own, so it stays on " + far
 	}
-	return "its name says it may hold secrets, so it stays on " + far
+	return "it may hold secrets, so it stays on " + far
 }
 
 // fileRowLine is a row: its fold mark and name, its mark at the end. far is

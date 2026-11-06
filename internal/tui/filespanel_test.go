@@ -1082,7 +1082,7 @@ func TestFilesFar(t *testing.T) {
 	}
 	// The withheld row says why, and enter doesn't read it.
 	filesPress(c, "down")
-	if !strings.Contains(infoText(c), "its name says it may hold secrets") {
+	if !strings.Contains(infoText(c), "it may hold secrets") {
 		t.Fatalf("no reason under .env:\n%s", infoText(c))
 	}
 	filesPress(c, "enter")
