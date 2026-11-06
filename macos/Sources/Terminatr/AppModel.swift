@@ -910,11 +910,15 @@ final class AppModel {
         var task: String?
         switch selection {
         case .project(let slug, let server):
-            session = server.isEmpty ? coordinatorSession(slug)?.id : nil
+            session = server.isEmpty ? coordinatorSession(slug)?.id : SessionRef(project: slug, server: server).session(in: peers)?.id
         case .session(let ref):
             session = sessionID(ref)
             if ref.isRemote {
                 task = ref.session(in: peers)?.task
+                if !ref.isCoordinator {
+                    let watched = peer(ref.server)?.projects.first { $0.project == ref.project }?.watched ?? []
+                    done = watched.first { $0.id == ref.thread }?.done ?? !watched.isEmpty
+                }
             } else if !ref.isCoordinator {
                 let t = thread(ref)
                 done = t?.record.done ?? true
@@ -923,9 +927,13 @@ final class AppModel {
         case .program, nil:
             break
         }
+        var far: FarFiles?
+        if let selection, !selection.server.isEmpty {
+            far = FarFiles.of(peer(selection.server), project: selection.project, caps: caps)
+        }
         return FilesPlace.of(selection, sessionID: session, threadDone: done, task: task,
                              readsWorktree: caps.contains("worktree-files"), hasLibrary: projectTabs.contains(.library),
-                             readsProgramLibrary: readsProgramLibrary)
+                             readsProgramLibrary: readsProgramLibrary, far: far)
     }
 
     /// Whether this tm lists a program's library: a director's Files view.

@@ -71,6 +71,10 @@ type PeerMirror struct {
 	// a project's Files then says whether it does, with this server. A tm
 	// without it can't, and is never asked.
 	Worktree bool `json:"worktree,omitempty"`
+	// FilesHere are this server's projects whose files it may read: this
+	// server's own switch for it, as peers.json says now. It reads nothing of
+	// them unless they are shared too.
+	FilesHere []string `json:"files_here,omitempty"`
 	// Uploads: the peer's sessions take files for a prompt (its hello lists
 	// session-upload), while Panes is write.
 	Uploads bool `json:"uploads,omitempty"`

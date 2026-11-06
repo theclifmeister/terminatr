@@ -234,8 +234,9 @@ type Safety struct {
 	// projects; it changes their order only (§4).
 	Pinned bool `json:"pinned"`
 	// Share offers the project to the paired servers (docs/SPEC.md
-	// §16.9): its state, read-only, never its files. Off until the user
-	// turns it on; a project's own, never all projects'.
+	// §16.9): its state, read-only. Its files cross only under their own
+	// switch (§16.18). Off until the user turns it on; a project's own, never
+	// all projects'.
 	Share bool `json:"share"`
 	// Merge is who merges a thread's PR: MergeCoordinator or MergeThread.
 	Merge string `json:"merge"`

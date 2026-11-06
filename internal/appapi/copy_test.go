@@ -375,8 +375,6 @@ func TestCopies(t *testing.T) {
 	check("library.list", homeOf(libraryOf), nil)
 	check("library.read", homeOf(libraryChunkOf), nil)
 	check("library.thumbnail", homeOf(libraryThumbnailOf), nil)
-	// Withheld is a paired server's mark: no folder of this server's has one.
-	check("files.list", homeOf(filesListOf), []string{".Entries[].Withheld"})
 	check("files.read", homeOf(filesChunkOf), nil)
 	check("files.stamp", homeOf(filesStampOf), nil)
 	check("files.repos", homeOf(filesReposOf), nil)

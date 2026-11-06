@@ -483,6 +483,69 @@ func SetPages(dir, alias, project string, on bool) (bool, error) {
 	return found, err
 }
 
+// SetFiles turns the files switch for the peer called alias, or named so,
+// on or off for project (docs/SPEC.md §16.18); false when there is none.
+func SetFiles(dir, alias, project string, on bool) (bool, error) {
+	if !pageSlug.MatchString(project) {
+		return false, fmt.Errorf("files: %q is not a project", project)
+	}
+	found := false
+	err := change(dir, func(peers []Peer) ([]Peer, error) {
+		alias := NamesOf(peers).Alias(alias)
+		for i := range peers {
+			if peers[i].Alias != alias {
+				continue
+			}
+			found = true
+			files := slices.DeleteFunc(slices.Clone(peers[i].Files), func(s string) bool { return s == project })
+			if on {
+				files = append(files, project)
+				slices.Sort(files)
+			}
+			if len(files) == 0 {
+				files = nil
+			}
+			peers[i].Files = files
+		}
+		return peers, nil
+	})
+	return found, err
+}
+
+// ClearFiles turns the files switch off for every peer on the projects drop
+// says go, and answers which were on, as alias and project. A file with
+// nothing to clear isn't written. Unlike the pages switch, this one doesn't
+// outlive sharing or the slug: a new project under an old name must not be
+// readable without being asked for again.
+func ClearFiles(dir string, drop func(project string) bool) ([][2]string, error) {
+	peers, err := LoadPeers(dir)
+	if err != nil {
+		return nil, err
+	}
+	if !slices.ContainsFunc(peers, func(p Peer) bool { return slices.ContainsFunc(p.Files, drop) }) {
+		return nil, nil
+	}
+	var cleared [][2]string
+	err = change(dir, func(peers []Peer) ([]Peer, error) {
+		cleared = nil
+		for i := range peers {
+			files := slices.DeleteFunc(slices.Clone(peers[i].Files), func(s string) bool {
+				if drop(s) {
+					cleared = append(cleared, [2]string{peers[i].Alias, s})
+					return true
+				}
+				return false
+			})
+			if len(files) == 0 {
+				files = nil
+			}
+			peers[i].Files = files
+		}
+		return peers, nil
+	})
+	return cleared, err
+}
+
 // Unpin drops the peer called alias, or named so; false when there is
 // none.
 func Unpin(dir, alias string) (bool, error) {

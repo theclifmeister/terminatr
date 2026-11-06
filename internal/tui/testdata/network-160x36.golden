@@ -42,10 +42,10 @@
 │    ■ infra             shared with you · + link (L)             · not running │                                                              │
 │                                                                               │ A shared project shows, read-only, in the sidebar of every   │
 │ ▾ ○ nas · offline 4m · relay                                        panes off │ paired server: what waits for you, the inbox, threads, tasks │
-│    ■ media · stale     shared with you · + link (L)                 ● working │ on deck and its sessions' states; never its files. Sharing   │
-│                                                                               │ asks first; it is the project's own Shared with paired       │
-│ ▾ devices                                                    D pairs a device │ servers setting.                                             │
-│    No device yet. D pairs one: a QR code to scan with the terminatr app on an │                                                              │
+│    ■ media · stale     shared with you · + link (L)                 ● working │ on deck and its sessions' states. Its files stay here unless │
+│                                                                               │ you turn on files for a server, in its details. Sharing asks │
+│ ▾ devices                                                    D pairs a device │ first; it is the project's own Shared with paired servers    │
+│    No device yet. D pairs one: a QR code to scan with the terminatr app on an │ setting.                                                     │
 │    iPhone or iPad.                                                            │                                                              │
 │                                                                               │                                                              │
 │                                                                               │                                                              │
@@ -80,6 +80,7 @@
 │ ▾ devices                                                    D pairs a device │   ○ types in them                                            │
 │    No device yet. D pairs one: a QR code to scan with the terminatr app on an │   ● reads their conversations, in its Mac app                │
 │    iPhone or iPad.                                                            │   ○ sees what your projects ask you, in full                 │
+│                                                                               │   ○ reads no files of yours                                  │
 │                                                                               │   panes (V)   off · [view] · write                           │
 │                                                                               │               it can watch the coordinators and threads of   │
 │                                                                               │               the projects you share, not type               │
@@ -92,7 +93,6 @@
 │                                                                               │ AND THE OTHER WAY                                            │
 │                                                                               │   work lets you watch its panes; its popups open here, read- │
 │                                                                               │   only                                                       │
-│                                                                               │   it shares acme-api, infra                                  │
 │                                                                                                                                              │
 │ S ask to share · E name · V panes · C conversations · N needs · U update relay · X unpair · enter fold · tab details · P pair · J join       │
 │ ? keys · esc close                                                                                                                           │

@@ -38,11 +38,11 @@
 │                                                           │ A shared project shows, read-only, in the    │
 │ ▾ ○ nas · offline 4m · relay                    panes off │ sidebar of every paired server: what waits   │
 │    ■ media · stale     shared with you · + link (L)       │ for you, the inbox, threads, tasks on deck   │
-│                                                           │ and its sessions' states; never its files.   │
-│ ▾ devices                                D pairs a device │ Sharing asks first; it is the project's own  │
-│    No device yet. D pairs one: a QR code to scan with the │ Shared with paired servers setting.          │
-│    terminatr app on an iPhone or iPad.                    │                                              │
-│                                                           │                                              │
+│                                                           │ and its sessions' states. Its files stay     │
+│ ▾ devices                                D pairs a device │ here unless you turn on files for a server,  │
+│    No device yet. D pairs one: a QR code to scan with the │ in its details. Sharing asks first; it is    │
+│    terminatr app on an iPhone or iPad.                    │ the project's own Shared with paired servers │
+│                                                           │ setting.                                     │
 │                                                           │                                              │
 │                                                           │                                              │
 │                                                           │                                              │
@@ -72,12 +72,12 @@
 │    terminatr app on an iPhone or iPad.                    │   ● reads their conversations, in its Mac    │
 │                                                           │     app                                      │
 │                                                           │   ○ sees what your projects ask you, in full │
+│                                                           │   ○ reads no files of yours                  │
 │                                                           │   panes (V)   off · [view] · write           │
 │                                                           │               it can watch the coordinators  │
 │                                                           │               and threads of the projects    │
 │                                                           │               you share, not type            │
 │                                                           │   chats (C)   [on] · off                     │
-│                                                           │               its Mac app reads the          │
 │                                                                                                          │
 │ S ask to share · E name · V panes · C conversations · N needs · U update relay · X unpair · enter fold   │
 │ tab details · P pair · J join · ? keys · esc close                                                       │

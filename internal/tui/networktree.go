@@ -487,7 +487,7 @@ func (nv *networkView) detail(m *dash, r netRow, w int) [2]string {
 		return [2]string{joinFit(l1, w), joinFit(append([]string{"panes: " + th().Accent.Render(netName(e)+" "+panesMay(panesLevel(e))) + " (V)"}, otherWay(mirror(m, e))...), w)}
 	case netProject:
 		if shared(m, r.slug) {
-			return [2]string{r.slug + " · shared with every paired server: they see its state, never its files",
+			return [2]string{r.slug + " · shared with every paired server: they see its state; files only where you turn them on",
 				th().Faint.Render("space stops sharing it, at once · L links it with another project")}
 		}
 		return [2]string{r.slug + " · not shared: paired servers don't see it", th().Faint.Render("space shares it with every paired server, asking first · L links it")}
