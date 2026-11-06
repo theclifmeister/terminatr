@@ -180,7 +180,7 @@ type Task struct {
 // otherwise from and to narrow the list to days (YYYY-MM-DD, both
 // inclusive, "none" for what nothing dates), archived reads the archive
 // too, query (mod API 1.20) keeps the tasks with each of its words in their
-// id or title, and offset and limit take a page (limit 0: all).
+// id, title or status, and offset and limit take a page (limit 0: all).
 type DoneOptions struct {
 	Groups   bool   `json:"groups,omitempty"`
 	Reveal   string `json:"reveal,omitempty"`
@@ -391,7 +391,7 @@ var Methods = []Method{
 	{Name: "tasks.list", Params: []Param{{Name: "slug", Type: typ[string]()}}, Result: typ[[]Task](), Needs: mod.PermProjectRead,
 		Doc: "A project's tasks, in board order."},
 	{Name: "tasks.done", Params: []Param{{Name: "slug", Type: typ[string]()}, {Name: "options", Type: typ[DoneOptions](), Optional: true}}, Result: typ[DoneTasks](), Needs: mod.PermProjectRead,
-		Doc: "A project's done tasks, newest first (mod API 1.16), from tm's task records only, no git, in the server's time zone: with options.groups Done's headings, the newest 7 days with work (at most 30 rows open), then older work by week, then by month, the archive's tasks counted; empty spans have no heading. Otherwise a page of the tasks, by days from options.from to options.to, the archive's too with options.archived, only those with each word of options.query in their id or title (mod API 1.20), whatever its case and accents."},
+		Doc: "A project's done tasks, newest first (mod API 1.16), from tm's task records only, no git, in the server's time zone: with options.groups Done's headings, the newest 7 days with work (at most 30 rows open), then older work by week, then by month, the archive's tasks counted; empty spans have no heading. Otherwise a page of the tasks, by days from options.from to options.to, the archive's too with options.archived, only those with each word of options.query in their id, title or status (mod API 1.20), whatever its case and accents."},
 	{Name: "designs.list", Params: []Param{{Name: "slug", Type: typ[string]()}}, Result: typ[[]Design](), Needs: mod.PermProjectRead,
 		Doc: "A project's designs (mod API 1.10), by name: those tm design set recorded and those a task names (archived tasks too), each with its status from its build tasks, its design task, page, decided answers and open questions. A task's design and after (tasks.list) say which tasks build which."},
 	{Name: "history.get", Params: []Param{{Name: "slug", Type: typ[string]()}}, Result: typ[proto.History](), Needs: mod.PermProjectRead,

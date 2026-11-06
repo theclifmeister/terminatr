@@ -1,5 +1,5 @@
 {
-  "name": "while the filter has words, Done is every task they find, the archive's too, without b, each row found by its id and title, read a page at a time; with no words it folds again",
+  "name": "while the filter has words, Done is every task they find, the archive's too, without b, each row found by its id, title and status, read a page at a time; with no words it folds again",
   "answers": [
     {
       "method": "tasks.list",
@@ -7,6 +7,14 @@
         "slug": "demo"
       },
       "result": [
+        {
+          "id": "T6",
+          "title": "Waiting for a look",
+          "status": "review",
+          "steps_done": 0,
+          "steps_total": 0,
+          "steps": []
+        },
         {
           "id": "T5",
           "title": "Idea for login",
@@ -33,6 +41,14 @@
         "slug": "demo"
       },
       "result": [
+        {
+          "id": "T6",
+          "title": "Waiting for a look",
+          "status": "review",
+          "steps_done": 0,
+          "steps_total": 0,
+          "steps": []
+        },
         {
           "id": "T5",
           "title": "Idea for login",
@@ -117,6 +133,14 @@
         "slug": "demo"
       },
       "result": [
+        {
+          "id": "T6",
+          "title": "Waiting for a look",
+          "status": "review",
+          "steps_done": 0,
+          "steps_total": 0,
+          "steps": []
+        },
         {
           "id": "T5",
           "title": "Idea for login",
@@ -206,11 +230,18 @@
                 "kind": "table",
                 "rows": [
                   {
+                    "id": "g:needs-you"
+                  },
+                  {
+                    "id": "T6",
+                    "find": "T6 Waiting for a look review"
+                  },
+                  {
                     "id": "g:backlog"
                   },
                   {
                     "id": "T5",
-                    "find": "T5 Idea for login"
+                    "find": "T5 Idea for login open"
                   },
                   {
                     "id": "g:done",
@@ -257,6 +288,13 @@
                 "kind": "table",
                 "rows": [
                   {
+                    "id": "g:needs-you"
+                  },
+                  {
+                    "id": "T6",
+                    "find": "T6 Waiting for a look review"
+                  },
+                  {
                     "id": "g:backlog"
                   },
                   {
@@ -268,7 +306,7 @@
                   },
                   {
                     "id": "T2",
-                    "find": "T2 Login done on board"
+                    "find": "T2 Login done on board done"
                   },
                   {
                     "id": "m:found",
@@ -312,6 +350,13 @@
                 "kind": "table",
                 "rows": [
                   {
+                    "id": "g:needs-you"
+                  },
+                  {
+                    "id": "T6",
+                    "find": "T6 Waiting for a look review"
+                  },
+                  {
                     "id": "g:backlog"
                   },
                   {
@@ -326,7 +371,7 @@
                   },
                   {
                     "id": "T1",
-                    "find": "T1 Old café login",
+                    "find": "T1 Old café login done",
                     "actions": [
                       {
                         "id": "task.show",
@@ -362,6 +407,13 @@
               {
                 "kind": "table",
                 "rows": [
+                  {
+                    "id": "g:needs-you"
+                  },
+                  {
+                    "id": "T6",
+                    "find": "T6 Waiting for a look review"
+                  },
                   {
                     "id": "g:backlog"
                   },

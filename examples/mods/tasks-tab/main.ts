@@ -19,8 +19,8 @@
 // on. The mod draws what tm groups, so an empty week has no heading. While
 // the core's filter has words (ui.filter), Done is every task they find,
 // the archive's too, with or without b, read a page at a time: the board's
-// filter on the Mac finds the same, in a task's id and title alone (a row's
-// find).
+// filter on the Mac finds the same by id and title. A row's find adds its
+// status, which the Mac's doesn't look in: /review lists the tasks in review.
 import type { TM } from "./types/tm";
 declare const $: TM;
 
@@ -175,7 +175,7 @@ function row(project: string, t: TM.Task, prio: boolean, timeOnly = false): TM.V
   if (more) rest.push({ text: (rest.length > 0 ? "  " : "") + more, role: "faint" });
   const r: Record<string, TM.Value> = {
     id: t.id,
-    find: `${t.id} ${t.title}`,
+    find: `${t.id} ${t.title} ${t.status}`,
     cells: [[{ text: t.id }], ...(prio ? [t.status === "done" ? [] : priority(t.priority)] : []), [{ text: t.title }], status(t.status, timeOnly ? timeOf(t.done_label) : t.done_label), rest] as TM.Value,
     actions: actions(project, t) as TM.Value,
   };

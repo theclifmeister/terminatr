@@ -48,7 +48,8 @@ func TestModDone(t *testing.T) {
 
 // TestModDoneQuery: $.tasks.done's query finds done tasks on the board and
 // in the archive by the words of their id and title, as the Mac's board
-// filter does, and the page counts only what it found.
+// filter does, and of their status, which it doesn't; the page counts only
+// what it found.
 func TestModDoneQuery(t *testing.T) {
 	t.Setenv("TERMINATR_HOME", t.TempDir())
 	p := newWatchProject(t)
@@ -71,7 +72,9 @@ func TestModDoneQuery(t *testing.T) {
 		{"login fix", []string{"T2"}},
 		{"cafe", []string{"T4"}},
 		{"t3", []string{"T3"}},
-		{"done", nil}, // its status is no word of its id or title
+		{"done", []string{"T2", "T3", "T4"}}, // the status, in the TUI's filter alone
+		{"review", nil},
+		{"done fix", []string{"T2"}},
 		{"", []string{"T2", "T3", "T4"}},
 	} {
 		got, err := modDone(p, modapi.DoneOptions{Query: c.query, Archived: true}, now)

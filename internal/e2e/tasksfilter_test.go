@@ -11,7 +11,8 @@ import (
 // TestTasksTabFilterReachesDone: / on the Tasks tab finds done tasks that
 // aren't drawn, on the board and in the archive, with Done folded, by the
 // words of their id and title, as the Mac's board filter does; an archived
-// one opens; esc folds them again.
+// one opens; esc folds them again; a status word finds its tasks too, which
+// the Mac's doesn't.
 func TestTasksTabFilterReachesDone(t *testing.T) {
 	env := New(t)
 	w := env.Window(100, 24)
@@ -21,6 +22,8 @@ func TestTasksTabFilterReachesDone(t *testing.T) {
 	env.MustCLI("task", "add", "The old needle", "--project", slug)
 	env.MustCLI("task", "add", "A needle on the board", "--project", slug)
 	env.MustCLI("task", "add", "Something else", "--project", slug)
+	env.MustCLI("task", "add", "Waiting for a look", "--project", slug)
+	env.MustCLI("task", "status", "T4", "review", "--project", slug)
 	env.MustCLI("task", "status", "T1", "done", "--project", slug)
 	env.MustCLI("task", "status", "T2", "done", "--project", slug)
 	env.MustCLI("task", "archive", "T1", "--project", slug)
@@ -64,5 +67,13 @@ func TestTasksTabFilterReachesDone(t *testing.T) {
 	w.WaitFor("(b shows them)", wait)
 	if s := w.Screen(); strings.Contains(s, "needle") {
 		t.Fatalf("the filter gone, done tasks still listed:\n%s", s)
+	}
+	w.Type("/")
+	w.Type("review")
+	if !Poll(wait, func() bool {
+		s := w.Screen()
+		return strings.Contains(s, "Waiting for a look") && !strings.Contains(s, "Something else")
+	}) {
+		t.Fatalf("a status word:\n%s", w.Screen())
 	}
 }

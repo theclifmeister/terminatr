@@ -615,7 +615,7 @@ func modDone(p *project.Project, o modapi.DoneOptions, now time.Time) (modapi.Do
 	}
 	if !o.Groups {
 		if o.Query != "" {
-			done = slices.DeleteFunc(done, func(t *tasks.Task) bool { return !widget.Matches(t.Ref()+" "+t.Title, o.Query) })
+			done = slices.DeleteFunc(done, func(t *tasks.Task) bool { return !widget.Matches(t.Ref()+" "+t.Title+" "+string(t.Status), o.Query) })
 		}
 		page, total, next := tasks.PageDone(done, now.Location(), o.From, o.To, o.Offset, o.Limit)
 		out.Tasks, out.Total, out.Next = rows(page), total, next

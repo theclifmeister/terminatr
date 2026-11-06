@@ -111,7 +111,7 @@
     if (more) rest.push({ text: (rest.length > 0 ? "  " : "") + more, role: "faint" });
     const r = {
       id: t.id,
-      find: `${t.id} ${t.title}`,
+      find: `${t.id} ${t.title} ${t.status}`,
       cells: [[{ text: t.id }], ...prio ? [t.status === "done" ? [] : priority(t.priority)] : [], [{ text: t.title }], status(t.status, timeOnly ? timeOf(t.done_label) : t.done_label), rest],
       actions: actions(project, t)
     };
