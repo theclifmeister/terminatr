@@ -298,11 +298,47 @@ const RuleExcluded = "excluded"
 // time judging it (docs/SPEC.md §8.6, Guard: the guard fails closed).
 const RuleUnchecked = "unchecked"
 
-// Unchecked is the refusal of a call tm couldn't check: the agent's
-// hook answers with it when the server's verdict doesn't come.
-func Unchecked() *Denial {
+// Cause is why a call went unchecked and what the agent can do about it:
+// the agent reads it as the tool's error, and a reason that isn't true
+// ("try again" with no server) only has it retry.
+type Cause struct{ why, next string }
+
+// The causes of an unchecked call; the zero Cause names none.
+var (
+	CauseNoServer = Cause{"its server isn't running",
+		"every tool call is refused until it is back. Try once more; if it is refused again, stop and tell the user: `tm server start` brings it back."}
+	CauseNoAnswer = Cause{"its server didn't answer",
+		"try again. If it is refused again, stop and tell the user: the server may be stuck, and `tm server restart` restarts it."}
+	CauseOldServer = Cause{"its running server is older than this tm",
+		"every tool call is refused until it is restarted, so stop and tell the user: `tm server restart` switches it to this tm."}
+	CauseRefused = Cause{"its server refused the request",
+		"stop and tell the user."}
+	CauseNoSession = Cause{"its server has no such session",
+		"stop and tell the user: this session needs starting again."}
+	CauseUnreadable = Cause{"tm couldn't read the call: over its size limit, or not JSON",
+		"try a smaller call. If it is refused again, stop and tell the user."}
+	CauseNoHome = Cause{"tm couldn't find its home folder",
+		"stop and tell the user."}
+	CauseNoAgent = Cause{"tm doesn't know this agent",
+		"stop and tell the user."}
+	CauseNoTool = Cause{"the call names no tool",
+		"stop and tell the user."}
+)
+
+// Denial is the refusal of a call unchecked for this cause.
+func (c Cause) Denial() *Denial {
+	why, next := "", "try again. If it is refused again, stop and tell the user."
+	if c != (Cause{}) {
+		why, next = " ("+c.why+")", c.next
+	}
 	return &Denial{Rule: RuleUnchecked, Floor: true, Summary: "a call tm couldn't check",
-		Message: "terminatr guard: tm couldn't check this call (its server didn't answer in time), so it is refused; try again."}
+		Message: "terminatr guard: tm couldn't check this call" + why + ", so it is refused; " + next}
+}
+
+// Unchecked is the refusal of a call tm couldn't check, for no cause it
+// can name.
+func Unchecked() *Denial {
+	return Cause{}.Denial()
 }
 
 // RuleUnreadable is the rule of the floor's refusal of a command line

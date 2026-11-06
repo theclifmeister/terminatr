@@ -119,12 +119,13 @@ func runHook(e *Env, args []string) error {
 		event, _ = payload[hook.EventField()].(string)
 	}
 	// failClosed answers the guard's event without its verdict: the
-	// agent's refusal "tm couldn't check this call", never nothing, which
-	// would let the call through unjudged (docs/SPEC.md §8.6, Guard).
-	failClosed := func() {
+	// agent's refusal "tm couldn't check this call" and why, never
+	// nothing, which would let the call through unjudged (docs/SPEC.md
+	// §8.6, Guard).
+	failClosed := func(why guard.Cause) {
 		switch {
 		case a != nil:
-			e.Stdout.Write(agent.FailClosed(a, event, payload))
+			e.Stdout.Write(agent.FailClosed(a, event, payload, why))
 		case event == "PreToolUse":
 			// No agent to say how: tm's own refusal, in the shape Claude
 			// and Codex read.
@@ -133,17 +134,17 @@ func runHook(e *Env, args []string) error {
 	}
 	if a == nil {
 		hookLog(e, session, event, fmt.Errorf("no agent %q", name))
-		failClosed()
+		failClosed(guard.CauseNoAgent)
 		return nil
 	}
 	if !read {
 		hookLog(e, session, event, fmt.Errorf("payload of %d bytes unreadable or over %d", len(data), maxHookPayload))
-		failClosed()
+		failClosed(guard.CauseUnreadable)
 		return nil
 	}
 	if perr != nil {
 		hookLog(e, session, event, perr)
-		failClosed()
+		failClosed(guard.CauseNoHome)
 		return nil
 	}
 	total, tries, once := hookAck, 1, false
@@ -172,11 +173,11 @@ func runHook(e *Env, args []string) error {
 	params := proto.HookEventParams{Session: session, Agent: name, Event: event,
 		Payload: payload, Token: token}
 	start := time.Now()
-	out, ok := sendHook(paths.Socket, params, total, tries, func(try int, err error) {
+	out, err := sendHook(paths.Socket, params, total, tries, func(try int, err error) {
 		hookLog(e, session, event, fmt.Errorf("%w (try %d of %d, after %v of %v)", err, try, tries, time.Since(start).Round(time.Millisecond), total))
 	})
-	if !ok && guarded {
-		failClosed()
+	if err != nil && guarded {
+		failClosed(uncheckedCause(err))
 		return nil
 	}
 	if out != "" {
@@ -185,10 +186,25 @@ func runHook(e *Env, args []string) error {
 	return nil
 }
 
+// uncheckedCause is why sendHook's err left a call without its verdict.
+func uncheckedCause(err error) guard.Cause {
+	var mismatch *proto.MismatchError
+	var refused *proto.Error
+	switch {
+	case ipc.IsAbsent(err):
+		return guard.CauseNoServer
+	case errors.As(err, &mismatch):
+		return guard.CauseOldServer
+	case errors.As(err, &refused):
+		return guard.CauseRefused
+	}
+	return guard.CauseNoAnswer
+}
+
 // genericDeny is the refusal of a PreToolUse tm hook can't judge for an
 // agent it doesn't know.
 var genericDeny = `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":` +
-	strconv.Quote(guard.Unchecked().Message) + `}}`
+	strconv.Quote(guard.CauseNoAgent.Denial().Message) + `}}`
 
 // rawEvent is the event name in a payload tm hook couldn't decode (cut
 // at the read limit, or not JSON): the first string value of field, ""
@@ -217,20 +233,21 @@ func hookLog(e *Env, session, event string, err error) {
 }
 
 // sendHook delivers one event and returns the server's stdout for the
-// agent, and ok once the server answered. Every failure (no server, a
-// stale socket, a wedged server, a protocol mismatch, a refusal) returns
-// false and goes to failed, never to the agent. One the server didn't
-// take is tried again, up to tries times in all, while total lasts.
-func sendHook(socket string, p proto.HookEventParams, total time.Duration, tries int, failed func(try int, err error)) (string, bool) {
+// agent, nil once the server answered. Every failure (no server, a stale
+// socket, a wedged server, a protocol mismatch, a refusal) returns the
+// last try's error and goes to failed, never to the agent. One the
+// server didn't take is tried again, up to tries times in all, while
+// total lasts.
+func sendHook(socket string, p proto.HookEventParams, total time.Duration, tries int, failed func(try int, err error)) (string, error) {
 	deadline := time.Now().Add(total)
 	for i := 1; ; i++ {
 		out, again, err := sendHookOnce(socket, p, deadline)
 		if err == nil {
-			return out, true
+			return out, nil
 		}
 		failed(i, err)
 		if !again || i >= tries || time.Until(deadline) < hookRetry+hookDial {
-			return "", false
+			return "", err
 		}
 		time.Sleep(hookRetry)
 	}
@@ -257,7 +274,8 @@ func sendHookOnce(socket string, p proto.HookEventParams, deadline time.Time) (o
 	}
 	// Hello and request in one write: one round trip less.
 	var msg bytes.Buffer
-	proto.WriteLine(&msg, proto.Hello{Protocol: proto.Protocol, Version: version.Version, Build: version.BuildID(), Kind: proto.KindHook})
+	hello := proto.Hello{Protocol: proto.Protocol, Version: version.Version, Build: version.BuildID(), Kind: proto.KindHook}
+	proto.WriteLine(&msg, hello)
 	proto.WriteLine(&msg, proto.Request{ID: 1, Method: proto.MethodHookEvent, Params: params})
 	if _, err := c.Write(msg.Bytes()); err != nil {
 		return "", !isTimeout(err), fmt.Errorf("write: %w", err)
@@ -269,6 +287,11 @@ func sendHookOnce(socket string, p proto.HookEventParams, deadline time.Time) (o
 	}
 	var resp proto.Response
 	if err := proto.ReadLine(br, &resp); err != nil {
+		// A server that can't talk to this tm says hello and closes: its
+		// hello says why.
+		if merr := proto.Check(hello, srv); merr != nil {
+			err = merr
+		}
 		return "", readAgain(err), fmt.Errorf("response: %w", err)
 	}
 	if resp.Error != nil {

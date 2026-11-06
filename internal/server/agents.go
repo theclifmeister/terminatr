@@ -23,6 +23,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/emu"
 	"github.com/theclifmeister/terminatr/internal/features"
 	"github.com/theclifmeister/terminatr/internal/gitx"
+	"github.com/theclifmeister/terminatr/internal/guard"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/plat/caps"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
@@ -1304,7 +1305,7 @@ func (s *Server) hookEvent(p proto.HookEventParams) proto.HookEventResult {
 	sess, perr := s.session(p.Session)
 	if perr != nil {
 		s.log.Printf("hook %s for %s dropped: %s", p.Event, p.Session, perr.Message)
-		return s.droppedHook(p)
+		return s.droppedHook(p, guard.CauseNoSession)
 	}
 	if a := sess.Agent(); a == nil || a.Name() != p.Agent {
 		runs := "no agent"
@@ -1312,7 +1313,7 @@ func (s *Server) hookEvent(p proto.HookEventParams) proto.HookEventResult {
 			runs = a.Name()
 		}
 		s.log.Printf("hook %s for %s dropped: from agent %q, the session runs %s", p.Event, p.Session, p.Agent, runs)
-		return s.droppedHook(p)
+		return s.droppedHook(p, guard.CauseNoSession)
 	}
 	if p.Token != "" {
 		sess.SetPromptToken(p.Token)
@@ -1322,7 +1323,7 @@ func (s *Server) hookEvent(p proto.HookEventParams) proto.HookEventResult {
 		s.log.Printf("session %s: hook %s: %v", p.Session, p.Event, err)
 	}
 	if err != nil {
-		if d := s.droppedHook(p); d.Stdout != "" {
+		if d := s.droppedHook(p, guard.Cause{}); d.Stdout != "" {
 			return d
 		}
 	}
@@ -1332,7 +1333,7 @@ func (s *Server) hookEvent(p proto.HookEventParams) proto.HookEventResult {
 // droppedHook answers an event the server didn't take: nothing, or for
 // the guard's event its agent's refusal of a call it couldn't check
 // (agent.FailClosed).
-func (s *Server) droppedHook(p proto.HookEventParams) proto.HookEventResult {
+func (s *Server) droppedHook(p proto.HookEventParams, why guard.Cause) proto.HookEventResult {
 	a, ok := agent.BuiltinAgent(p.Agent)
 	if !ok {
 		s.mu.Lock()
@@ -1345,7 +1346,7 @@ func (s *Server) droppedHook(p proto.HookEventParams) proto.HookEventResult {
 	if !ok {
 		return proto.HookEventResult{}
 	}
-	return proto.HookEventResult{Stdout: string(agent.FailClosed(a, p.Event, p.Payload))}
+	return proto.HookEventResult{Stdout: string(agent.FailClosed(a, p.Event, p.Payload, why))}
 }
 
 // prompt is session.prompt, a client's prompt: one still queued at a

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/client/clienttest"
+	"github.com/theclifmeister/terminatr/internal/guard"
 	"github.com/theclifmeister/terminatr/internal/plat/ipc/ipctest"
 	"github.com/theclifmeister/terminatr/internal/proto"
 )
@@ -65,6 +66,32 @@ func fakeServer(t *testing.T, sock string, delay time.Duration, stdout string, g
 				b, _ = json.Marshal(proto.Response{ID: req.ID, Result: res})
 				c.Write(append(b, '\n'))
 			}()
+		}
+	}()
+}
+
+// scriptedServer takes hook connections, writes lines to each as JSON and
+// closes it.
+func scriptedServer(t *testing.T, sock string, lines ...any) {
+	t.Helper()
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { ln.Close() })
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			br := bufio.NewReader(c)
+			br.ReadBytes('\n') // hello
+			br.ReadBytes('\n') // the request
+			for _, l := range lines {
+				proto.WriteLine(c, l)
+			}
+			c.Close()
 		}
 	}()
 }
@@ -185,16 +212,24 @@ func TestHookGuardFailsClosed(t *testing.T) {
 		agent   string
 		payload string
 		setup   func(t *testing.T, sock string)
-		deny    bool
+		why     guard.Cause // what the refusal must say
+		refused bool
 	}{
-		{"server down", "claude", pre, func(*testing.T, string) {}, true},
-		{"stale socket", "claude", pre, func(t *testing.T, sock string) { clienttest.StaleSocket(t, sock) }, true},
-		{"wedged", "claude", pre, func(t *testing.T, sock string) { fakeServer(t, sock, 2*time.Second, "late", nil) }, true},
-		{"never says hello", "codex", pre, func(t *testing.T, sock string) { clienttest.Silent(t, sock) }, true},
-		{"not json", "claude", `{"hook_event_name":"PreToolUse","tool_input":`, func(t *testing.T, sock string) { fakeServer(t, sock, 0, "", nil) }, true},
-		{"over the limit", "claude", big, func(t *testing.T, sock string) { fakeServer(t, sock, 0, "", nil) }, true},
-		{"allowed", "claude", pre, func(t *testing.T, sock string) { fakeServer(t, sock, 0, "", nil) }, false},
-		{"another event", "claude", `{"hook_event_name":"PostToolUse"}`, func(*testing.T, string) {}, false},
+		{"server down", "claude", pre, func(*testing.T, string) {}, guard.CauseNoServer, true},
+		{"stale socket", "claude", pre, func(t *testing.T, sock string) { clienttest.StaleSocket(t, sock) }, guard.CauseNoServer, true},
+		{"wedged", "claude", pre, func(t *testing.T, sock string) { fakeServer(t, sock, 2*time.Second, "late", nil) }, guard.CauseNoAnswer, true},
+		{"never says hello", "codex", pre, func(t *testing.T, sock string) { clienttest.Silent(t, sock) }, guard.CauseNoAnswer, true},
+		{"closes at once", "claude", pre, func(t *testing.T, sock string) { scriptedServer(t, sock) }, guard.CauseNoAnswer, true},
+		{"older server", "claude", pre, func(t *testing.T, sock string) {
+			scriptedServer(t, sock, proto.Hello{Protocol: proto.Protocol - 1})
+		}, guard.CauseOldServer, true},
+		{"refused", "claude", pre, func(t *testing.T, sock string) {
+			scriptedServer(t, sock, proto.Hello{Protocol: proto.Protocol}, proto.Response{ID: 1, Error: &proto.Error{Code: "refused", Message: "no"}})
+		}, guard.CauseRefused, true},
+		{"not json", "claude", `{"hook_event_name":"PreToolUse","tool_input":`, func(t *testing.T, sock string) { fakeServer(t, sock, 0, "", nil) }, guard.CauseUnreadable, true},
+		{"over the limit", "claude", big, func(t *testing.T, sock string) { fakeServer(t, sock, 0, "", nil) }, guard.CauseUnreadable, true},
+		{"allowed", "claude", pre, func(t *testing.T, sock string) { fakeServer(t, sock, 0, "", nil) }, guard.Cause{}, false},
+		{"another event", "claude", `{"hook_event_name":"PostToolUse"}`, func(*testing.T, string) {}, guard.Cause{}, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -211,11 +246,38 @@ func TestHookGuardFailsClosed(t *testing.T) {
 				} `json:"hookSpecificOutput"`
 			}
 			json.Unmarshal(out.Bytes(), &res)
-			denied := res.Out.Event == "PreToolUse" && res.Out.Decision == "deny" && strings.Contains(res.Out.Reason, "tm couldn't check this call")
-			if denied != c.deny || !c.deny && out.Len() != 0 || errb.Len() != 0 {
-				t.Errorf("stdout %q stderr %q, want deny %v", out, errb, c.deny)
+			denied := res.Out.Event == "PreToolUse" && res.Out.Decision == "deny"
+			if denied != c.refused || !c.refused && out.Len() != 0 || errb.Len() != 0 {
+				t.Errorf("stdout %q stderr %q, want refused %v", out, errb, c.refused)
+			}
+			if c.refused && res.Out.Reason != c.why.Denial().Message {
+				t.Errorf("reason %q, want %q", res.Out.Reason, c.why.Denial().Message)
 			}
 		})
+	}
+}
+
+// TestHookFloorNoServer: with no server the floor still holds, as no call
+// runs unjudged: what the floor refuses and what it allows are all
+// refused, at once and for both agents, and the refusal says the server
+// isn't running, not to keep trying as if it were slow.
+func TestHookFloorNoServer(t *testing.T) {
+	for _, name := range []string{"claude", "codex"} {
+		for _, call := range []string{
+			`"tool_name":"Bash","tool_input":{"command":"gh pr merge 1"}`,
+			`"tool_name":"Bash","tool_input":{"command":"tm config set x y"}`,
+			`"tool_name":"Write","tool_input":{"file_path":"/h/.terminatr/config.toml","content":"x"}`,
+			`"tool_name":"Read","tool_input":{"file_path":"/h/.ssh/id_rsa"}`,
+			`"tool_name":"Bash","tool_input":{"command":"ls"}`,
+		} {
+			e, out, errb, _ := hookEnv(t, `{"hook_event_name":"PreToolUse",`+call+`}`)
+			if d := runHookTimed(t, e, "--agent", name); d > time.Second {
+				t.Errorf("%s %s: took %v", name, call, d)
+			}
+			if s := out.String(); !strings.Contains(s, `"permissionDecision":"deny"`) || !strings.Contains(s, "its server isn't running") || !strings.Contains(s, "tm server start") || errb.Len() != 0 {
+				t.Errorf("%s %s: stdout %q stderr %q", name, call, s, errb)
+			}
+		}
 	}
 }
 
