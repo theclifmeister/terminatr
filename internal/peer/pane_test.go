@@ -479,8 +479,9 @@ func TestPaneRaiseTold(t *testing.T) {
 				return src.asked == 1
 			})
 
-			SetPanes(b.dir, "studio", proto.PanesWrite)
-			mb.Reload()
+			if _, err := mb.SetSwitch(proto.PeerSwitchParams{Alias: "studio", Switch: proto.PeerSwitchPanes, Value: proto.PanesWrite}); err != nil {
+				t.Fatal(err)
+			}
 			if !old {
 				testwait.Eventually(t, "the raise told", func() bool {
 					mu.Lock()

@@ -239,6 +239,21 @@ func TestNetworkNeedsSwitch(t *testing.T) {
 // TestNetworkPanes: V moves a paired server's panes along off · view ·
 // write, asking before each raise (N keeps it), lowering at once; the
 // panel's switch takes ← → and a click on a word.
+// What peers.json says beyond what the human asked for shows in the tree and
+// the details, with the way to keep it.
+func TestNetworkRefused(t *testing.T) {
+	m, src := netDash(t, 120, 30)
+	src.peers.Peers[0].Refused = []string{"panes write"}
+	nv := netOpen(t, m)
+	nv.sel = "g:mini"
+	out := ansi.Strip(netBox(m))
+	for _, want := range []string{"refused", "Doesn't count: panes write", "allow mini keeps it"} {
+		if !strings.Contains(strings.Join(strings.Fields(out), " "), want) {
+			t.Errorf("no %q in\n%s", want, out)
+		}
+	}
+}
+
 func TestNetworkPanes(t *testing.T) {
 	m, src := netDash(t, 120, 30)
 	nv := netOpen(t, m)

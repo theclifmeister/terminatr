@@ -276,13 +276,21 @@ func TestReload(t *testing.T) {
 	}
 	a.pair(t, "mini", b, url)
 	m.Reload()
+	if st := m.Status(); len(st.Peers) != 0 || len(st.Refused) != 1 {
+		t.Fatalf("a pairing tm wasn't told of got a link: %+v", st)
+	}
+	if _, err := m.SetSwitch(proto.PeerSwitchParams{Alias: "mini", Switch: proto.PeerSwitchPin}); err != nil {
+		t.Fatal(err)
+	}
 	waitLink(t, m, "mini", "waiting", offline(proto.LinkReasonPeer))
 	if st := m.Status(); st.ID != a.id.ID.String() || len(st.Peers) != 1 {
 		t.Fatalf("status %+v", st)
 	}
 	// mini leaves, nas comes.
 	SavePeers(a.dir, []Peer{{Alias: "nas", Key: pub(c.id.Key), Relay: url}})
-	m.Reload()
+	if _, err := m.SetSwitch(proto.PeerSwitchParams{Alias: "nas", Switch: proto.PeerSwitchPin}); err != nil {
+		t.Fatal(err)
+	}
 	if st := m.Status(); len(st.Peers) != 1 || st.Peers[0].Alias != "nas" {
 		t.Fatalf("after reload: %+v", st.Peers)
 	}

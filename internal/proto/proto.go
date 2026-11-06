@@ -55,8 +55,9 @@ import (
 // .send, .read, .answer, .umbrella.accept and .send-back, and
 // .delete (proto/programapp.go), and task.get's After. 38:
 // program.open, a program's director opened or started. 39:
-// project.history and peer.history, a project's daily numbers.
-const Protocol = 39
+// project.history and peer.history, a project's daily numbers. 40:
+// peer.switch, and LinkStatus's Refused (an added field).
+const Protocol = 40
 
 // Kind is what a connection is for.
 type Kind string

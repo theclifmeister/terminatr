@@ -29,6 +29,7 @@ const peerUsage = `usage: tm peer pair [--relay URL] [--as ALIAS]
        tm peer join CODE [--as ALIAS]
        tm peer list [--json]
        tm peer remove ALIAS
+       tm peer allow ALIAS
        tm peer name ALIAS|NAME NEW|""
        tm peer rotate [--yes]
        tm peer panes ALIAS off|view|write
@@ -59,6 +60,7 @@ var (
 	pairName     = peer.SelfName
 	reloadPeers  = serverReloadPeers
 	peerLinks    = serverPeerLinks
+	peerSwitch   = serverPeerSwitch
 )
 
 // runPeer is tm peer (docs/SPEC.md §16.8): pairing this server with
@@ -83,7 +85,7 @@ func runPeer(e *Env, args []string) error {
 			return usagef("tm peer %s takes no --%s\n%s", args[0], name, peerUsage)
 		}
 	}
-	npos := map[string]int{"pair": 0, "join": 1, "list": 0, "remove": 1, "rotate": 0, "panes": 2, "conversations": 2, "needs": 2, "pages": 3, "files": 3, "relay": 2, "relay-update": 1, "name": 2,
+	npos := map[string]int{"pair": 0, "join": 1, "list": 0, "remove": 1, "allow": 1, "rotate": 0, "panes": 2, "conversations": 2, "needs": 2, "pages": 3, "files": 3, "relay": 2, "relay-update": 1, "name": 2,
 		"ask-share": 1, "requests": 0, "decline": 1}
 	if n, ok := npos[args[0]]; !ok || len(pos) != n {
 		return usagef("%s", peerUsage)
@@ -113,6 +115,8 @@ func runPeer(e *Env, args []string) error {
 		return e.peerList(dir, *asJSON)
 	case "remove":
 		return e.peerRemove(dir, pos[0])
+	case "allow":
+		return e.peerAllow(pos[0])
 	case "panes":
 		return e.peerPanes(dir, pos[0], pos[1])
 	case "conversations":
@@ -275,7 +279,53 @@ func (e *Env) pin(dir string, p *peer.Paired, relayURL, as string) error {
 		return err
 	}
 	fmt.Fprintf(e.Stdout, "Paired with %s (server id %s) through %s.\n", got.Alias, got.ID().Short(), relayHost(relayURL))
+	if _, err := peerSwitch(proto.PeerSwitchParams{Alias: got.Alias, Switch: proto.PeerSwitchPin}); err != nil {
+		fmt.Fprintf(e.Stderr, "tm peer: the server didn't keep the pairing (%v); tm peer allow %s does\n", err, got.Alias)
+	}
 	e.reload()
+	return nil
+}
+
+// serverPeerSwitch has the server set a switch: what a raise takes, so one
+// starts a server that isn't running.
+func serverPeerSwitch(p proto.PeerSwitchParams) (proto.PeerSwitchResult, error) {
+	var res proto.PeerSwitchResult
+	c, _, err := connect(true)
+	if err != nil {
+		return res, err
+	}
+	defer c.Close()
+	return res, c.Call(proto.MethodPeerSwitch, p, &res)
+}
+
+// raise sets a switch through the server, which keeps it as the human's;
+// false when there is no such peer.
+func raise(p proto.PeerSwitchParams) (bool, error) {
+	_, err := peerSwitch(p)
+	var perr *proto.Error
+	if errors.As(err, &perr) && perr.Code == "unknown-peer" {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+// peerAllow keeps all peers.json says for the paired server alias: what a
+// hand edit or an older tm wrote there, or a pairing the server never heard
+// of (docs/SPEC.md §16.8).
+func (e *Env) peerAllow(alias string) error {
+	res, err := peerSwitch(proto.PeerSwitchParams{Alias: alias, Switch: proto.PeerSwitchAllow})
+	var perr *proto.Error
+	if errors.As(err, &perr) && perr.Code == "unknown-peer" {
+		return &project.Error{Code: "unknown-peer", Msg: fmt.Sprintf("no peer %q (tm peer list)", alias)}
+	}
+	if err != nil {
+		return err
+	}
+	if len(res.Allowed) == 0 {
+		fmt.Fprintf(e.Stdout, "Nothing to allow for %s: tm already counts all it has.\n", res.Alias)
+		return nil
+	}
+	fmt.Fprintf(e.Stdout, "Allowed for %s: %s.\n", res.Alias, strings.Join(res.Allowed, ", "))
 	return nil
 }
 
@@ -426,6 +476,9 @@ type peerEntry struct {
 	// Files are the projects whose folders it may read, the files switch
 	// (§16.18): on for these, off for every other.
 	Files []string `json:"files"`
+	// Refused is what peers.json says of it that doesn't count, since the
+	// human didn't ask for it (§16.8); the switches above are what does.
+	Refused []string `json:"refused,omitempty"`
 }
 
 func (e *Env) peerList(dir string, asJSON bool) error {
@@ -450,6 +503,13 @@ func (e *Env) peerList(dir string, asJSON bool) error {
 			Conversations: convWord(p.ConversationsOn()), Needs: p.NeedsLevel(), Pages: append([]string{}, p.Pages...), Files: append([]string{}, p.Files...)}
 		if l, ok := links[pe.ID]; ok {
 			pe.Link = &l
+		}
+		if st != nil {
+			if i := slices.IndexFunc(st.Refused, func(r proto.PeerRefusal) bool { return r.ID == pe.ID }); i >= 0 {
+				r := st.Refused[i]
+				pe.Panes, pe.Conversations, pe.Needs = proto.PanesWord(r.Panes), r.Conversations, r.Needs
+				pe.Pages, pe.Files, pe.Refused = append([]string{}, r.Pages...), append([]string{}, r.Files...), r.Words
+			}
 		}
 		entries = append(entries, pe)
 	}
@@ -496,6 +556,9 @@ func (e *Env) peerList(dir string, asJSON bool) error {
 		if len(pe.Files) > 0 {
 			state += "; files: " + strings.Join(pe.Files, ", ")
 		}
+		if len(pe.Refused) > 0 {
+			state += "; doesn't count: " + strings.Join(pe.Refused, ", ") + " (tm peer allow " + pe.Alias + " keeps it)"
+		}
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", peer.Both(cmp.Or(pe.Name, pe.Told), pe.Alias), pe.Short, relayHost(pe.Relay), state)
 	}
 	return tw.Flush()
@@ -522,7 +585,13 @@ func (e *Env) peerPanes(dir, alias, level string) error {
 	if !proto.ValidPanes(level) {
 		return usagef("tm peer panes ALIAS off|view|write: %q isn't one", level)
 	}
-	found, err := peer.SetPanes(dir, alias, level)
+	var found bool
+	var err error
+	if level == proto.PanesOff {
+		found, err = peer.SetPanes(dir, alias, level)
+	} else {
+		found, err = raise(proto.PeerSwitchParams{Alias: alias, Switch: proto.PeerSwitchPanes, Value: level})
+	}
 	if err != nil {
 		return err
 	}
@@ -550,7 +619,13 @@ func (e *Env) peerNeeds(dir, alias, level string) error {
 	if _, ok := proto.ParseNeeds(level); !ok {
 		return usagef("tm peer needs ALIAS off|view|answer: %q isn't one", level)
 	}
-	found, err := peer.SetNeeds(dir, alias, level)
+	var found bool
+	var err error
+	if level == proto.NeedsOff {
+		found, err = peer.SetNeeds(dir, alias, level)
+	} else {
+		found, err = raise(proto.PeerSwitchParams{Alias: alias, Switch: proto.PeerSwitchNeeds, Value: level})
+	}
 	if err != nil {
 		return err
 	}
@@ -583,7 +658,13 @@ func (e *Env) peerPages(dir, alias, slug, word string) error {
 		return usagef("tm peer pages ALIAS PROJECT on|off: %q isn't a project", slug)
 	}
 	on := word == "on"
-	found, err := peer.SetPages(dir, alias, slug, on)
+	var found bool
+	var err error
+	if on {
+		found, err = raise(proto.PeerSwitchParams{Alias: alias, Switch: proto.PeerSwitchPages, Project: slug, Value: word})
+	} else {
+		found, err = peer.SetPages(dir, alias, slug, false)
+	}
 	if err != nil {
 		return err
 	}
@@ -646,7 +727,12 @@ func (e *Env) peerFiles(dir, alias, slug, word string) error {
 			return &project.Error{Code: "unknown-peer", Msg: fmt.Sprintf("no peer %q (tm peer list)", alias)}
 		}
 	} else {
-		found, err := p.SetPeerFiles(e.Caller, dir, alias, on)
+		var found bool
+		if on {
+			found, err = raise(proto.PeerSwitchParams{Alias: alias, Switch: proto.PeerSwitchFiles, Project: slug, Value: word})
+		} else {
+			found, err = p.SetPeerFiles(e.Caller, dir, alias, false)
+		}
 		if err != nil {
 			return err
 		}
@@ -680,7 +766,13 @@ func (e *Env) peerConversations(dir, alias, word string) error {
 		return usagef("tm peer conversations ALIAS on|off: %q isn't one", word)
 	}
 	on := word == proto.ConversationsOn
-	found, err := peer.SetConversations(dir, alias, on)
+	var found bool
+	var err error
+	if on {
+		found, err = raise(proto.PeerSwitchParams{Alias: alias, Switch: proto.PeerSwitchConversations, Value: word})
+	} else {
+		found, err = peer.SetConversations(dir, alias, false)
+	}
 	if err != nil {
 		return err
 	}

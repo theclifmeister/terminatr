@@ -2,6 +2,7 @@ package server
 
 import (
 	"crypto/ed25519"
+	"errors"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -117,9 +118,36 @@ func TestPeerReload(t *testing.T) {
 	if _, err := peer.Pin(dir, k, "ws://127.0.0.1:1", "mini", ""); err != nil {
 		t.Fatal(err)
 	}
+	// On the file's word alone it gets no link, and the status says so.
 	call(t, c, proto.MethodPeerReload, nil, &st)
-	if st == nil || st.ID != id.ID.String() || len(st.Peers) != 1 || st.Peers[0].Alias != "mini" {
+	if st == nil || len(st.Peers) != 0 || len(st.Refused) != 1 || st.Refused[0].Words[0] != proto.PeerRefusalPairing {
+		t.Fatalf("a pairing in the file alone: %+v", st)
+	}
+	var res proto.PeerSwitchResult
+	call(t, c, proto.MethodPeerSwitch, proto.PeerSwitchParams{Alias: "mini", Switch: proto.PeerSwitchPin}, &res)
+	st = nil
+	call(t, c, proto.MethodPeerReload, nil, &st)
+	if st == nil || st.ID != id.ID.String() || len(st.Peers) != 1 || st.Peers[0].Alias != "mini" || len(st.Refused) != 0 {
 		t.Fatalf("after pairing: %+v", st)
+	}
+	// A raise in the file doesn't count; the same raise from the human does.
+	if ok, err := peer.SetPanes(dir, "mini", proto.PanesType); !ok || err != nil {
+		t.Fatal(ok, err)
+	}
+	st = nil
+	call(t, c, proto.MethodPeerReload, nil, &st)
+	if st == nil || len(st.Refused) != 1 || st.Refused[0].Panes != proto.PanesOff || st.Refused[0].Words[0] != "panes write" {
+		t.Fatalf("a raise in the file alone: %+v", st)
+	}
+	call(t, c, proto.MethodPeerSwitch, proto.PeerSwitchParams{Alias: "mini", Switch: proto.PeerSwitchPanes, Value: proto.PanesType}, &res)
+	st = nil
+	call(t, c, proto.MethodPeerReload, nil, &st)
+	if st == nil || len(st.Refused) != 0 {
+		t.Fatalf("after the human's raise: %+v", st)
+	}
+	var perr *proto.Error
+	if err := c.Call(proto.MethodPeerSwitch, proto.PeerSwitchParams{Alias: "nobody", Switch: proto.PeerSwitchPanes, Value: proto.PanesView}, &res); !errors.As(err, &perr) || perr.Code != "unknown-peer" {
+		t.Fatalf("a peer that isn't: %v", err)
 	}
 	if ok, err := peer.Unpin(dir, "mini"); !ok || err != nil {
 		t.Fatal(ok, err)

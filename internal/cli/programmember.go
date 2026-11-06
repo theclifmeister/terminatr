@@ -61,15 +61,16 @@ func programMember(e *Env, verb string, args []string) error {
 	default:
 		return usagef("--needs is view, answer or off\n%s", programMemberUsage)
 	}
+	o.RaiseNeeds = func(alias, level string) error {
+		_, err := peerSwitch(proto.PeerSwitchParams{Alias: alias, Switch: proto.PeerSwitchNeeds, Value: level})
+		return err
+	}
 	r, _, err := link.AnswerInvite(e.Caller, p, pos[0], o)
 	if err != nil {
 		return err
 	}
 	if o.Accept {
 		fmt.Fprintf(e.Stdout, "accepted %s: %s is in %s (%s); %s hears of it\n", r.ID, p.Slug, link.Shown(r.Peer), r.Words(), link.Shown(r.Peer))
-		if o.NeedsView {
-			fmt.Fprintln(e.Stdout, "if tm server runs, tm peer reload has it read the needs switch now")
-		}
 		return nil
 	}
 	fmt.Fprintf(e.Stdout, "declined %s from %s; nothing here changed, %s hears of it\n", r.ID, link.Shown(r.Peer), link.Shown(r.Peer))

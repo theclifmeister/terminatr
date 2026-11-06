@@ -272,7 +272,8 @@ func TestWorktreeCap(t *testing.T) {
 
 // TestFilesOnReadsTheFile: the switch is the file's now, with no reload, by
 // the peer's key: another key, an entry gone, a file that can't be read are
-// off. Pairing again keeps it; a list with something not a slug isn't loaded.
+// off, and so is what the human didn't ask for. Pairing again keeps it; a list
+// with something not a slug isn't loaded.
 func TestFilesOnReadsTheFile(t *testing.T) {
 	dir := hometest.PrivateDir(t)
 	key, other := make(ed25519.PublicKey, ed25519.PublicKeySize), make(ed25519.PublicKey, ed25519.PublicKeySize)
@@ -283,12 +284,22 @@ func TestFilesOnReadsTheFile(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	m := &Manager{opts: Options{Dir: dir}}
+	m := &Manager{opts: Options{Dir: dir}, grants: loadGrants(dir, nil)}
 	id := IDOf(key)
 	if m.filesOn(id, "web") {
 		t.Error("no file: on")
 	}
+	allow := func() {
+		t.Helper()
+		if _, err := m.grants.set(proto.PeerSwitchParams{Alias: "mini", Switch: proto.PeerSwitchAllow}); err != nil {
+			t.Fatal(err)
+		}
+	}
 	save("web")
+	if m.filesOn(id, "web") {
+		t.Error("on in the file alone, with no word from the human")
+	}
+	allow()
 	if !m.filesOn(id, "web") || m.filesOn(id, "api") || m.filesOn(id, "") {
 		t.Error("on for web alone: wrong")
 	}
@@ -300,6 +311,10 @@ func TestFilesOnReadsTheFile(t *testing.T) {
 		t.Error("off in the file, still on")
 	}
 	save("web")
+	if m.filesOn(id, "web") {
+		t.Error("back on in the file alone")
+	}
+	allow()
 	if _, err := Pin(dir, key, "wss://r.example", "mini", ""); err != nil {
 		t.Fatal(err)
 	}

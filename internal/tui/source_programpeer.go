@@ -58,12 +58,12 @@ func (s *ServerSource) ProgramAct(slug, verb, arg string, o link.AnswerOpts) (st
 	switch verb {
 	case "accept", "decline":
 		o.Accept = verb == "accept"
-		r, changed, err := link.AnswerInvite(s.Caller, p, arg, o)
+		o.RaiseNeeds = func(alias, level string) error {
+			return s.peerSwitch(proto.PeerSwitchParams{Alias: alias, Switch: proto.PeerSwitchNeeds, Value: level})
+		}
+		r, _, err := link.AnswerInvite(s.Caller, p, arg, o)
 		if err != nil {
 			return "", err
-		}
-		if changed {
-			s.reloadPeers()
 		}
 		if r.State == link.ReqAccepted {
 			return fmt.Sprintf("accepted %s: %s is in %s (%s); %s hears of it", r.ID, slug, link.Shown(r.Peer), r.Words(), link.Shown(r.Peer)), nil
@@ -93,13 +93,6 @@ func (s *ServerSource) SetProgramLinkKey(slug, key string, value any) error {
 		p.Journal(s.Caller, "settings."+key, slug, fmt.Sprint(value))
 	}
 	return nil
-}
-
-// reloadPeers has the server read peers.json again, as a needs switch
-// set here changed it; a server that doesn't run reads it at its start.
-func (s *ServerSource) reloadPeers() {
-	var st *proto.LinkStatus
-	_ = s.call(proto.MethodPeerReload, nil, &st)
 }
 
 // programsOnIn is the programs switch in cfg.

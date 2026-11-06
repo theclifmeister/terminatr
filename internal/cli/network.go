@@ -119,7 +119,10 @@ type (
 		TheirNeeds string `json:"their_needs,omitempty"`
 		// Files are the projects whose folders it may read here, this
 		// server's files switch for it (§16.18).
-		Files    []string             `json:"files,omitempty"`
+		Files []string `json:"files,omitempty"`
+		// Refused is what peers.json says of it that doesn't count (§16.8);
+		// the switches above are what does.
+		Refused  []string             `json:"refused,omitempty"`
 		Listed   bool                 `json:"listed,omitempty"`
 		Projects []networkTheirs      `json:"projects"`
 		Shares   []proto.ShareRequest `json:"shares,omitempty"`
@@ -293,6 +296,12 @@ func readNetwork() (*networkTree, error) {
 	for _, p := range peers {
 		np := networkPeer{Alias: p.Alias, Name: p.Name, Told: p.Told, ID: p.ID().String(), Short: p.ID().Short(), Relay: p.Relay,
 			Panes: proto.PanesWord(p.PanesLevel()), Conversations: convWord(p.ConversationsOn()), Needs: p.NeedsLevel(), Files: p.Files, Projects: []networkTheirs{}, Shares: shares[p.Alias]}
+		if st != nil {
+			if i := slices.IndexFunc(st.Refused, func(r proto.PeerRefusal) bool { return r.ID == np.ID }); i >= 0 {
+				r := st.Refused[i]
+				np.Panes, np.Conversations, np.Needs, np.Files, np.Refused = proto.PanesWord(r.Panes), r.Conversations, r.Needs, r.Files, r.Words
+			}
+		}
 		if c, ok := conns[np.ID]; ok {
 			np.Connection = &c
 			np.Version = c.Version
@@ -510,6 +519,9 @@ func (e *Env) printNetwork(t *networkTree, now time.Time) {
 		}
 		if len(pe.Files) > 0 {
 			panes += " · reads files of " + strings.Join(pe.Files, ", ")
+		}
+		if len(pe.Refused) > 0 {
+			panes += " · doesn't count: " + strings.Join(pe.Refused, ", ")
 		}
 		fmt.Fprintf(w, "%s · %s · %s · %s\n", peer.Both(cmp.Or(pe.Name, pe.Told), pe.Alias), pe.Short, conn, panes)
 		switch {
