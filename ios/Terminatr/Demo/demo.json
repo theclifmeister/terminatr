@@ -2781,7 +2781,7 @@
   }
  },
  "hello": {
-  "app_api": 54,
+  "app_api": 55,
   "build": "demo",
   "capabilities": [
    "read",
@@ -2866,7 +2866,8 @@
         "status": "ready",
         "priority": "must",
         "title": "Gift cards at checkout",
-        "updated": "2026-10-26"
+        "updated": "2026-10-26",
+        "waiters": 1
        },
        {
         "id": 17,
@@ -2874,7 +2875,10 @@
         "status": "ready",
         "priority": "should",
         "title": "Wishlist page",
-        "updated": "2026-10-26"
+        "updated": "2026-10-26",
+        "waits_for": [
+         "T18"
+        ]
        },
        {
         "id": 20,
@@ -2882,14 +2886,19 @@
         "status": "open",
         "priority": "should",
         "title": "Accessibility audit of the product page",
-        "updated": "2026-10-26"
+        "updated": "2026-10-26",
+        "waiters": 1
        },
        {
         "id": 19,
         "ref": "T19",
         "status": "open",
         "title": "Recently viewed strip on the product page",
-        "updated": "2026-10-26"
+        "updated": "2026-10-26",
+        "waits_for": [
+         "T20",
+         "acme-api/T12"
+        ]
        },
        {
         "id": 21,

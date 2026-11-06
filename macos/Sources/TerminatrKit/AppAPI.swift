@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 54
+    public static let version = 55
 
     public struct AdoptRequestParams: Codable, Sendable, Hashable {
         public var id: String
@@ -4129,8 +4129,10 @@ public enum AppAPI {
         public var updated: String
         public var doneAt: String
         public var after: [TaskDep]
+        public var waitsFor: [String]
+        public var waiters: Int
 
-        public init(id: Int, ref: String, title: String, status: String, priority: String = "", notes: String = "", steps: [Step] = [], thread: String = "", owner: String = "", created: String = "", updated: String = "", doneAt: String = "", after: [TaskDep] = []) {
+        public init(id: Int, ref: String, title: String, status: String, priority: String = "", notes: String = "", steps: [Step] = [], thread: String = "", owner: String = "", created: String = "", updated: String = "", doneAt: String = "", after: [TaskDep] = [], waitsFor: [String] = [], waiters: Int = 0) {
             self.id = id
             self.ref = ref
             self.title = title
@@ -4144,6 +4146,8 @@ public enum AppAPI {
             self.updated = updated
             self.doneAt = doneAt
             self.after = after
+            self.waitsFor = waitsFor
+            self.waiters = waiters
         }
 
         enum CodingKeys: String, CodingKey {
@@ -4160,6 +4164,8 @@ public enum AppAPI {
             case updated
             case doneAt = "done_at"
             case after
+            case waitsFor = "waits_for"
+            case waiters
         }
     }
 
@@ -6947,6 +6953,8 @@ extension AppAPI.Task {
         self.updated = try c.decodeIfPresent(String.self, forKey: .updated) ?? ""
         self.doneAt = try c.decodeIfPresent(String.self, forKey: .doneAt) ?? ""
         self.after = try c.decodeIfPresent([AppAPI.TaskDep].self, forKey: .after) ?? []
+        self.waitsFor = try c.decodeIfPresent([String].self, forKey: .waitsFor) ?? []
+        self.waiters = try c.decodeIfPresent(Int.self, forKey: .waiters) ?? 0
     }
 }
 

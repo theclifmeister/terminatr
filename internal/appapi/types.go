@@ -438,6 +438,13 @@ type Task struct {
 	// this board's and other projects', with another program member's
 	// dependency state while programs are on.
 	After []TaskDep `json:"after,omitempty"`
+	// WaitsFor (app API 55; the board's tasks, projects.watch with
+	// detail) are the tasks it still comes after ("T10", or another
+	// project's "acme-api/T12"): none once they are done, dropped or
+	// archived. Waiters are the open tasks of the board that come after
+	// it. Both come from the after field.
+	WaitsFor []string `json:"waits_for,omitempty"`
+	Waiters  int      `json:"waiters,omitempty"`
 }
 
 // Step is one step of a task.
@@ -951,7 +958,7 @@ func projectOf(p server.SideProject) Project {
 
 func taskOf(t server.SideTask) Task {
 	out := Task{ID: t.ID, Ref: (&tasks.Task{ID: t.ID}).Ref(), Title: t.Title, Status: string(t.Status), Priority: string(t.Priority), Notes: t.Notes,
-		Thread: t.Thread, Owner: t.Owner, Created: t.Created, Updated: t.Updated, DoneAt: t.DoneAt}
+		Thread: t.Thread, Owner: t.Owner, Created: t.Created, Updated: t.Updated, DoneAt: t.DoneAt, WaitsFor: t.WaitsFor, Waiters: t.Waiters}
 	for _, s := range t.Steps {
 		out.Steps = append(out.Steps, Step{N: s.N, Text: s.Text, Done: s.Done})
 	}
