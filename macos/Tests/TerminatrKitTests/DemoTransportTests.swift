@@ -70,7 +70,7 @@ func demoBridge() async throws -> Bridge {
     #expect(overview.tasks == "1 needs you · 3 in motion · 2 on deck · 4 done")
 
     #expect(Dashboard.onDeck(web).count == 2 && Dashboard.backlog(web).count == 3)
-    let done = try await b.call(AppAPI.Methods.taskDone, AppAPI.ProjectParams(project: "acme-web")).tasks
+    let done = try await b.call(AppAPI.Methods.taskDoneAll, AppAPI.ProjectParams(project: "acme-web")).tasks
     #expect(done.count == Dashboard.doneCount(web))
     #expect(done.map(\.ref) == ["T11", "T8", "T10", "T5"]) // newest first, as task.done answers
     #expect(done.allSatisfy { !$0.doneAt.isEmpty && !Dashboard.finished($0.doneAt).isEmpty })

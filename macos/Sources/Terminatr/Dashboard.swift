@@ -23,10 +23,15 @@ struct ProjectDashboard: View {
     /// The board's filter (the TUI's / on the Tasks tab): words found in
     /// a task's id or title. While it has some, the folds are open.
     @State private var filter = ""
-    /// The board's done tasks (task.done), read when the Done fold
-    /// opens and again when the board's done count changes; nil until
-    /// read.
+    /// The board's done tasks (task.done), all of them for the filter or
+    /// from a tm before Done's groups, read when the Done fold opens and
+    /// again when the board's done count changes; nil until read.
     @State private var done: [AppAPI.Task]?
+    /// Done by day, read as done is, and when the board has no done task
+    /// left to say whether the archive has some.
+    @State private var ledger = DoneLedger()
+    /// The groups with a read on its way.
+    @State private var reading: Set<String> = []
     @State private var doneError: String?
 
     var body: some View {
@@ -49,7 +54,7 @@ struct ProjectDashboard: View {
     @ViewBuilder
     private var boardPage: some View {
         let deck = Dashboard.onDeck(project), backlog = Dashboard.backlog(project)
-        let doneCount = app.listsDone ? Dashboard.doneCount(project) : 0
+        let doneCount = app.listsDone ? max(Dashboard.doneCount(project), ledger.total) : 0
         if !deck.isEmpty || !backlog.isEmpty || doneCount > 0 {
             PaneFilter(prompt: "Filter tasks", label: "Filter the board's tasks",
                        help: "Shows the tasks whose id or title has these words, the done ones too", text: $filter)
@@ -198,6 +203,12 @@ struct ProjectDashboard: View {
                     Text(doneError)
                         .font(theme.body(.subheadline))
                         .foregroundStyle(theme.attention)
+                } else if !filtering && app.groupsDone {
+                    if let groups = ledger.groups {
+                        doneByDay(groups)
+                    } else {
+                        ProgressView().controlSize(.small)
+                    }
                 } else if done == nil {
                     ProgressView().controlSize(.small)
                 } else {
@@ -211,23 +222,99 @@ struct ProjectDashboard: View {
                 .foregroundStyle(theme.muted)
         }
         Color.clear.frame(height: 0)
-            .task(id: DoneRead(project: project.slug, open: doneOpen, count: doneCount)) {
-                guard doneOpen else { return }
-                do {
-                    done = try await app.doneTasks(project.slug)
-                    doneError = nil
-                } catch {
-                    doneError = Dashboard.words(error)
-                }
+            .task(id: DoneRead(project: project.slug, open: doneOpen, count: Dashboard.doneCount(project), filtering: filtering,
+                               day: Calendar.current.startOfDay(for: .now))) {
+                await readDone(open: doneOpen, filtering: filtering)
             }
     }
 
-    /// When the board's done tasks are read again: the fold opens, or
-    /// the board's done count changes while it is open.
+    /// Reads what the Done fold shows, or, with no done task on the board,
+    /// whether the archive holds some.
+    private func readDone(open: Bool, filtering: Bool) async {
+        let grouped = app.groupsDone
+        guard open || (grouped && Dashboard.doneCount(project) == 0) else { return }
+        do {
+            if grouped && !filtering {
+                let again = ledger.take(try await app.doneGroups(project.slug))
+                for (group, limit) in again {
+                    ledger.set(group, try await app.doneRows(project.slug, group, limit: limit))
+                }
+            } else {
+                done = try await app.doneTasks(project.slug)
+            }
+            doneError = nil
+        } catch {
+            doneError = Dashboard.words(error)
+        }
+    }
+
+    /// Done by day: each heading tm gives, an open one's rows under it,
+    /// and what reads on while it has more.
+    private func doneByDay(_ groups: [AppAPI.DoneGroup]) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            ForEach(groups, id: \.key) { group in
+                VStack(alignment: .leading, spacing: 5) {
+                    Button {
+                        if ledger.press(group) { read(group) }
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "chevron.right")
+                                .rotationEffect(.degrees(ledger.isOpen(group) ? 90 : 0))
+                                .font(theme.body(.glyph, .semibold))
+                                .foregroundStyle(theme.muted)
+                            Text(group.title)
+                                .font(theme.sized(Flat.label))
+                            Text("· \(group.count)")
+                                .font(theme.sized(Flat.label))
+                                .foregroundStyle(theme.muted)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityValue(ledger.isOpen(group) ? "open" : "folded")
+                    if ledger.isOpen(group) {
+                        let rows = ledger.tasks(in: group)
+                        if !rows.isEmpty {
+                            HairlineList { ForEach(rows) { BoardRow(project: project.slug, task: $0, timeOnly: group.kind == "day") } }
+                        }
+                        if reading.contains(group.key) {
+                            ProgressView().controlSize(.small)
+                        } else if ledger.more(in: group) > 0 {
+                            Button("\(ledger.more(in: group)) more") { read(group, from: ledger.next(in: group)) }
+                                .buttonStyle(.link)
+                                .foregroundStyle(theme.action)
+                                .font(theme.sized(Flat.label))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Reads a page of group's rows from offset.
+    private func read(_ group: AppAPI.DoneGroup, from offset: Int = 0) {
+        guard reading.insert(group.key).inserted else { return }
+        Task {
+            defer { reading.remove(group.key) }
+            do {
+                let page = try await app.doneRows(project.slug, group, offset: offset)
+                if offset == 0 { ledger.set(group, page) } else { ledger.append(group, page) }
+                doneError = nil
+            } catch {
+                doneError = Dashboard.words(error)
+            }
+        }
+    }
+
+    /// When the board's done tasks are read again: the fold opens, the
+    /// board's done count changes while it is open, the filter takes or
+    /// leaves words, or the day turns, which renames the headings.
     private struct DoneRead: Equatable {
         let project: String
         let open: Bool
         let count: Int
+        let filtering: Bool
+        let day: Date
     }
 
     private func threadCard(_ t: AppAPI.Thread) -> some View {
@@ -503,6 +590,8 @@ private struct BoardRow: View {
     @Environment(\.theme) private var theme
     let project: String
     let task: AppAPI.Task
+    /// A done row under its day's heading says the time alone.
+    var timeOnly = false
 
     var body: some View {
         ListRow {
@@ -525,7 +614,7 @@ private struct BoardRow: View {
                     .buttonStyle(.plain)
                     .help("Shows \(task.ref) in full: its steps and notes")
                     if task.status == "done" {
-                        FinishedLabel(task: task)
+                        FinishedLabel(task: task, timeOnly: timeOnly)
                     } else {
                         PriorityTag(task.priority)
                     }
@@ -543,9 +632,10 @@ private struct BoardRow: View {
 struct FinishedLabel: View {
     @Environment(\.theme) private var theme
     let task: AppAPI.Task
+    var timeOnly = false
 
     var body: some View {
-        let label = Dashboard.finished(task.doneAt)
+        let label = timeOnly ? Dashboard.finishedTime(task.doneAt) : Dashboard.finished(task.doneAt)
         if !label.isEmpty {
             Text(label)
                 .font(theme.mono(.caption2))

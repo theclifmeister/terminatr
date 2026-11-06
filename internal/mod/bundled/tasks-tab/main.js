@@ -3,6 +3,7 @@
   // ../../examples/mods/tasks-tab/main.ts
   var VIEW = "tasks";
   var TABLE = "tasks";
+  var PAGE = 50;
   var GROUPS = [
     { id: "needs-you", title: "NEEDS YOU", statuses: ["blocked", "review"] },
     { id: "in-motion", title: "IN MOTION", statuses: ["started"] },
@@ -16,11 +17,13 @@
     for (const g of GROUPS) if (g.statuses.includes(status2)) return g.id;
     return "on-deck";
   }
+  var key = (g) => `${g.from}:${g.to}`;
   var PRIOS = ["", "must", "should", "could", "none"];
   var tabs = /* @__PURE__ */ new Map();
   function actions(project, t) {
     const task = { project, task: t.id };
     const out = [{ id: "task.show", target: task }];
+    if (t.archived) return out;
     if (!closed(groupOf(t.status))) out.push({ id: "task.priority", target: task });
     const ask = (id) => {
       if (!t.asked) out.push({ id, target: task });
@@ -60,12 +63,17 @@
       { text: " " + (s === "done" && finished || s), role }
     ];
   }
+  function timeOf(label) {
+    var _a;
+    const last = (_a = (label != null ? label : "").split(" ").pop()) != null ? _a : "";
+    return last.includes(":") ? last : "";
+  }
   function priority(p) {
     if (!p) return [];
     const role = { must: "warn", should: void 0, could: "faint" };
     return [{ text: p, role: role[p] }];
   }
-  function row(project, t, prio) {
+  function row(project, t, prio, timeOnly = false) {
     var _a, _b;
     const rest = [];
     if (t.asked) rest.push({ text: "asked the coordinator", role: "warn" });
@@ -73,7 +81,7 @@
     if (more) rest.push({ text: (rest.length > 0 ? "  " : "") + more, role: "faint" });
     const r = {
       id: t.id,
-      cells: [[{ text: t.id }], ...prio ? [t.status === "done" ? [] : priority(t.priority)] : [], [{ text: t.title }], status(t.status, t.done_label), rest],
+      cells: [[{ text: t.id }], ...prio ? [t.status === "done" ? [] : priority(t.priority)] : [], [{ text: t.title }], status(t.status, timeOnly ? timeOf(t.done_label) : t.done_label), rest],
       actions: actions(project, t)
     };
     if (!closed(groupOf(t.status)) && ((_b = t.steps) != null ? _b : []).length > 0) {
@@ -89,6 +97,7 @@
     const out = [];
     for (const g of GROUPS) {
       if (closed(g.id) && !t.doneAll) continue;
+      if (g.id === "done" && byDay(t)) continue;
       const in_ = t.tasks.filter((x) => groupOf(x.status) === g.id && wanted(t, x));
       if (!closed(g.id)) {
         in_.sort((a, b) => rank(a.priority) - rank(b.priority) || num(a.id) - num(b.id));
@@ -103,6 +112,28 @@
       out.push(...in_);
     }
     return out;
+  }
+  function byDay(t) {
+    return t.doneAll && t.prio === "";
+  }
+  function isOpen(t, g) {
+    return g.open !== t.toggled.has(key(g));
+  }
+  function foldRow(t, g) {
+    const mark = isOpen(t, g) ? "" : "  ▸";
+    return { id: "f:" + key(g), spans: [{ text: g.title, role: isOpen(t, g) ? void 0 : "faint" }, { text: ` · ${g.count}${mark}`, role: "faint" }] };
+  }
+  function doneRows(project, t, prio) {
+    const rows = [{ id: "g:done", head: true, spans: [{ text: `DONE · ${t.total}`, role: "head" }, { text: "  newest first   b hides   ⏎ opens", role: "faint" }] }];
+    for (const g of t.groups) {
+      rows.push(foldRow(t, g));
+      if (!isOpen(t, g)) continue;
+      const f = t.rows.get(key(g));
+      if (!f) continue;
+      for (const task of f.tasks) rows.push(row(project, task, prio, g.kind === "day"));
+      if (f.next > 0) rows.push({ id: "m:" + key(g), spans: [{ text: `  … ${g.count - f.tasks.length} more`, role: "faint" }] });
+    }
+    return rows;
   }
   function wanted(t, x) {
     var _a;
@@ -123,16 +154,20 @@
     let group = "";
     const list = shown(t);
     const prio = list.some((x) => !!x.priority && x.status !== "done");
+    const days = byDay(t) && t.groups.length > 0;
     for (const task of list) {
       const g = groupOf(task.status);
       if (g !== group) {
+        if (g === "dropped" && days) rows.push(...doneRows(project, t, prio));
         group = g;
         const title = GROUPS.find((x) => x.id === g).title;
         rows.push({ id: "g:" + g, head: true, spans: [{ text: title, role: g === "needs-you" ? "warn" : "head" }] });
       }
       rows.push(row(project, task, prio));
     }
-    const done = t.tasks.filter((x) => x.status === "done" && wanted(t, x)).length;
+    if (days && group !== "dropped") rows.push(...doneRows(project, t, prio));
+    const onBoard = t.tasks.filter((x) => x.status === "done" && wanted(t, x)).length;
+    const done = onBoard === 0 && t.prio === "" ? t.total : onBoard;
     const dropped = t.tasks.filter((x) => x.status === "dropped" && wanted(t, x)).length;
     const folded = !t.doneAll && done + dropped > 0;
     if (folded && done > 0) rows.push({ id: "g:done", head: true, spans: [{ text: "DONE", role: "head" }] });
@@ -155,19 +190,73 @@
       children.push({ kind: "text", text: `only ${which} (p for the next)`, role: "faint" });
     }
     const keys = t.doneAll || done + dropped > 0 ? [{ key: "b", label: t.doneAll ? "hide done" : "done" }] : [];
+    if (days) keys.push({ key: "enter", label: "open or fold" });
     const next = PRIOS[(PRIOS.indexOf(t.prio) + 1) % PRIOS.length];
     keys.push({ key: "p", label: next === "" ? "all priorities" : next === "none" ? "no priority only" : `${next} only` });
     children.push({ kind: "keys", id: "keys", keys, actions: [{ id: "task.new", target: { project } }] });
     return { kind: "stack", children };
   }
   async function load(project, t) {
-    var _a;
+    var _a, _b, _c;
     t.error = "";
     try {
       t.tasks = await $.tasks.list(project);
+      await loadDone(project, t);
+      if (!t.doneAll && !t.tasks.some((x) => x.status === "done")) {
+        t.total = (_b = (_a = await $.tasks.done(project, { groups: true })) == null ? void 0 : _a.total) != null ? _b : 0;
+      }
     } catch (e) {
-      t.error = String((_a = e == null ? void 0 : e.message) != null ? _a : e);
+      t.error = String((_c = e == null ? void 0 : e.message) != null ? _c : e);
     }
+  }
+  async function loadDone(project, t) {
+    var _a, _b, _c, _d;
+    if (!byDay(t)) return;
+    const res = await $.tasks.done(project, { groups: true, reveal: t.reveal });
+    t.groups = res.groups;
+    t.total = res.total;
+    const was = t.rows;
+    t.rows = /* @__PURE__ */ new Map();
+    for (const g of t.groups) {
+      if (!isOpen(t, g)) continue;
+      const read = (_b = (_a = was.get(key(g))) == null ? void 0 : _a.tasks.length) != null ? _b : 0;
+      if (g.open && read <= ((_c = g.tasks) != null ? _c : []).length) {
+        t.rows.set(key(g), { tasks: (_d = g.tasks) != null ? _d : [], next: g.next });
+      } else {
+        t.rows.set(key(g), await readFold(project, g, 0, Math.max(read, PAGE)));
+      }
+    }
+  }
+  async function readFold(project, g, offset, limit) {
+    const res = await $.tasks.done(project, { from: g.from, to: g.to, archived: g.archived > 0, offset, limit });
+    return { tasks: res.tasks, next: res.next };
+  }
+  async function press(project, t, row2) {
+    var _a, _b;
+    const fold = row2.startsWith("f:");
+    if (!fold && !row2.startsWith("m:")) return false;
+    const k = row2.slice(2);
+    const g = t.groups.find((x) => key(x) === k);
+    if (!g) return false;
+    try {
+      t.error = "";
+      if (fold) {
+        if (t.toggled.has(k)) t.toggled.delete(k);
+        else t.toggled.add(k);
+        if (isOpen(t, g) && !t.rows.has(k)) {
+          t.rows.set(k, g.open ? { tasks: (_a = g.tasks) != null ? _a : [], next: g.next } : await readFold(project, g, 0, PAGE));
+        }
+      } else {
+        const f = t.rows.get(k);
+        if (f && f.next > 0) {
+          const more = await readFold(project, g, f.next, PAGE);
+          t.rows.set(k, { tasks: [...f.tasks, ...more.tasks], next: more.next });
+        }
+      }
+    } catch (e) {
+      t.error = String((_b = e == null ? void 0 : e.message) != null ? _b : e);
+    }
+    return true;
   }
   async function publish(project, t) {
     var _a;
@@ -188,10 +277,14 @@
   $.on("view.opened", async (e) => {
     var _a;
     if (e.view !== VIEW || !e.project) return;
-    const t = (_a = tabs.get(e.project)) != null ? _a : { tasks: [], doneAll: false, prio: "", error: "" };
+    const t = (_a = tabs.get(e.project)) != null ? _a : { tasks: [], doneAll: false, prio: "", error: "", groups: [], total: 0, rows: /* @__PURE__ */ new Map(), toggled: /* @__PURE__ */ new Set(), reveal: "" };
     tabs.set(e.project, t);
     await load(e.project, t);
-    if (e.task && t.tasks.some((x) => x.id === e.task && closed(groupOf(x.status)))) t.doneAll = true;
+    if (e.task && t.tasks.some((x) => x.id === e.task && closed(groupOf(x.status)))) {
+      t.doneAll = true;
+      t.reveal = e.task;
+      await load(e.project, t);
+    }
     await publish(e.project, t);
   });
   $.on("view.closed", async (e) => {
@@ -201,13 +294,26 @@
   });
   $.on("tasks.changed", async (e) => refresh(e.project));
   $.on("ui.key", async (e) => {
-    var _a;
+    var _a, _b;
     const project = (_a = e.target) == null ? void 0 : _a.project;
-    if (e.view !== VIEW || !project || e.key !== "b" && e.key !== "p") return;
+    if (e.view !== VIEW || !project) return;
     const t = tabs.get(project);
     if (!t) return;
+    if (e.key === "enter") {
+      if (await press(project, t, (_b = e.row) != null ? _b : "")) await publish(project, t);
+      return;
+    }
+    if (e.key !== "b" && e.key !== "p") return;
     if (e.key === "b") t.doneAll = !t.doneAll;
     else t.prio = PRIOS[(PRIOS.indexOf(t.prio) + 1) % PRIOS.length];
+    await load(project, t);
     await publish(project, t);
+  });
+  $.on("ui.click", async (e) => {
+    var _a, _b;
+    const project = (_a = e.target) == null ? void 0 : _a.project;
+    if (e.view !== VIEW || !project) return;
+    const t = tabs.get(project);
+    if (t && await press(project, t, (_b = e.row) != null ? _b : "")) await publish(project, t);
   });
 })();

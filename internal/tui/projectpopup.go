@@ -356,7 +356,11 @@ func (pv *projectView) messagesKey(m *dash, s string) tea.Cmd {
 // openTask shows task t of the popup's project over it; esc comes back
 // to the popup.
 func (m *dash) openTask(pv *projectView, t *tasks.Task) tea.Cmd {
-	m.push(&taskView{pv: pv, id: t.ID})
+	tv := &taskView{pv: pv, id: t.ID}
+	if t.Archived {
+		tv.archived = t
+	}
+	m.push(tv)
 	return nil
 }
 
@@ -365,9 +369,15 @@ func (m *dash) openTask(pv *projectView, t *tasks.Task) tea.Cmd {
 type taskView struct {
 	pv *projectView
 	id int
+	// archived is the task when it is in the archive, off the board: it
+	// shows, and no key acts on it.
+	archived *tasks.Task
 }
 
 func (tv *taskView) task() *tasks.Task {
+	if tv.archived != nil {
+		return tv.archived
+	}
 	if tv.pv.board != nil {
 		for _, t := range tv.pv.board.Tasks {
 			if t.ID == tv.id {
@@ -383,7 +393,7 @@ func (tv *taskView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	case "esc":
 		m.pop()
 	case "D", "A", "X", "c", "P":
-		if t := tv.task(); t != nil {
+		if t := tv.task(); t != nil && tv.archived == nil {
 			return m.taskKey(tv.pv.slug, t, k.String())
 		}
 	}
@@ -409,6 +419,9 @@ func (tv *taskView) render(m *dash) string {
 	for i, l := range d.lines {
 		// The box has its own gutters.
 		d.lines[i] = strings.TrimRight(strings.TrimSuffix(strings.TrimPrefix(l, " "), reset), " ") + reset
+	}
+	if tv.archived != nil {
+		return m.popup(box{title: title + " · archived", body: d.lines, sel: -1, keys: "esc back"})
 	}
 	return m.popup(box{title: title, body: d.lines, sel: -1, keys: joinKeys(taskKeys(t), "esc back")})
 }

@@ -229,9 +229,6 @@ func TestCopies(t *testing.T) {
 		// Settings and mods are never in the app API, but for the
 		// sidebar's three (settingsHome).
 		".Projects[].Own", ".Projects[].Badges",
-		// A task's archive flag: archived tasks aren't sent.
-		".Projects[].NeedsYou[].Archived", ".Projects[].Threads[].Task.Archived",
-		".Projects[].Board[].Archived",
 		// For resume, and resolved threads aren't sent.
 		".Projects[].Threads[].Record.AgentSID", ".Projects[].Threads[].Record.Prompted",
 		".Projects[].Threads[].Record.ResolvedAt",
@@ -330,12 +327,12 @@ func TestCopies(t *testing.T) {
 	// The request's other fields are peer.list's.
 	check("peer.share-answer", homeOf(shareAnswerOf), []string{".Out", ".Peer", ".For", ".Note", ".Created", ".Answered",
 		".Code", ".Summary"})
-	check("task.get", homeOf(taskOf), []string{".Archived"})
-	check("task.done", homeOf(doneTasksOf), []string{".Tasks[].Archived"})
+	check("task.get", homeOf(taskOf), nil)
+	check("task.done", homeOf(doneTasksOf), nil)
 	// Programs (app API 44): the members' read splits them into
-	// (server, project); a task's archive flag and after refs, and the
+	// (server, project); a task's after refs, and the
 	// paths of a renamed or deleted program's folder, stay home.
-	check("program.get", homeOf(programDetailOf), []string{".Umbrellas[].Task.Archived", ".Tasks{}.Archived", ".SideProgram.Projects"})
+	check("program.get", homeOf(programDetailOf), []string{".SideProgram.Projects"})
 	// An escape's menu and dialog never cross (as on peer.list's needs,
 	// checked without Escape); a paired member's mirror time is the
 	// TUI's.
