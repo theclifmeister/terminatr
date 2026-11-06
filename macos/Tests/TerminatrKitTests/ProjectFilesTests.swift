@@ -440,6 +440,7 @@ private actor Thumbs {
 @Test func aDamagedThumbnailDrawsNothing() async {
     let bad = AppAPI.LibraryThumbnail(name: "a.png", width: 1, height: 1, data: Data("not an image".utf8))
     #expect(await LibraryPage.drawn(bad) == nil)
+}
 
 @Test func aSeatsOwnFilesHeadTheirGroup() {
     func seat(_ name: String, _ title: String, project: String = "") -> AppAPI.LibraryFile {
