@@ -425,6 +425,7 @@ func init() {
 			s.peers.Reload()
 			return s.peers.Status()
 		})},
+		proto.MethodPeerSwitch: {gate: gateHuman, call: typed((*Server).peerSwitch)},
 		// The apps' crash and hang reports (appreport.go): added by an
 		// app only, read by the human and any agent.
 		proto.MethodAppReportAdd:  {gate: gateHuman, call: typed((*Server).addAppReport)},

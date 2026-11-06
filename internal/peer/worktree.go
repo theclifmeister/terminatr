@@ -118,7 +118,7 @@ func worktreeRefusal(err error) *proto.Error {
 // from the file each time: a link's copy can lag a change, and off must hold
 // at the next request. A file that can't be read is off.
 func (m *Manager) filesOn(id ID, project string) bool {
-	peers, err := LoadPeers(m.opts.Dir)
+	peers, err := m.Allowed()
 	if err != nil {
 		return false
 	}

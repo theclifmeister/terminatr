@@ -135,6 +135,10 @@ var InviteRefusalWords = map[string]string{
 // NeedsAnswer (decision 14).
 type AnswerOpts struct {
 	Accept bool
+	// RaiseNeeds raises the needs switch for the paired server alias through
+	// the server, as peer.switch; a raise written only to peers.json doesn't
+	// count (docs/SPEC.md §16.8). Nil writes the file (no server to tell).
+	RaiseNeeds func(alias, level string) error
 	// Tasks is program_tasks (config.ProgramTasksFile or …Propose),
 	// Starts program_starts, Status program_status.
 	Tasks       string
@@ -324,7 +328,12 @@ func AnswerInvite(c caller.Caller, p *project.Project, id string, o AnswerOpts) 
 			if peers, err := peer.LoadPeers(dir); err == nil {
 				for _, q := range peers {
 					if q.Alias == alias && needsRank(q.NeedsLevel()) < needsRank(want) {
-						if _, err := peer.SetNeeds(dir, alias, want); err != nil {
+						if o.RaiseNeeds != nil {
+							err = o.RaiseNeeds(alias, want)
+						} else {
+							_, err = peer.SetNeeds(dir, alias, want)
+						}
+						if err != nil {
 							return nil, false, err
 						}
 						peersChanged = true

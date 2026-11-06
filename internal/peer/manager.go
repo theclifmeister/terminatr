@@ -81,6 +81,9 @@ type Manager struct {
 	stamps stampShare
 	// filesRead is when each peer last read a folder here (noteFilesRead).
 	filesRead map[ID]time.Time
+	// grants is what the human let each peer do; what peers.json says
+	// counts only up to it.
+	grants *grants
 }
 
 type running struct {
@@ -95,10 +98,27 @@ func Start(opts Options) *Manager {
 	if opts.Backoff == nil {
 		opts.Backoff = backoff
 	}
-	m := &Manager{opts: opts, links: map[ID]*running{}, fileSlots: make(chan struct{}, maxFileStreams)}
+	m := &Manager{opts: opts, links: map[ID]*running{}, fileSlots: make(chan struct{}, maxFileStreams), grants: loadGrants(opts.Dir, opts.Logf)}
 	m.ctx, m.stop = context.WithCancel(context.Background())
 	m.Reload()
 	return m
+}
+
+// Allowed is the paired servers as they hold here: peers.json, up to what the
+// human let each do, without a pairing tm wasn't asked to keep.
+func (m *Manager) Allowed() ([]Peer, error) {
+	peers, _, err := m.grants.read()
+	return peers, err
+}
+
+// SetSwitch does the human's change to a paired server's switch: peer.switch,
+// which only the human reaches. It is the way up for a switch.
+func (m *Manager) SetSwitch(p proto.PeerSwitchParams) (proto.PeerSwitchResult, error) {
+	res, err := m.grants.set(p)
+	if err != nil {
+		return res, err
+	}
+	return res, m.Reload()
 }
 
 // Reload reads the identity key and the peers again: a new peer gets a
@@ -110,7 +130,7 @@ func (m *Manager) Reload() error {
 	}
 	var peers []Peer
 	if err == nil && id != nil {
-		peers, err = LoadPeers(m.opts.Dir)
+		peers, err = m.Allowed()
 	}
 	var cert tls.Certificate
 	if err == nil && id != nil {
@@ -450,12 +470,13 @@ func (m *Manager) Status() *proto.LinkStatus {
 	if m == nil {
 		return nil
 	}
+	_, refused, _ := m.grants.read()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.id == nil && m.err == nil {
 		return nil
 	}
-	st := &proto.LinkStatus{}
+	st := &proto.LinkStatus{Refused: refused}
 	if m.id != nil {
 		st.ID, st.Short = m.id.ID.String(), m.id.ID.Short()
 	}

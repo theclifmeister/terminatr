@@ -18,8 +18,8 @@ func (s *Server) peerList() proto.PeerList {
 	l := s.mirror.List()
 	shares, rev := link.ShareState()
 	var pinned []peer.Peer
-	if dir, err := peer.Dir(); err == nil {
-		pinned, _ = peer.LoadPeers(dir)
+	if s.peers != nil {
+		pinned, _ = s.peers.Allowed()
 	}
 	for i := range l.Peers {
 		l.Peers[i].Shares = shares[l.Peers[i].Alias]

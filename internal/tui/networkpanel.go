@@ -158,6 +158,12 @@ func (nv *networkView) panelLines(m *dash, r netRow, ok bool, w int) []panelLine
 			}
 		}
 		row(itemRelay, "relay", relay)
+		if len(e.Refused) > 0 {
+			add(itemNone, "")
+			for _, l := range wrapLines("Doesn't count: "+strings.Join(e.Refused, ", ")+". peers.json says so, but you didn't ask for it here or with tm peer; something else wrote it. tm peer allow "+e.Alias+" keeps it, if it was you; if not, turn it off with tm peer and find what wrote it.", max(w, 8)) {
+				add(itemNone, th().Warn.Render(l))
+			}
+		}
 		add(itemNone, "")
 		level := panesLevel(e)
 		lv := map[string]int{proto.PanesOff: 0, proto.PanesView: 1, proto.PanesType: 2}[level]
@@ -177,7 +183,11 @@ func (nv *networkView) panelLines(m *dash, r netRow, ok bool, w int) []panelLine
 			}
 		}
 		add(itemNone, th().Faint.Render("WHAT "+strings.ToUpper(name)+" MAY DO HERE"))
-		rung(true, "paired: your projects and its can link")
+		if slices.Contains(e.Refused, proto.PeerRefusalPairing) {
+			rung(false, "paired here, but no link: tm wasn't asked to keep this pairing")
+		} else {
+			rung(true, "paired: your projects and its can link")
+		}
 		if s := sharedSlugs(m); len(s) > 0 {
 			rung(true, "sees what you share: "+strings.Join(s, ", "))
 		} else {

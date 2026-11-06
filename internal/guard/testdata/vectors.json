@@ -1438,6 +1438,7 @@
  {"rules": "yolo-thread-temp", "tool": "Bash", "input": {"command": "tm peer pair"}, "rule": "tm-files", "summary": "tm peer pair", "floor": true},
  {"rules": "yolo-thread-temp", "tool": "Bash", "input": {"command": "tm peer join CODE"}, "rule": "tm-files", "summary": "tm peer join", "floor": true},
  {"rules": "yolo-thread-temp", "tool": "Bash", "input": {"command": "tm peer remove mini"}, "rule": "tm-files", "summary": "tm peer remove", "floor": true},
+ {"rules": "yolo-thread-temp", "tool": "Bash", "input": {"command": "tm peer allow mini"}, "rule": "tm-files", "summary": "tm peer allow", "floor": true},
  {"rules": "yolo-thread-temp", "tool": "Bash", "input": {"command": "tm peer rotate --yes"}, "rule": "tm-files", "summary": "tm peer rotate", "floor": true},
  {"rules": "yolo-thread-temp", "tool": "Bash", "input": {"command": "tm peer name mini work"}, "rule": "tm-files", "summary": "tm peer name", "floor": true},
  {"rules": "yolo-thread-temp", "tool": "Bash", "input": {"command": "tm peer panes mini write"}, "rule": "tm-files", "summary": "tm peer panes", "floor": true},

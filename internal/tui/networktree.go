@@ -372,6 +372,9 @@ func (nv *networkView) rowLines(m *dash, r netRow, w int) []string {
 		default:
 			left += th().Faint.Render(" · " + words)
 		}
+		if len(e.Refused) > 0 {
+			left += " · " + th().Warn.Render("refused")
+		}
 		if v := peerVersion(m, e); v != "" && w >= 70 {
 			left += th().Faint.Render(" · tm " + v)
 		}

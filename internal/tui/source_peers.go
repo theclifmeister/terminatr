@@ -55,6 +55,22 @@ type PeerEntry struct {
 	// Files are the projects whose folders it may read, this server's
 	// files switch for it (§16.18).
 	Files []string
+	// Refused is what peers.json says of it that doesn't count, since you
+	// didn't ask for it (§16.8); the switches above are what does.
+	Refused []string
+}
+
+// peerSwitch has the server set a switch and keep it as the human's: what a
+// raise takes (§16.8). A server that doesn't run can't take one.
+func (s *ServerSource) peerSwitch(p proto.PeerSwitchParams) error {
+	var res proto.PeerSwitchResult
+	if err := s.call(proto.MethodPeerSwitch, p, &res); err != nil {
+		if errors.Is(err, tmclient.ErrNotRunning) {
+			return errors.New("the server isn't running, and only it raises a switch: tm server start")
+		}
+		return err
+	}
+	return nil
 }
 
 func (s *ServerSource) Peers() (PeerList, error) {
@@ -75,6 +91,7 @@ func (s *ServerSource) Peers() (PeerList, error) {
 		return l, err
 	}
 	links := map[string]proto.PeerLink{}
+	refused := map[string]proto.PeerRefusal{}
 	var st proto.ServerStatus
 	if s.call(proto.MethodServerStatus, nil, &st) == nil {
 		l.Running = true
@@ -83,6 +100,9 @@ func (s *ServerSource) Peers() (PeerList, error) {
 			for _, pl := range st.Link.Peers {
 				links[pl.ID] = pl
 			}
+			for _, r := range st.Link.Refused {
+				refused[r.ID] = r
+			}
 		}
 	}
 	for _, p := range peers {
@@ -90,6 +110,10 @@ func (s *ServerSource) Peers() (PeerList, error) {
 			ConversationsOff: !p.ConversationsOn(), Needs: p.NeedsLevel(), Pages: slices.Clone(p.Pages), Files: slices.Clone(p.Files)}
 		if pl, ok := links[e.ID]; ok {
 			e.Link = &pl
+		}
+		if r, ok := refused[e.ID]; ok {
+			e.Panes, e.ConversationsOff, e.Needs = r.Panes, r.Conversations == proto.ConversationsNot, r.Needs
+			e.Pages, e.Files, e.Refused = slices.Clone(r.Pages), slices.Clone(r.Files), r.Words
 		}
 		l.Peers = append(l.Peers, e)
 	}
@@ -149,7 +173,10 @@ func (s *ServerSource) SetPeerConversations(alias string, on bool) error {
 	if s.Caller.IsAgent() {
 		return errHumanOnly
 	}
-	found, err := peer.SetConversations(peer.DirIn(s.Paths.Home), alias, on)
+	if on {
+		return s.peerSwitch(proto.PeerSwitchParams{Alias: alias, Switch: proto.PeerSwitchConversations, Value: proto.ConversationsOn})
+	}
+	found, err := peer.SetConversations(peer.DirIn(s.Paths.Home), alias, false)
 	if err != nil {
 		return err
 	}
@@ -176,7 +203,10 @@ func (s *ServerSource) SetPeerPages(alias, project string, on bool) error {
 	if s.Caller.IsAgent() {
 		return errHumanOnly
 	}
-	found, err := peer.SetPages(peer.DirIn(s.Paths.Home), alias, project, on)
+	if on {
+		return s.peerSwitch(proto.PeerSwitchParams{Alias: alias, Switch: proto.PeerSwitchPages, Project: project, Value: "on"})
+	}
+	found, err := peer.SetPages(peer.DirIn(s.Paths.Home), alias, project, false)
 	if err != nil {
 		return err
 	}
@@ -194,12 +224,15 @@ func (s *ServerSource) SetPeerFiles(alias, slug string, on bool) error {
 	if s.Caller.IsAgent() {
 		return errHumanOnly
 	}
+	if on {
+		return s.peerSwitch(proto.PeerSwitchParams{Alias: alias, Switch: proto.PeerSwitchFiles, Project: slug, Value: "on"})
+	}
 	dir := peer.DirIn(s.Paths.Home)
 	p, err := project.Open(slug)
 	if err != nil {
 		return err
 	}
-	found, err := p.SetPeerFiles(s.Caller, dir, alias, on)
+	found, err := p.SetPeerFiles(s.Caller, dir, alias, false)
 	if err != nil {
 		return err
 	}
@@ -216,6 +249,9 @@ func (s *ServerSource) SetPeerFiles(alias, slug string, on bool) error {
 func (s *ServerSource) SetPeerNeeds(alias, level string) error {
 	if s.Caller.IsAgent() {
 		return errHumanOnly
+	}
+	if level != proto.NeedsOff {
+		return s.peerSwitch(proto.PeerSwitchParams{Alias: alias, Switch: proto.PeerSwitchNeeds, Value: level})
 	}
 	found, err := peer.SetNeeds(peer.DirIn(s.Paths.Home), alias, level)
 	if err != nil {
@@ -234,6 +270,9 @@ func (s *ServerSource) SetPeerNeeds(alias, level string) error {
 func (s *ServerSource) SetPeerPanes(alias, level string) error {
 	if s.Caller.IsAgent() {
 		return errHumanOnly
+	}
+	if level != proto.PanesOff {
+		return s.peerSwitch(proto.PeerSwitchParams{Alias: alias, Switch: proto.PeerSwitchPanes, Value: level})
 	}
 	found, err := peer.SetPanes(peer.DirIn(s.Paths.Home), alias, level)
 	if err != nil {
@@ -394,6 +433,9 @@ func (s *ServerSource) pairing(ctx context.Context, code peer.Code, ev PairEvent
 	got, err := peer.PinTaken(dir, p.Key, code.Relay, p.Name, "", func(n string) string { return project.ProgramTaken(n, nil) })
 	if err != nil {
 		return "", err
+	}
+	if err := s.peerSwitch(proto.PeerSwitchParams{Alias: got.Alias, Switch: proto.PeerSwitchPin}); err != nil {
+		return got.Alias, fmt.Errorf("paired with %s, but the server didn't keep the pairing (%v); tm peer allow %s does", got.Alias, err, got.Alias)
 	}
 	var st *proto.LinkStatus
 	if err := s.call(proto.MethodPeerReload, nil, &st); err != nil && !errors.Is(err, tmclient.ErrNotRunning) {

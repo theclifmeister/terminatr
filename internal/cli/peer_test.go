@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/tls"
 	"encoding/json"
 	"io"
@@ -15,7 +17,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/home/hometest"
 	"github.com/theclifmeister/terminatr/internal/peer"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
@@ -30,8 +34,61 @@ func stubPeerServer(t *testing.T, links *proto.LinkStatus) *int {
 	oldReload, oldLinks := reloadPeers, peerLinks
 	t.Cleanup(func() { reloadPeers, peerLinks = oldReload, oldLinks })
 	reloadPeers = func() error { n++; return nil }
+	stubPeerSwitch(t)
 	peerLinks = func() (*proto.LinkStatus, bool) { return links, links != nil }
 	return &n
+}
+
+// stubPeerSwitch has peer.switch write the file as the server would, with no
+// server to start.
+func stubPeerSwitch(t *testing.T) {
+	t.Helper()
+	old := peerSwitch
+	t.Cleanup(func() { peerSwitch = old })
+	peerSwitch = func(p proto.PeerSwitchParams) (proto.PeerSwitchResult, error) {
+		dir, err := peer.Dir()
+		if err != nil {
+			return proto.PeerSwitchResult{}, err
+		}
+		if p.Switch == proto.PeerSwitchPin || p.Switch == proto.PeerSwitchAllow {
+			return proto.PeerSwitchResult{Alias: p.Alias}, nil
+		}
+		found, err := peer.ApplySwitch(dir, p)
+		if err == nil && !found {
+			err = &proto.Error{Code: "unknown-peer", Message: "no peer"}
+		}
+		return proto.PeerSwitchResult{Alias: p.Alias}, err
+	}
+}
+
+// Every tm peer and tm device command takes the caller the server sees, not
+// only the one the environment says: a process with its session's variables
+// unset is still the agent it is.
+func TestPeerAndDeviceAreChecked(t *testing.T) {
+	for _, cmd := range []string{"peer", "device"} {
+		if !checked[cmd] {
+			t.Errorf("tm %s isn't in checked", cmd)
+		}
+	}
+	dir := hometest.PrivateDir(t)
+	t.Setenv("TERMINATR_HOME", dir)
+	raised := false
+	old := peerSwitch
+	t.Cleanup(func() { peerSwitch = old })
+	peerSwitch = func(proto.PeerSwitchParams) (proto.PeerSwitchResult, error) {
+		raised = true
+		return proto.PeerSwitchResult{}, nil
+	}
+	var out, errb bytes.Buffer
+	e := &Env{Stdin: strings.NewReader(""), Stdout: &out, Stderr: &errb, Caller: caller.Caller{Kind: caller.Human},
+		Getenv: func(string) string { return "" },
+		Identify: func() (caller.Caller, bool) {
+			return caller.Caller{Kind: caller.Thread, Project: "p", Thread: "t-1"}, true
+		}}
+	code, handled := e.Run([]string{"peer", "panes", "mini", "write"})
+	if !handled || code == ExitOK || raised || !strings.Contains(errb.String(), "human-only") {
+		t.Fatalf("code %d raised %v: %s", code, raised, errb.String())
+	}
 }
 
 func TestPeerUsageAndGuard(t *testing.T) {
@@ -46,7 +103,7 @@ func TestPeerUsageAndGuard(t *testing.T) {
 	h.expect(2, "--relay URL", human, "peer", "pair")
 	h.expect(2, "--relay: relay", human, "peer", "pair", "--relay", "https://r.example.net")
 	h.expect(2, "16 digits", human, "peer", "join", "r.example.net/1234")
-	for _, c := range [][]string{{"pair", "--relay", "r.example.net"}, {"join", "r.example.net/7Q4M-K2XD-9HVA-PT3C"}, {"list"}, {"remove", "mini"}, {"rotate", "--yes"}, {"panes", "mini", "type"}} {
+	for _, c := range [][]string{{"pair", "--relay", "r.example.net"}, {"join", "r.example.net/7Q4M-K2XD-9HVA-PT3C"}, {"list"}, {"allow", "mini"}, {"remove", "mini"}, {"rotate", "--yes"}, {"panes", "mini", "type"}} {
 		h.expect(1, "human-only", coord, append([]string{"peer"}, c...)...)
 		h.expect(1, "human-only", thr, append([]string{"peer"}, c...)...)
 	}
@@ -392,14 +449,51 @@ func TestPeerFiles(t *testing.T) {
 	if out := h.ok(human, "network"); !strings.Contains(out, "reads files of demo") {
 		t.Fatalf("network: %q", out)
 	}
+	if out := h.ok(human, "peer", "files", "mini", "demo", "off"); !strings.Contains(out, "Files off") {
+		t.Fatalf("off says: %q", out)
+	}
 	p, _ := project.Open("demo")
 	if j, _ := os.ReadFile(filepath.Join(p.Dir, "JOURNAL.md")); !strings.Contains(string(j), "peer.files") {
 		t.Errorf("journal:\n%s", j)
 	}
-	if out := h.ok(human, "peer", "files", "mini", "demo", "off"); !strings.Contains(out, "Files off") {
-		t.Fatalf("off says: %q", out)
-	}
 	if out := h.ok(human, "peer", "list"); strings.Contains(out, "files:") {
 		t.Fatalf("list after off: %q", out)
+	}
+}
+
+// tm peer list shows what holds, not what the file says, and says what doesn't
+// count; tm peer allow goes to the server.
+func TestPeerListRefusedAndAllow(t *testing.T) {
+	h := newHarness(t)
+	dir, err := peer.Dir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := peer.EnsureIdentity(dir); err != nil {
+		t.Fatal(err)
+	}
+	key, _, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := peer.SavePeers(dir, []peer.Peer{{Alias: "mini", Key: key, Relay: "wss://r.example.net", Panes: proto.PanesType}}); err != nil {
+		t.Fatal(err)
+	}
+	stubPeerServer(t, &proto.LinkStatus{Refused: []proto.PeerRefusal{{Alias: "mini", ID: peer.IDOf(key).String(), Words: []string{"panes write"},
+		Panes: proto.PanesOff, Conversations: proto.ConversationsOn, Needs: proto.NeedsOff}}})
+	out := h.ok(human, "peer", "list")
+	if strings.Contains(out, "panes: write") || !strings.Contains(out, "doesn't count: panes write") || !strings.Contains(out, "tm peer allow mini") {
+		t.Fatalf("list: %q", out)
+	}
+	var asked proto.PeerSwitchParams
+	peerSwitch = func(p proto.PeerSwitchParams) (proto.PeerSwitchResult, error) {
+		asked = p
+		return proto.PeerSwitchResult{Alias: "mini", Allowed: []string{"panes write"}}, nil
+	}
+	if out := h.ok(human, "peer", "allow", "mini"); !strings.Contains(out, "Allowed for mini: panes write") {
+		t.Fatalf("allow: %q", out)
+	}
+	if asked.Switch != proto.PeerSwitchAllow || asked.Alias != "mini" {
+		t.Fatalf("asked %+v", asked)
 	}
 }

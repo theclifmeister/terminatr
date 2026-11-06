@@ -96,6 +96,54 @@ type DeviceLink struct {
 // (null without an identity key). The human's.
 const MethodPeerReload = "peer.reload"
 
+// MethodPeerSwitch is the human setting a paired server's switch: the
+// server writes it and keeps it as theirs. peers.json alone raises nothing
+// (docs/SPEC.md §16.8). The human's only.
+const MethodPeerSwitch = "peer.switch"
+
+// What peer.switch sets.
+const (
+	PeerSwitchPanes         = "panes"         // Value: off, view or write
+	PeerSwitchNeeds         = "needs"         // Value: off, view or answer
+	PeerSwitchConversations = "conversations" // Value: on or off
+	PeerSwitchPages         = "pages"         // Project, Value: on or off
+	PeerSwitchFiles         = "files"         // Project, Value: on or off
+	PeerSwitchPin           = "pin"           // keeps a pairing just made, its switches at their defaults
+	PeerSwitchAllow         = "allow"         // keeps all peers.json says for the server
+)
+
+// PeerRefusalPairing is PeerRefusal's word for a pairing tm wasn't asked to
+// keep.
+const PeerRefusalPairing = "the pairing"
+
+// PeerSwitchParams are peer.switch's.
+type PeerSwitchParams struct {
+	Alias   string `json:"alias"`
+	Switch  string `json:"switch"`
+	Project string `json:"project,omitempty"`
+	Value   string `json:"value,omitempty"`
+}
+
+// PeerSwitchResult answers peer.switch: Alias the server's, Allowed what
+// PeerSwitchAllow just kept that didn't count before.
+type PeerSwitchResult struct {
+	Alias   string   `json:"alias"`
+	Allowed []string `json:"allowed,omitempty"`
+}
+
+// PeerRefusal is a paired server whose entry in peers.json says more than
+// the human asked for: Words what doesn't count, the rest what does.
+type PeerRefusal struct {
+	Alias         string   `json:"alias"`
+	ID            string   `json:"id"`
+	Words         []string `json:"words"`
+	Panes         string   `json:"panes"`
+	Conversations string   `json:"conversations"`
+	Needs         string   `json:"needs"`
+	Pages         []string `json:"pages,omitempty"`
+	Files         []string `json:"files,omitempty"`
+}
+
 // LinkStatus is this server's identity and its links.
 type LinkStatus struct {
 	// ID is this server's id, 64 hex digits; Short the 8 people read.
@@ -104,6 +152,9 @@ type LinkStatus struct {
 	// Error is why the identity key or the peers can't be read.
 	Error string     `json:"error,omitempty"`
 	Peers []PeerLink `json:"peers,omitempty"`
+	// Refused are the paired servers peers.json says more of than the
+	// human asked for.
+	Refused []PeerRefusal `json:"refused,omitempty"`
 }
 
 // Link states.
