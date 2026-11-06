@@ -49,7 +49,7 @@ const (
 	quality = 70
 	// version is in every cache key: a change to how thumbnails look, or
 	// to which files make one, makes them again.
-	version = 1
+	version = 2 // 2: a JPEG's EXIF orientation is honoured
 	// slots is how many are made at a time, and waitSlot how long a
 	// request waits for one: a first scroll through a long library asks
 	// for many, and the server has other work.
@@ -118,14 +118,27 @@ func Make(data []byte) (t Thumb, err error) {
 		return Thumb{}, fmt.Errorf("%w: %v is not %dx%d", ErrNoThumbnail, b, cfg.Width, cfg.Height)
 	}
 	w, h := fit(cfg.Width, cfg.Height)
+	small := shrink(src, w, h)
+	if o := jpegOrientation(data); o > 1 {
+		small = orient(small, o)
+		w, h = small.Rect.Dx(), small.Rect.Dy()
+	}
 	var out bytes.Buffer
-	if err := jpeg.Encode(&out, shrink(src, w, h), &jpeg.Options{Quality: quality}); err != nil {
+	if err := jpeg.Encode(&out, small, &jpeg.Options{Quality: quality}); err != nil {
 		return Thumb{}, fmt.Errorf("%w: %v", ErrNoThumbnail, err)
 	}
 	if out.Len() > MaxBytes {
 		return Thumb{}, fmt.Errorf("%w: %d bytes made", ErrNoThumbnail, out.Len())
 	}
 	return Thumb{Width: w, Height: h, Data: out.Bytes()}, nil
+}
+
+// jpegOrientation is data's EXIF orientation if it is a JPEG, else 1.
+func jpegOrientation(data []byte) int {
+	if !bytes.HasPrefix(data, []byte("\xff\xd8\xff")) {
+		return 1
+	}
+	return orientation(data)
 }
 
 // decoders are the format's functions, by the file's first bytes and not
@@ -328,4 +341,49 @@ func Forget(project, id, name string) error {
 	}
 	os.Remove(dir) // when it is empty
 	return nil
+}
+
+// ForgetProject removes all the cache keeps for a project that was deleted
+// or renamed: a thumbnail shows what its file showed.
+func ForgetProject(project string) error {
+	if project == "" || project != filepath.Base(project) {
+		return nil
+	}
+	d, err := home.ThumbCacheDir()
+	if err != nil {
+		return err
+	}
+	return os.RemoveAll(filepath.Join(d, project))
+}
+
+// Sweep removes the cache of every project for which exists says no (a
+// project deleted or renamed while no server ran, or by an older one). It
+// returns how many it removed.
+func Sweep(exists func(slug string) bool) (int, error) {
+	d, err := home.ThumbCacheDir()
+	if err != nil {
+		return 0, err
+	}
+	ents, err := os.ReadDir(d)
+	if errors.Is(err, fs.ErrNotExist) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	var first error
+	for _, e := range ents {
+		if !e.IsDir() || exists(e.Name()) {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(d, e.Name())); err != nil {
+			if first == nil {
+				first = err
+			}
+			continue
+		}
+		n++
+	}
+	return n, first
 }

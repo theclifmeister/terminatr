@@ -406,6 +406,7 @@ func Run(ctx context.Context, opts Options) error {
 	// And an install from before protection keeps what it ran with.
 	pinProtection(logger.Printf)
 	tellYolo(logger.Printf)
+	sweepThumbs(logger.Printf)
 	toResume, lost := s.loadPrevious()
 	if err := s.saveLocked(""); err != nil {
 		logger.Printf("sessions.json: %v", err)

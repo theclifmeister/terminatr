@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/home"
 )
 
 // writeFront replaces PROJECT.md's front matter with front, as a
@@ -203,5 +204,29 @@ func TestMoveReposFailsClosed(t *testing.T) {
 	writeFront(t, p, "repos = ["+strconv.Quote(a)+"]\n")
 	if got := reposOf(t, "demo"); len(got) != 0 {
 		t.Fatalf("PROJECT.md's list counts: %v", got)
+	}
+}
+
+// TestTrashForgetsThumbs: a deleted project's cached library thumbnails go
+// with it; another project's stay.
+func TestTrashForgetsThumbs(t *testing.T) {
+	setup(t)
+	p, err := New(Options{Slug: "demo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, _ := home.ThumbCacheDir()
+	for _, s := range []string{"demo", "other"} {
+		os.MkdirAll(filepath.Join(d, s, "t-0001"), 0o700)
+		os.WriteFile(filepath.Join(d, s, "t-0001", "x.jpg"), []byte("x"), 0o600)
+	}
+	if _, err := p.Trash(human, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(d, "demo")); err == nil {
+		t.Error("deleted project's thumbnails stay")
+	}
+	if _, err := os.Stat(filepath.Join(d, "other", "t-0001", "x.jpg")); err != nil {
+		t.Errorf("another project's: %v", err)
 	}
 }
