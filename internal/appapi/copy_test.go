@@ -300,6 +300,9 @@ func TestCopies(t *testing.T) {
 		// A need filled whole is an escape's, whose menu and dialog
 		// never cross (checked below, without Escape).
 		".Peers[].NeedsCap", ".Peers[].Projects[].Needs[].Approval", ".Peers[].Projects[].Needs[].Question",
+		// Whether a paired server's files can be read: no console says
+		// so yet.
+		".Peers[].Projects[].PeerProject.Files",
 	})
 	check("peer.list needs", homeOf(func(n proto.PeerNeed) PeerNeed {
 		n.Escape = false
@@ -375,7 +378,8 @@ func TestCopies(t *testing.T) {
 	check("memory.read", homeOf(memoryTextOf), nil)
 	check("library.list", homeOf(libraryOf), nil)
 	check("library.read", homeOf(libraryChunkOf), nil)
-	check("files.list", homeOf(filesListOf), nil)
+	// Withheld is a paired server's mark: no folder of this server's has one.
+	check("files.list", homeOf(filesListOf), []string{".Entries[].Withheld"})
 	check("files.read", homeOf(filesChunkOf), nil)
 	check("files.stamp", homeOf(filesStampOf), nil)
 	check("files.repos", homeOf(filesReposOf), nil)
