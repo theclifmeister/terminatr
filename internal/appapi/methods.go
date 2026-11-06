@@ -126,6 +126,11 @@ func init() {
 		// board's done count changes.
 		unary(proto.MethodProjectHistory, false, historyParams, historyOf),
 		unary(proto.MethodPeerHistory, false, peerPagesParams, historyOf),
+		// Which of a project's tags count as releases (app API 65; the
+		// server's caps say release-tags): the one project setting that
+		// joins, the Mac app's alone for now (macOnly), the human's only.
+		unary(proto.MethodReleaseTags, false, releaseTagsParams, releaseTagsOf),
+		unary(proto.MethodReleaseTagsSet, true, releaseTagsSetParams, releaseTagsOf),
 
 		// A project's history, as tm search asks it (app API 41; the
 		// server's caps say search): hits, a hit's timeline and the
@@ -535,6 +540,14 @@ func taskGetParams(p TaskGetParams) proto.TaskGetParams {
 
 func taskAddParams(p TaskAddParams) proto.TaskAddParams {
 	return proto.TaskAddParams{Project: p.Project, Title: p.Title, Notes: p.Notes, Template: p.Template}
+}
+
+func releaseTagsParams(p ProjectParams) proto.ReleaseTagsParams {
+	return proto.ReleaseTagsParams{Project: p.Project}
+}
+
+func releaseTagsSetParams(p ReleaseTagsSetParams) proto.ReleaseTagsSetParams {
+	return proto.ReleaseTagsSetParams{Project: p.Project, Mode: p.Mode, Patterns: slices.Clone(p.Patterns)}
 }
 
 func historyParams(p ProjectParams) proto.HistoryParams {

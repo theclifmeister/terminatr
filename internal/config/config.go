@@ -244,6 +244,10 @@ type Safety struct {
 	// MethodSquash or MethodRebase. A repo whose rules require linear
 	// history refuses MethodMerge.
 	MergeMethod string `json:"merge_method"`
+	// ReleaseTags are the patterns of the tags that count as the project's
+	// releases, which replace the default rule (internal/releases); none
+	// is that rule, and ReleaseTagsOff alone is no releases.
+	ReleaseTags []string `json:"release_tags,omitempty"`
 	// BranchName is the template of new threads' branches
 	// (ExpandBranchName); existing threads keep the branch they have.
 	BranchName string `json:"branch_name"`
@@ -339,6 +343,7 @@ type rawSafety struct {
 	Share          *bool         `toml:"share"`
 	Merge          *string       `toml:"merge"`
 	BranchName     *string       `toml:"branch_name"`
+	ReleaseTags    *ReleaseTags  `toml:"release_tags"`
 	Guard          *bool         `toml:"guard"`
 	GuardOff       *[]string     `toml:"guard_off"`
 	GuardMode      *string       `toml:"guard_mode"`

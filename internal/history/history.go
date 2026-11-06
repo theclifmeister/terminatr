@@ -1,7 +1,8 @@
 // Package history keeps a project's daily numbers (docs/SPEC.md §5.1,
 // History): done per day and the facts, from tm's own records only, the
-// task list, its archive and the journal. It never runs git, so a plain
-// folder and a repo with several remotes answer alike.
+// task list, its archive and the journal, so a plain folder and a repo
+// with several remotes answer alike. Git only adds each repo's releases
+// (internal/releases), read locally, and nothing else.
 //
 // The journal is read once: JOURNAL.md is followed from its last offset
 // and each month archive is read again only when its size or time
@@ -16,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"maps"
 	"math"
 	"os"
 	"path/filepath"
@@ -24,9 +26,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/releases"
 	"github.com/theclifmeister/terminatr/internal/tasks"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 )
 
 // indexes are the indexes this process keeps, by project folder: the
@@ -36,13 +41,30 @@ var (
 	indexes   = map[string]*index{}
 )
 
-// Read answers project p's numbers, its days in this machine's time zone.
+// Read answers project p's numbers and releases, its days in this
+// machine's time zone.
 func Read(p *project.Project) (proto.History, error) {
 	return ReadIn(p, time.Local)
 }
 
 // ReadIn is Read with days in loc.
 func ReadIn(p *project.Project, loc *time.Location) (proto.History, error) {
+	x := indexOf(p)
+	h, err := x.read(p, loc)
+	if err != nil {
+		return h, err
+	}
+	h.Releases = x.releases(p, h.FirstRecord, loc)
+	return h, nil
+}
+
+// Records is Read without the releases: tm's records alone, no git run.
+// A paired server gets these.
+func Records(p *project.Project) (proto.History, error) {
+	return indexOf(p).read(p, time.Local)
+}
+
+func indexOf(p *project.Project) *index {
 	indexesMu.Lock()
 	x := indexes[p.Dir]
 	if x == nil {
@@ -50,8 +72,59 @@ func ReadIn(p *project.Project, loc *time.Location) (proto.History, error) {
 		indexes[p.Dir] = x
 	}
 	indexesMu.Unlock()
-	return x.read(p, loc)
+	return x
 }
+
+// releases are the releases of p's repos that have any (releases.Count),
+// each repo's on its own. No repo, or release_tags = "none", runs no git;
+// settings that can't be read are no reason to fail the numbers.
+func (x *index) releases(p *project.Project, first string, loc *time.Location) []proto.HistoryRepo {
+	if len(p.Repos) == 0 || first == "" {
+		return nil
+	}
+	cfg, err := config.Load()
+	if err != nil {
+		return nil
+	}
+	safety, err := cfg.Safety(p.Slug)
+	if err != nil || config.ReleaseTagsAreOff(safety.ReleaseTags) {
+		return nil
+	}
+	names := tasks.RepoLabels(p.Repos)
+	var out []proto.HistoryRepo
+	for i, repo := range p.Repos {
+		rs := releases.Count(x.tags.Tags(repo), safety.ReleaseTags, first, loc)
+		if len(rs) > 0 {
+			out = append(out, repoReleases(names[i], rs))
+		}
+	}
+	return out
+}
+
+// repoReleases is a repo's releases, the newest proto.HistoryReleases of
+// them, and how many it has of each part when any names a part.
+func repoReleases(name string, rs []releases.Release) proto.HistoryRepo {
+	h := proto.HistoryRepo{Repo: name, Count: len(rs)}
+	parts := map[string]int{}
+	for _, r := range rs {
+		parts[r.Part]++
+	}
+	if len(parts) > 1 || parts[""] == 0 {
+		for _, part := range slices.Sorted(maps.Keys(parts)) {
+			h.Parts = append(h.Parts, proto.HistoryPart{Part: textsafe.Line(part, maxTagWords), Count: parts[part]})
+		}
+	}
+	rs = rs[max(len(rs)-proto.HistoryReleases, 0):]
+	h.Releases = make([]proto.HistoryRelease, len(rs))
+	for i, r := range rs {
+		h.Releases[i] = proto.HistoryRelease{Tag: textsafe.Line(r.Tag, maxTagWords), Part: textsafe.Line(r.Part, maxTagWords),
+			Version: textsafe.Line(r.Version, maxTagWords), At: r.At.UTC().Format(time.RFC3339)}
+	}
+	return h
+}
+
+// maxTagWords cuts a tag's name for a console.
+const maxTagWords = 200
 
 // archive is what one month archive said, and which version of it.
 type archive struct {
@@ -90,6 +163,8 @@ type index struct {
 	journal fs.FileInfo
 	offset  int64
 	current records
+	// tags are the repos' tags, cached by their refs.
+	tags releases.Cache
 }
 
 func (x *index) read(p *project.Project, loc *time.Location) (proto.History, error) {

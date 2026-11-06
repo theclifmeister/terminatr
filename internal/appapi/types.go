@@ -3,6 +3,7 @@ package appapi
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
@@ -1297,6 +1298,52 @@ type History struct {
 	TypicalSeconds int64        `json:"typical_seconds,omitempty"`
 	Typical        string       `json:"typical,omitempty"`
 	Truncated      bool         `json:"truncated,omitempty"`
+	// Releases are each repo's releases, never summed (app API 65).
+	Releases []HistoryRepo `json:"releases,omitempty"`
+}
+
+// HistoryRepo is one repo's releases, since the project's first record:
+// its name, how many, a monorepo's count by part, the newest 1,000.
+type HistoryRepo struct {
+	Repo     string           `json:"repo"`
+	Count    int              `json:"count"`
+	Parts    []HistoryPart    `json:"parts,omitempty"`
+	Releases []HistoryRelease `json:"releases"`
+}
+
+// HistoryPart is how many releases a monorepo's part has; "" is those
+// that name no part.
+type HistoryPart struct {
+	Part  string `json:"part,omitempty"`
+	Count int    `json:"count"`
+}
+
+// HistoryRelease is one release: its tag, its part, what to show after
+// the part, and when in UTC.
+type HistoryRelease struct {
+	Tag     string `json:"tag"`
+	Part    string `json:"part,omitempty"`
+	Version string `json:"version"`
+	At      string `json:"at"`
+}
+
+// ReleaseTags is release.tags's and release.tags.set's result: how the
+// project's tags count (rule, patterns or none), whether the project
+// sets that itself, and all projects' in words.
+type ReleaseTags struct {
+	Project     string   `json:"project"`
+	Mode        string   `json:"mode"`
+	Patterns    []string `json:"patterns,omitempty"`
+	Own         bool     `json:"own,omitempty"`
+	AllProjects string   `json:"all_projects"`
+}
+
+// ReleaseTagsSetParams are release.tags.set's: the project, the mode
+// (rule, patterns, none, or follow for all projects') and the patterns.
+type ReleaseTagsSetParams struct {
+	Project  string   `json:"project"`
+	Mode     string   `json:"mode"`
+	Patterns []string `json:"patterns,omitempty"`
 }
 
 // HistoryDay is a day with work (2026-11-06) and how many tasks finished
@@ -1315,7 +1362,21 @@ func historyOf(r proto.History) History {
 	if r.BestDay != nil {
 		out.BestDay = &HistoryDay{Day: r.BestDay.Day, Done: r.BestDay.Done}
 	}
+	for _, repo := range r.Releases {
+		c := HistoryRepo{Repo: repo.Repo, Count: repo.Count, Releases: make([]HistoryRelease, 0, len(repo.Releases))}
+		for _, p := range repo.Parts {
+			c.Parts = append(c.Parts, HistoryPart{Part: p.Part, Count: p.Count})
+		}
+		for _, x := range repo.Releases {
+			c.Releases = append(c.Releases, HistoryRelease{Tag: x.Tag, Part: x.Part, Version: x.Version, At: x.At})
+		}
+		out.Releases = append(out.Releases, c)
+	}
 	return out
+}
+
+func releaseTagsOf(r proto.ReleaseTags) ReleaseTags {
+	return ReleaseTags{Project: r.Project, Mode: r.Mode, Patterns: slices.Clone(r.Patterns), Own: r.Own, AllProjects: r.AllProjects}
 }
 
 // Templates is task.templates' result: the task templates of the mods

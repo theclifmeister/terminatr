@@ -639,8 +639,10 @@ func programShowParams(p ProgramShowParams) proto.ProgramShowParams {
 // own paired phone too, at write level (Q208): program.answer is an
 // ordinary write. A session's folder (app API 49) is read at this computer
 // too, until the iPhone's follow-up looks at what a device may read of it.
+// A project's release tags too (app API 65), until the iPhone's follow-up.
 var macOnly = []string{proto.MethodProgramRename, proto.MethodProgramDelete, proto.MethodProgramOpen,
-	proto.MethodFilesList, proto.MethodFilesRead, proto.MethodFilesStamp, proto.MethodFilesDiff, proto.MethodFilesRepos}
+	proto.MethodFilesList, proto.MethodFilesRead, proto.MethodFilesStamp, proto.MethodFilesDiff, proto.MethodFilesRepos,
+	proto.MethodReleaseTags, proto.MethodReleaseTagsSet}
 
 // MacOnly says m is the Mac app's alone, at no device level (macOnly).
 func (m Method) MacOnly() bool { return slices.Contains(macOnly, m.Name) }

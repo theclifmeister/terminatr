@@ -113,6 +113,11 @@ struct MainWindow: View {
                 LinkMessageSheet(project: m.project, form: LinkMessageForm(peer: m.peer))
             }
         }
+        .sheet(isPresented: Binding(get: { app.releaseTagsProject != nil }, set: { if !$0 { app.releaseTagsProject = nil } })) {
+            if let project = app.releaseTagsProject {
+                ReleaseTagsSheet(project: project)
+            }
+        }
         // Save & Clear, Activate and Deactivate, remote control and
         // adopting, from wherever the user picked them: asked here, in
         // the TUI's words.

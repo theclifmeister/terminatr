@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/peer"
 	"github.com/theclifmeister/terminatr/internal/project"
@@ -96,5 +97,59 @@ func TestPeerHistoryOlderPeer(t *testing.T) {
 	}
 	if pe := pagesError("mini", peer.ErrNoHistory); pe.Code != proto.ErrNoPages {
 		t.Errorf("words: %+v", pe)
+	}
+}
+
+// TestReleaseTagsMethods: release.tags reads what the setting says, and
+// release.tags.set writes each mode, journaled.
+func TestReleaseTagsMethods(t *testing.T) {
+	testPaths(t)
+	if _, err := project.New(project.Options{Slug: "web"}); err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{}
+	human := callCtx{human: true, who: func() caller.Caller { return caller.Caller{Kind: caller.Human} }}
+	mustSet := func(mode string, patterns ...string) proto.ReleaseTags {
+		t.Helper()
+		got, perr := s.releaseTagsSet(proto.ReleaseTagsSetParams{Project: "web", Mode: mode, Patterns: patterns}, human)
+		if perr != nil {
+			t.Fatalf("%s: %v", mode, perr)
+		}
+		return got.(proto.ReleaseTags)
+	}
+	first, perr := s.releaseTags(proto.ReleaseTagsParams{Project: "web"})
+	if perr != nil {
+		t.Fatal(perr)
+	}
+	if r := first.(proto.ReleaseTags); r.Mode != proto.ReleaseTagsRule || r.Own || r.AllProjects != "version tags" {
+		t.Errorf("before any setting: %+v", r)
+	}
+	if r := mustSet(proto.ReleaseTagsPatterns, "prod-*"); r.Mode != proto.ReleaseTagsPatterns || !r.Own || len(r.Patterns) != 1 {
+		t.Errorf("patterns: %+v", r)
+	}
+	if r := mustSet(proto.ReleaseTagsNone); r.Mode != proto.ReleaseTagsNone || !r.Own {
+		t.Errorf("none: %+v", r)
+	}
+	if r := mustSet(proto.ReleaseTagsRule); r.Mode != proto.ReleaseTagsRule || !r.Own {
+		t.Errorf("own rule: %+v", r)
+	}
+	if r := mustSet(proto.ReleaseTagsFollow); r.Mode != proto.ReleaseTagsRule || r.Own {
+		t.Errorf("follow: %+v", r)
+	}
+	for _, bad := range []proto.ReleaseTagsSetParams{{Project: "web", Mode: "x"}, {Project: "web", Mode: proto.ReleaseTagsPatterns}, {Project: "web", Mode: proto.ReleaseTagsPatterns, Patterns: []string{"a b"}}, {Project: "nope", Mode: proto.ReleaseTagsRule}} {
+		if _, perr := s.releaseTagsSet(bad, human); perr == nil {
+			t.Errorf("%+v passes", bad)
+		}
+	}
+	p, err := project.Open("web")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(p.Path("JOURNAL.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "settings.release_tags") {
+		t.Errorf("not journaled:\n%s", data)
 	}
 }
