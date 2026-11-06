@@ -12,6 +12,11 @@ import "time"
 // marks Withheld and the bytes of what isn't text never cross, and a
 // refusal crosses in fixed words (PeerWorktreeRefusal).
 
+// CapPeerWorktrees says the files methods read a paired server's session
+// too, cleaned and at a slower stamp: a server without it refuses one
+// "no-files". PeerMirror.Worktree and PeerProject.Files say which may answer.
+const CapPeerWorktrees = "peer-worktrees"
+
 // Link methods: a paired server reads them over the link.
 const (
 	// MethodPeerWorktreeRepos names what a session's Repo may name
@@ -38,6 +43,14 @@ const (
 	ErrFilesOff    = "files-off"    // the files switch is off for the project, or there is no such project
 	ErrWithheld    = "withheld"     // its listing shows it, and no more
 	ErrRateLimited = "rate-limited" // over the rate: nothing is wrong, ask later
+)
+
+// Refusals of the files methods for a paired server's session, besides those:
+// a view keeps what it has on ErrPeerOffline and ErrRateLimited, which here
+// also means a slow answer, and clears on ErrFilesOff and ErrNotShared.
+const (
+	ErrNoPeerFiles = "no-peer-files" // that server's tm is too old to share files: it wasn't asked
+	ErrPeerOffline = "peer-offline"  // the link to that server is down
 )
 
 // Bounds of the link's reads: a file's first PeerWorktreeMaxRead bytes,

@@ -46,6 +46,14 @@ func linkedServersPanes(t *testing.T, ex peer.Exporter, panes string) *peer.Mana
 // by set.
 func linkedServersWith(t *testing.T, ex peer.Exporter, set func(p *peer.Peer)) *peer.Manager {
 	t.Helper()
+	studio, _ := linkedServersDir(t, ex, set)
+	return studio
+}
+
+// linkedServersDir is linkedServersWith, and mini: its manager and its peer
+// directory, where its switches are.
+func linkedServersDir(t *testing.T, ex peer.Exporter, set func(p *peer.Peer)) (*peer.Manager, linkedMini) {
+	t.Helper()
 	rs := relay.New(relay.DefaultConfig())
 	hs := httptest.NewUnstartedServer(rs)
 	hs.StartTLS()
@@ -79,19 +87,25 @@ func linkedServersWith(t *testing.T, ex peer.Exporter, set func(p *peer.Peer)) *
 		return m
 	}
 	studio := start(dirs[0], nil, tc)
-	start(dirs[1], ex, tc)
+	mini := linkedMini{m: start(dirs[1], ex, tc), dir: dirs[1]}
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		if st := studio.Status(); st != nil && len(st.Peers) == 1 && st.Peers[0].State == proto.LinkUp {
 			if !slices.Contains(st.Peers[0].Caps, peer.CapWatch) {
 				t.Fatalf("mini exports but its hello says %v", st.Peers[0].Caps)
 			}
-			return studio
+			return studio, mini
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("the link never came up: %+v", studio.Status())
-	return nil
+	return nil, mini
+}
+
+// linkedMini is the exporting end of linkedServersDir.
+type linkedMini struct {
+	m   *peer.Manager
+	dir string
 }
 
 // TestPeerExportNeverLeaks: through a real link, a paired server sees

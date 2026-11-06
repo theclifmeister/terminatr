@@ -319,7 +319,7 @@ func (s *Scope) read(ctx context.Context, rel string, offset int64, ignored, bin
 	if n < len(buf) && err != nil && err != io.EOF {
 		return res, fmt.Errorf("%w: %s: %v", ErrGone, rel, err)
 	}
-	if s.far && chunkBinary(buf[:n]) {
+	if s.far && ChunkBinary(buf[:n]) {
 		// Text at its head only: what isn't text doesn't cross.
 		res.Binary = true
 		return res, nil

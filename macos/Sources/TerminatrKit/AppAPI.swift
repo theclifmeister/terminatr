@@ -1947,8 +1947,9 @@ public enum AppAPI {
         public var uploads: Bool
         public var version: String
         public var rttMs: Double
+        public var worktree: Bool
 
-        public init(alias: String, name: String = "", id: String = "", state: String, reason: String = "", since: Date? = nil, projects: [PeerProject] = [], shareWaits: Int = 0, shareRequests: [ShareRequest] = [], pane: Bool = false, panes: String = "", transcript: Bool = false, conversations: String = "", needs: String = "", picks: Bool = false, uploads: Bool = false, version: String = "", rttMs: Double = 0) {
+        public init(alias: String, name: String = "", id: String = "", state: String, reason: String = "", since: Date? = nil, projects: [PeerProject] = [], shareWaits: Int = 0, shareRequests: [ShareRequest] = [], pane: Bool = false, panes: String = "", transcript: Bool = false, conversations: String = "", needs: String = "", picks: Bool = false, uploads: Bool = false, version: String = "", rttMs: Double = 0, worktree: Bool = false) {
             self.alias = alias
             self.name = name
             self.id = id
@@ -1967,6 +1968,7 @@ public enum AppAPI {
             self.uploads = uploads
             self.version = version
             self.rttMs = rttMs
+            self.worktree = worktree
         }
 
         enum CodingKeys: String, CodingKey {
@@ -1988,6 +1990,7 @@ public enum AppAPI {
             case uploads
             case version
             case rttMs = "rtt_ms"
+            case worktree
         }
     }
 
@@ -2262,9 +2265,10 @@ public enum AppAPI {
         public var watched: [PeerThread]
         public var needs: [PeerNeed]
         public var pages: Bool
+        public var files: Bool
         public var program: String
 
-        public init(project: String, goal: String = "", paused: Bool = false, needsYou: Int, threads: Int, ready: Int, stale: Bool = false, synced: Date? = nil, sessions: [PeerSession] = [], watched: [PeerThread] = [], needs: [PeerNeed] = [], pages: Bool = false, program: String = "") {
+        public init(project: String, goal: String = "", paused: Bool = false, needsYou: Int, threads: Int, ready: Int, stale: Bool = false, synced: Date? = nil, sessions: [PeerSession] = [], watched: [PeerThread] = [], needs: [PeerNeed] = [], pages: Bool = false, files: Bool = false, program: String = "") {
             self.project = project
             self.goal = goal
             self.paused = paused
@@ -2277,6 +2281,7 @@ public enum AppAPI {
             self.watched = watched
             self.needs = needs
             self.pages = pages
+            self.files = files
             self.program = program
         }
 
@@ -2293,6 +2298,7 @@ public enum AppAPI {
             case watched
             case needs
             case pages
+            case files
             case program
         }
     }
@@ -6049,6 +6055,7 @@ extension AppAPI.Peer {
         self.uploads = try c.decodeIfPresent(Bool.self, forKey: .uploads) ?? false
         self.version = try c.decodeIfPresent(String.self, forKey: .version) ?? ""
         self.rttMs = try c.decodeIfPresent(Double.self, forKey: .rttMs) ?? 0
+        self.worktree = try c.decodeIfPresent(Bool.self, forKey: .worktree) ?? false
     }
 }
 
@@ -6180,6 +6187,7 @@ extension AppAPI.PeerProject {
         self.watched = try c.decodeIfPresent([AppAPI.PeerThread].self, forKey: .watched) ?? []
         self.needs = try c.decodeIfPresent([AppAPI.PeerNeed].self, forKey: .needs) ?? []
         self.pages = try c.decodeIfPresent(Bool.self, forKey: .pages) ?? false
+        self.files = try c.decodeIfPresent(Bool.self, forKey: .files) ?? false
         self.program = try c.decodeIfPresent(String.self, forKey: .program) ?? ""
     }
 }

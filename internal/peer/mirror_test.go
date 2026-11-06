@@ -24,6 +24,8 @@ type fakeLinks struct {
 	calls   []string
 	changes chan struct{}
 	panes   string // the peers' pane switch, in peer.projects
+	pages   bool   // their pages switch, for every project
+	files   bool   // their files switch, for every project
 }
 
 func newFakeLinks(skew time.Duration, threads map[string]int, peers ...proto.PeerLink) *fakeLinks {
@@ -99,7 +101,7 @@ func (f *fakeLinks) Call(ctx context.Context, alias, method string, params, resu
 		case proto.MethodPeerProjects:
 			var ps proto.PeerProjects
 			for _, slug := range slices.Sorted(maps.Keys(f.threads)) {
-				ps.Projects = append(ps.Projects, proto.PeerProject{Project: slug, Goal: "goal of " + slug, Threads: f.threads[slug]})
+				ps.Projects = append(ps.Projects, proto.PeerProject{Project: slug, Goal: "goal of " + slug, Threads: f.threads[slug], Pages: f.pages, Files: f.files})
 			}
 			ps.Now, ps.Panes = now, f.panes
 			f.mu.Unlock()
@@ -300,6 +302,42 @@ func TestMirrorProjectsComeAndGo(t *testing.T) {
 	})
 	f.set("mini", "")
 	waitList(t, m, "dropped mini", func(l proto.PeerList) bool { return len(l.Peers) == 0 })
+}
+
+// TestMirrorSwitchesFollow: a pages or files switch changed there reaches a
+// project already being watched, at the next list, off as well as on, and
+// peer.list says whether that server's tm can share its folders at all.
+func TestMirrorSwitchesFollow(t *testing.T) {
+	fastMirror(t)
+	f := newFakeLinks(0, map[string]int{"web": 1}, upLink("mini", CapWatch, CapWorktree), upLink("old", CapWatch))
+	m := startMirror(f, MirrorOptions{Logf: t.Logf})
+	defer m.Close()
+	l := waitList(t, m, "watching web", func(l proto.PeerList) bool {
+		w := projectOf(l, "mini", "web")
+		return w != nil && w.Watch != nil && !w.Files && !w.Pages
+	})
+	if !peerOf(l, "mini").Worktree || peerOf(l, "old").Worktree {
+		t.Errorf("worktree: %v, old %v", peerOf(l, "mini").Worktree, peerOf(l, "old").Worktree)
+	}
+	set := func(pages, files bool) {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		f.pages, f.files = pages, files
+	}
+	set(true, true)
+	waitList(t, m, "both on", func(l proto.PeerList) bool {
+		w := projectOf(l, "mini", "web")
+		return w != nil && w.Files && w.Pages
+	})
+	gen := m.List().Gen
+	set(false, false)
+	l = waitList(t, m, "both off", func(l proto.PeerList) bool {
+		w := projectOf(l, "mini", "web")
+		return w != nil && !w.Files && !w.Pages
+	})
+	if l.Gen == gen {
+		t.Error("the change didn't count")
+	}
 }
 
 // TestMirrorPeerWithoutWatch: a peer whose hello lacks the watch
