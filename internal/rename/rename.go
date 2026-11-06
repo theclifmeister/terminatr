@@ -195,6 +195,9 @@ func Project(o Options) (*Result, error) {
 	}
 	// Cached thumbnails are kept by slug: the old slug's are of no use.
 	_ = thumb.ForgetProject(o.From)
+	if err := project.ForgetPeerFiles(o.Caller, p, o.From, "the project was renamed"); err != nil {
+		note("the files switch of %s may still be on: %v (tm peer files turns it off)", o.From, err)
+	}
 	detail := o.From + " → " + o.To
 	if err := p.WriteRoleFile(); err != nil {
 		note("AGENTS.md not rewritten: %v", err)

@@ -29,13 +29,13 @@ func shareRow(slug string) setting {
 		}
 		return m.setSetting("projects."+slug, "share", on, msg)
 	}
-	return setting{label: "Shared with paired servers", help: "Let the servers paired with this one (tm peer pair) see this project, read-only: what waits for you, the inbox, threads, tasks on deck and its sessions' states. Never its files, settings, paths or worktrees, and nobody there can act on it. Only an active project is offered. Off by default; turning it on asks first.",
+	return setting{label: "Shared with paired servers", help: "Let the servers paired with this one (tm peer pair) see this project, read-only: what waits for you, the inbox, threads, tasks on deck and its sessions' states. Not its files, settings, paths or worktrees (a server reads files only with its own files switch), and nobody there can act on it. Only an active project is offered. Off by default; turning it on asks first.",
 		value: func(m *dash) string { return onOff(shared(m)) },
 		change: func(m *dash) tea.Cmd {
 			if shared(m) {
 				return set(m, false)
 			}
-			m.confirmNo("Share "+slug, "Share "+slug+" with every paired server? They see its state read-only (what waits for you, the inbox, threads, tasks on deck), never its files.", "not shared", func() tea.Cmd {
+			m.confirmNo("Share "+slug, "Share "+slug+" with every paired server? They see its state read-only (what waits for you, the inbox, threads, tasks on deck), not its files.", "not shared", func() tea.Cmd {
 				return set(m, true)
 			})
 			return nil

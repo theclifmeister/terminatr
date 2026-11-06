@@ -147,6 +147,9 @@ type PeerLink struct {
 	// RelayVersion is the relay's tm release, as it said when the link
 	// last went through it ("" for a relay older than that).
 	RelayVersion string `json:"relay_version,omitempty"`
+	// FilesRead is when the peer last read a folder here (the files switch,
+	// §16.18), since this server started; zero for not yet.
+	FilesRead time.Time `json:"files_read,omitzero"`
 }
 
 // KeychainStatus is the result of server.keychain.

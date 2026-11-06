@@ -722,6 +722,9 @@ type Peer struct {
 	// Files says whether it does with this server. Without, it runs an
 	// older tm, and is never asked.
 	Worktree bool `json:"worktree,omitempty"`
+	// FilesHere (app API 60) are the projects of this server whose files it
+	// may read, this server's files switch for it (docs/SPEC.md §16.18).
+	FilesHere []string `json:"files_here,omitempty"`
 }
 
 // PeerProject is a project a paired server shares: its goal line,
@@ -1056,7 +1059,7 @@ func peerListOf(l proto.PeerList) PeerList {
 		peer := Peer{Alias: p.Alias, Name: p.Name, ID: p.ID, State: p.State, Reason: p.Reason, Since: p.Since,
 			Projects: make([]PeerProject, 0, len(p.Projects)), ShareWaits: proto.ShareWaits([]proto.PeerMirror{p}),
 			Pane: p.Pane, Panes: p.Panes, Transcript: p.Transcript, Conversations: p.Conversations, Needs: p.Needs, Picks: p.NeedPicks, Uploads: p.Uploads,
-			Version: textsafe.Line(p.Version, 40), RTT: p.RTT, Worktree: p.Worktree}
+			Version: textsafe.Line(p.Version, 40), RTT: p.RTT, Worktree: p.Worktree, FilesHere: p.FilesHere}
 		for _, q := range p.Shares {
 			if !q.Out && q.Pending() {
 				peer.ShareRequests = append(peer.ShareRequests, shareRequestOf(q))
@@ -1950,6 +1953,9 @@ type FileEntry struct {
 	Ignored bool      `json:"ignored,omitempty"`
 	Link    bool      `json:"link,omitempty"`
 	LinkOut bool      `json:"link_out,omitempty"`
+	// Withheld (app API 60): a paired server's listing shows it by name and
+	// won't open it.
+	Withheld bool `json:"withheld,omitempty"`
 }
 
 // FilesList is files.list's result. Root is the folder's absolute path;
@@ -2044,7 +2050,7 @@ func filesListOf(r proto.FilesListResult) FilesList {
 		Entries: make([]FileEntry, 0, len(r.Entries)), Truncated: r.Truncated}
 	for _, e := range r.Entries {
 		out.Entries = append(out.Entries, FileEntry{Name: e.Name, Path: e.Path, Kind: e.Kind, Size: e.Size, MTime: e.MTime,
-			Status: e.Status, Changed: e.Changed, Ignored: e.Ignored, Link: e.Link, LinkOut: e.LinkOut})
+			Status: e.Status, Changed: e.Changed, Ignored: e.Ignored, Link: e.Link, LinkOut: e.LinkOut, Withheld: e.Withheld})
 	}
 	return out
 }

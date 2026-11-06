@@ -208,15 +208,21 @@ public struct LibraryHeading: View {
 /// A thumbnail in a Library group's strip (T1059): the picture, or its
 /// ground until it comes, with the file's name under it. A landscape picture
 /// fills the frame from its top, where a screenshot's title is; a tall one
-/// fits inside it, whole.
+/// fits inside it, whole. A stack (T1057) is one tile of the file it shows,
+/// by the stack's name, with a badge that is its switch: "dark · light".
 public struct LibraryTile: View {
     @Environment(\.theme) private var theme
     let file: AppAPI.LibraryFile
     let image: FileImage.Drawn?
+    let stack: LibraryPage.Row?
+    let pick: (AppAPI.LibraryFile) -> Void
 
-    public init(_ file: AppAPI.LibraryFile, image: FileImage.Drawn?) {
+    public init(_ file: AppAPI.LibraryFile, image: FileImage.Drawn?, stack: LibraryPage.Row? = nil,
+                pick: @escaping (AppAPI.LibraryFile) -> Void = { _ in }) {
         self.file = file
         self.image = image
+        self.stack = stack
+        self.pick = pick
     }
 
     public var body: some View {
@@ -235,15 +241,54 @@ public struct LibraryTile: View {
                 }
                 .clipShape(shape)
                 .overlay { shape.strokeBorder(theme.line, lineWidth: theme.contrast ? 1.5 : 1) }
-            Text(file.name)
+                .overlay(alignment: .topTrailing) {
+                    if let stack { badge(stack) }
+                }
+            Text(stack?.title ?? file.name)
                 .font(theme.sized(Flat.label))
                 .foregroundStyle(theme.muted)
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(file.name), \(Attachment.size(file.size))")
+        .accessibilityLabel(stack.map { "\($0.title), \($0.words.joined(separator: " and ")), showing \(file.name), \(Attachment.size(file.size))" }
+            ?? "\(file.name), \(Attachment.size(file.size))")
         .accessibilityAddTraits(.isImage)
+        .accessibilityActions {
+            if let stack {
+                ForEach(Array(zip(stack.words, stack.files)), id: \.0) { word, f in
+                    Button("Show \(word)") { pick(f) }
+                }
+            }
+        }
+    }
+
+    /// The stack's words on the picture, the showing one lit; a click on the
+    /// other goes to it.
+    private func badge(_ stack: LibraryPage.Row) -> some View {
+        HStack(spacing: 3) {
+            ForEach(Array(zip(stack.words, stack.files).enumerated()), id: \.offset) { i, pair in
+                if i > 0 {
+                    Text("·").foregroundStyle(theme.muted)
+                }
+                Button {
+                    pick(pair.1)
+                } label: {
+                    Text(pair.0)
+                        .fontWeight(pair.1.name == file.name ? .semibold : .regular)
+                        .foregroundStyle(pair.1.name == file.name ? theme.ink : theme.muted)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Shows \(pair.1.name)")
+            }
+        }
+        .font(theme.body(.caption2))
+        .lineLimit(1)
+        .padding(.horizontal, 5)
+        .background(theme.pane, in: RoundedRectangle(cornerRadius: 3))
+        .overlay { RoundedRectangle(cornerRadius: 3).strokeBorder(theme.line, lineWidth: theme.contrast ? 1.5 : 1) }
+        .padding(4)
     }
 }
 
@@ -291,5 +336,64 @@ public struct LibraryFileRow: View {
                 .foregroundStyle(theme.muted)
         }
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// A Library stack in the Library page (T1057): its name, a switch between
+/// its two files, and the size and date of the one showing.
+public struct LibraryStackRow: View {
+    @Environment(\.theme) private var theme
+    let row: LibraryPage.Row
+    let shown: AppAPI.LibraryFile
+    let pick: (AppAPI.LibraryFile) -> Void
+
+    public init(_ row: LibraryPage.Row, shown: AppAPI.LibraryFile, pick: @escaping (AppAPI.LibraryFile) -> Void) {
+        self.row = row
+        self.shown = shown
+        self.pick = pick
+    }
+
+    public var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(row.title)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .help(shown.name)
+            Spacer(minLength: 8)
+            HStack(spacing: 3) {
+                ForEach(Array(zip(row.words, row.files)), id: \.0) { word, file in
+                    let on = file.name == shown.name
+                    Button {
+                        pick(file)
+                    } label: {
+                        Text(word.capitalized)
+                            .font(theme.sized(Flat.label))
+                            .foregroundStyle(on ? theme.pane : theme.muted)
+                            .padding(.horizontal, 7)
+                            .background(on ? theme.ink : .clear, in: RoundedRectangle(cornerRadius: 4))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 4)
+                                    .strokeBorder(on ? theme.ink : theme.line, lineWidth: theme.contrast ? 1.5 : 1)
+                            }
+                            .contentShape(RoundedRectangle(cornerRadius: 4))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Shows \(file.name)")
+                }
+            }
+            Text(Attachment.size(shown.size))
+                .font(theme.mono(.caption))
+                .foregroundStyle(theme.muted)
+            Text(shown.time, format: .dateTime.month(.abbreviated).day())
+                .font(theme.body(.caption))
+                .foregroundStyle(theme.muted)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(row.title), \(row.words.joined(separator: " and ")), showing \(shown.name)")
+        .accessibilityActions {
+            ForEach(Array(zip(row.words, row.files)), id: \.0) { word, file in
+                Button("Show \(word)") { pick(file) }
+            }
+        }
     }
 }

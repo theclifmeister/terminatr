@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"crypto/ed25519"
 	"errors"
 	"fmt"
 	"net"
@@ -9,10 +10,15 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/peer"
+	"github.com/theclifmeister/terminatr/internal/project"
+	"github.com/theclifmeister/terminatr/internal/proto"
 )
 
 // netDash is remoteDash's dashboard w × h, with mini and nas paired as
@@ -638,5 +644,94 @@ func TestNetworkPagesSwitch(t *testing.T) {
 	}
 	if want := []string{"mini " + slug + " true", "mini " + slug + " false"}; !slices.Equal(src.pagesSet, want) {
 		t.Fatalf("set %v, want %v", src.pagesSet, want)
+	}
+}
+
+// TestNetworkFilesSwitch: a files row per shared project under pages, off by
+// default; on asks first and says what crosses, off is at once, and the ladder
+// says what it reads.
+func TestNetworkFilesSwitch(t *testing.T) {
+	m, src := netDash(t, 160, 60)
+	p := &src.data.Projects[0]
+	if p.Safety == nil {
+		p.Safety = &config.Safety{Active: true}
+	}
+	p.Safety.Share = true
+	m.setData(src.data)
+	nv := netOpen(t, m)
+	nv.sel = "g:mini"
+	slug := p.Slug
+	out := netBox(m)
+	if !strings.Contains(out, "reads no files of yours") || !strings.Contains(out, "Ignored files stay here") {
+		t.Fatalf("off by default:\n%s", out)
+	}
+	tab(m)
+	press(m, "down", "down", "down", "down", "down", "down")
+	press(m, "enter")
+	cv, ok := m.top().(*confirmView)
+	if !ok || cv.title != "Let mini read "+slug+"'s files?" || !strings.Contains(cv.question, "uncommitted work") || !strings.Contains(cv.question, "can't be called back") {
+		t.Fatalf("enter on files: %T %+v", m.top(), cv)
+	}
+	press(m, "N")
+	if m.msg != "files unchanged for mini" {
+		t.Fatalf("N says %q", m.msg)
+	}
+	press(m, "enter")
+	drain(t, m, press(m, "Y"))
+	if out := netBox(m); !strings.Contains(out, "reads files of "+slug) || !strings.Contains(out, "off · [on] "+slug) {
+		t.Errorf("after on:\n%s", out)
+	}
+	drain(t, m, press(m, "left"))
+	if _, ok := m.top().(*confirmView); ok {
+		t.Fatal("turning it off asked")
+	}
+	if out := netBox(m); !strings.Contains(out, "reads no files of yours") {
+		t.Errorf("after off:\n%s", out)
+	}
+}
+
+// TestFilesWhat: the line under the files switches says when it last read.
+func TestFilesWhat(t *testing.T) {
+	now := time.Now()
+	if got := filesWhat(PeerEntry{}, now); strings.Contains(got, "last read") {
+		t.Errorf("never read: %q", got)
+	}
+	e := PeerEntry{Link: &proto.PeerLink{FilesRead: now.Add(-3 * time.Minute)}}
+	if got := filesWhat(e, now); !strings.Contains(got, "last read 3m ago") {
+		t.Errorf("read: %q", got)
+	}
+}
+
+// TestShareOffClearsFiles: turning a project's sharing off turns its files
+// switch off too, and sharing again doesn't bring it back.
+func TestShareOffClearsFiles(t *testing.T) {
+	t.Setenv("TERMINATR_HOME", t.TempDir())
+	if _, err := project.New(project.Options{Slug: "demo"}); err != nil {
+		t.Fatal(err)
+	}
+	dir, err := peer.Dir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, _, _ := ed25519.GenerateKey(nil)
+	if err := peer.SavePeers(dir, []peer.Peer{{Alias: "mini", Key: key, Relay: "wss://relay.example", Files: []string{"demo"}}}); err != nil {
+		t.Fatal(err)
+	}
+	src := &ServerSource{Caller: caller.Caller{Kind: caller.Human}}
+	on := func() bool {
+		peers, err := peer.LoadPeers(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return peers[0].FilesOn("demo")
+	}
+	if err := src.SetSetting("projects.demo", "share", true); err != nil || !on() {
+		t.Fatalf("share on: %v, files on %v", err, on())
+	}
+	if err := src.SetSetting("projects.demo", "share", false); err != nil || on() {
+		t.Fatalf("share off: %v, files on %v", err, on())
+	}
+	if err := src.SetSetting("projects.demo", "share", true); err != nil || on() {
+		t.Fatalf("share on again: %v, files on %v", err, on())
 	}
 }
