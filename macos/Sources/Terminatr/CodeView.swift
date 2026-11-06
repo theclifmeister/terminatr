@@ -41,8 +41,11 @@ struct CodeView: NSViewRepresentable {
         v.isVerticallyResizable = true
         v.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         v.autoresizingMask = []
-        v.textContainerInset = NSSize(width: 8, height: 9)
-        let s = NSScrollView()
+        // The side's space is the container's own, not an inset: nothing
+        // draws in an inset, and a changed line's colour has to reach the ruler.
+        v.textContainerInset = NSSize(width: 0, height: 9)
+        box.lineFragmentPadding = 13
+        let s = CodeScroll()
         s.documentView = v
         s.drawsBackground = false
         s.hasVerticalScroller = true
@@ -74,31 +77,59 @@ struct CodeView: NSViewRepresentable {
         v.selectedTextAttributes = [.backgroundColor: NSColor(theme.selection)]
         let added = NSColor(theme.good), removed = NSColor(theme.attention)
         (v.layoutManager as? TintedLayout)?.update(text: text, marks: marks, added: added, removed: removed)
-        ruler.update(text: text, marks: marks, added: added, removed: removed, font: NSFont.monospacedDigitSystemFont(ofSize: size - 1, weight: .regular), ink: NSColor(theme.faint))
+        ruler.update(text: text, marks: marks, added: added, removed: removed, font: NSFont.monospacedDigitSystemFont(ofSize: size - 1, weight: .regular), ink: NSColor(theme.faint), ground: NSColor(theme.pane))
+        let left = -ruler.requiredThickness
+        s.contentView.scroll(to: NSPoint(x: sameFile && keep.x > 0 ? keep.x : left, y: keep.y))
         // Far down a file, the layout has to know how tall it is first.
         let seek = sameFile ? 0 : max((marks?.firstChange ?? 0) - 3, 0)
         if seek > 0, let box = v.textContainer { v.layoutManager?.ensureLayout(for: box) }
         v.sizeToFit()
         if sameFile {
-            s.contentView.scroll(to: keep)
+            s.contentView.scroll(to: NSPoint(x: keep.x > 0 ? keep.x : left, y: keep.y))
         } else if seek > 0 {
             let top = CGFloat(seek) * ceil(size * 1.5) + v.textContainerInset.height
-            s.contentView.scroll(to: NSPoint(x: min(keep.x, 0), y: min(top, max(v.frame.height - s.contentView.bounds.height, 0))))
+            s.contentView.scroll(to: NSPoint(x: left, y: min(top, max(v.frame.height - s.contentView.bounds.height, 0))))
         } else {
-            s.contentView.scroll(to: .zero)
+            s.contentView.scroll(to: NSPoint(x: left, y: 0))
         }
         s.reflectScrolledClipView(s.contentView)
         (c.id, c.text, c.marks, c.look) = (id, text, marks, look)
     }
 }
 
+/// A CodeView's scroll view. Its clip view runs under the ruler, so at rest its
+/// left edge is the ruler's width left of the text, or the text starts under
+/// the numbers. A first layout loses a scroll made before it, so each layout
+/// puts it back, and the text fits the pane's new width.
+private final class CodeScroll: NSScrollView {
+    private var tiling = false
+
+    override func tile() {
+        super.tile()
+        guard !tiling, let ruler = verticalRulerView else { return }
+        tiling = true
+        defer { tiling = false }
+        let at = contentView.bounds.origin
+        if at.x <= 0 { contentView.scroll(to: NSPoint(x: -ruler.requiredThickness, y: at.y)) }
+        (documentView as? NSTextView)?.sizeToFit()
+        reflectScrolledClipView(contentView)
+    }
+}
+
 /// A CodeView's text: never narrower than what shows of it, so a changed
 /// line's colour crosses the pane.
 private final class CodeText: NSTextView {
+    /// Stays at the top of its clip view: AppKit moves a text view by what its
+    /// layout changed, and a file's first change then opens off its place.
+    override func setFrameOrigin(_ newOrigin: NSPoint) {
+        super.setFrameOrigin(.zero)
+    }
+
     override func setFrameSize(_ newSize: NSSize) {
         // A clip view under the ruler starts left of the text, by the ruler.
         let shows = enclosingScrollView?.contentView.bounds ?? .zero
         super.setFrameSize(NSSize(width: max(newSize.width, shows.width + min(shows.minX, 0)), height: newSize.height))
+        (layoutManager as? TintedLayout)?.width = frame.width
     }
 }
 
@@ -107,6 +138,8 @@ private let tint: CGFloat = 0.13
 
 /// Draws the added and removed lines' colour under their text and selection.
 private final class TintedLayout: NSLayoutManager {
+    /// The text view's width: each changed line's colour crosses it.
+    var width: CGFloat = 0
     private var starts = [0]
     private var kinds: [FileMarks.Kind] = []
     private var added = NSColor.clear
@@ -120,12 +153,12 @@ private final class TintedLayout: NSLayoutManager {
     }
 
     override func drawBackground(forGlyphRange glyphs: NSRange, at origin: NSPoint) {
-        if !kinds.isEmpty, let view = firstTextView {
+        if !kinds.isEmpty {
             enumerateLineFragments(forGlyphRange: glyphs) { rect, _, _, range, _ in
                 let row = FileText.line(at: self.characterIndexForGlyph(at: range.location), in: self.starts) - 1
                 guard row < self.kinds.count, self.kinds[row] != .same else { return }
                 (self.kinds[row] == .added ? self.added : self.removed).setFill()
-                NSRect(x: 0, y: rect.minY + origin.y, width: view.bounds.width, height: rect.height).fill(using: .sourceOver)
+                NSRect(x: 0, y: rect.minY + origin.y, width: self.width, height: rect.height).fill(using: .sourceOver)
             }
         }
         super.drawBackground(forGlyphRange: glyphs, at: origin)
@@ -141,14 +174,16 @@ private final class LineNumbers: NSRulerView {
     private var marks: FileMarks?
     private var added = NSColor.clear
     private var removed = NSColor.clear
+    private var ground = NSColor.clear
 
     init(scrollView: NSScrollView, text: NSTextView) {
         self.text = text
         super.init(scrollView: scrollView, orientation: .verticalRuler)
         clientView = text
+        // Part of a line's number at its top or bottom stays inside.
+        clipsToBounds = true
         scrollView.contentView.postsBoundsChangedNotifications = true
         NotificationCenter.default.addObserver(self, selector: #selector(moved), name: NSView.boundsDidChangeNotification, object: scrollView.contentView)
-        NotificationCenter.default.addObserver(self, selector: #selector(resized), name: NSView.frameDidChangeNotification, object: scrollView.contentView)
     }
 
     @available(*, unavailable)
@@ -156,23 +191,21 @@ private final class LineNumbers: NSRulerView {
 
     @objc private func moved() { needsDisplay = true }
 
-    /// The pane's new width: the text fits it again.
-    @objc private func resized() { text?.sizeToFit() }
-
-    func update(text s: String, marks: FileMarks?, added: NSColor, removed: NSColor, font: NSFont, ink: NSColor) {
+    func update(text s: String, marks: FileMarks?, added: NSColor, removed: NSColor, font: NSFont, ink: NSColor, ground: NSColor) {
         starts = FileText.lineStarts(s)
         (self.marks, self.added, self.removed) = (marks, added, removed)
-        (numberFont, self.ink) = (font, ink)
+        (numberFont, self.ink, self.ground) = (font, ink, ground)
         let digits = max(String(marks?.numbers.max() ?? starts.count).count, 2)
         let digit = ("0" as NSString).size(withAttributes: [.font: font]).width
         ruleThickness = ceil(CGFloat(digits) * digit) + 16 + (marks == nil ? 0 : ceil(digit) + 4)
         needsDisplay = true
     }
 
-    /// Only its numbers, on the pane's own ground.
-    override var isOpaque: Bool { false }
-
+    /// On the pane's own ground: text scrolled sideways passes under it.
     override func draw(_ dirtyRect: NSRect) {
+        ground.setFill()
+        // A dirty rect can reach past the view since macOS 14.
+        dirtyRect.intersection(bounds).fill()
         drawHashMarksAndLabels(in: dirtyRect)
     }
 
