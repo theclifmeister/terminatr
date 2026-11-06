@@ -189,6 +189,23 @@ func (e peerExport) LibraryRead(c caller.Caller, pp proto.PeerLibraryReadParams)
 	return proto.LibraryReadResult{Name: pp.Name, Size: size, MTime: mod, Offset: pp.Offset, Data: data}, nil
 }
 
+// LibraryThumbnail is a thread's library file's thumbnail, for a paired
+// server: as LibraryRead, never a file a link brought.
+func (e peerExport) LibraryThumbnail(c caller.Caller, pp proto.PeerLibraryThumbnailParams) (proto.LibraryThumbnailResult, error) {
+	p, err := sharedProject(c, pp.Project, proto.MethodPeerPagesLibraryThumbnail)
+	if err != nil {
+		return proto.LibraryThumbnailResult{}, err
+	}
+	t, err := thumbnailOf(p, pp.Thread, pp.Name, thread.LibraryFileInfo, thread.ReadLibraryChunk)
+	if err != nil {
+		if perr := thumbnailError(pp.Name, err); perr.Code != proto.ErrInternal {
+			return proto.LibraryThumbnailResult{}, perr
+		}
+		return proto.LibraryThumbnailResult{}, proto.Errorf(proto.ErrRefused, "%s can't be read now", pp.Name)
+	}
+	return thumbnailResult(pp.Name, t), nil
+}
+
 // checkPeerRead checks a console's alias and project.
 func checkPeerRead(method, alias, slug string) *proto.Error {
 	if alias == "" || strings.ContainsAny(alias, "/@") || !project.ValidSlug(slug) {
@@ -236,6 +253,32 @@ func (s *Server) readPeerLibrary(p proto.PeerLibraryReadReadParams, _ callCtx) (
 		return nil, pagesError(p.Alias, err)
 	}
 	return r, nil
+}
+
+// readPeerThumbnail is peer.library-thumbnail. A paired tm that serves
+// no thumbnails answers as a file that makes none does: the console draws
+// a row, and nothing is wrong with the project's pages.
+func (s *Server) readPeerThumbnail(p proto.PeerLibraryThumbnailReadParams, _ callCtx) (any, *proto.Error) {
+	if perr := checkPeerRead(proto.MethodPeerLibraryThumbnail, p.Alias, p.Project); perr != nil {
+		return nil, perr
+	}
+	if !thread.ValidID(p.Thread) || p.Name == "" {
+		return nil, proto.Errorf(proto.ErrBadParams, "peer.library-thumbnail needs a thread and a file name")
+	}
+	r, err := s.peers.LibraryThumbnail(context.Background(), p.Alias,
+		proto.PeerLibraryThumbnailParams{Project: p.Project, Thread: p.Thread, Name: p.Name})
+	if err != nil {
+		return nil, peerThumbnailError(p.Alias, err)
+	}
+	return r, nil
+}
+
+func peerThumbnailError(alias string, err error) *proto.Error {
+	perr := pagesError(alias, err)
+	if perr.Code == proto.ErrNoPages {
+		return proto.Errorf(proto.ErrNoThumbnail, "%s's tm serves no thumbnails", alias)
+	}
+	return perr
 }
 
 // pagesError is a failed page read in this server's words, its code

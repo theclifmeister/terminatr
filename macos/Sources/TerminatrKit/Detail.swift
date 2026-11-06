@@ -54,7 +54,7 @@ public enum Dashboard {
         p.counts["done"] ?? 0
     }
 
-    /// What a done row says of its doneAt (app API 53), in the viewer's
+    /// What a done row says of its doneAt (app API 54), in the viewer's
     /// time zone: the time alone today, the day and time before that, the
     /// year too for another year's, no time when only the day is known;
     /// empty when nothing dates it, as from an older tm. As the TUI's

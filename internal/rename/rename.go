@@ -28,6 +28,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
+	"github.com/theclifmeister/terminatr/internal/thumb"
 	"github.com/theclifmeister/terminatr/internal/vaultlink"
 	"github.com/theclifmeister/terminatr/internal/worktree"
 )
@@ -192,6 +193,8 @@ func Project(o Options) (*Result, error) {
 	if n, err := relink(o.From, o.To, o.From, o.To); err != nil {
 		note("links to %s not all renamed (%d files done): %v", o.From, n, err)
 	}
+	// Cached thumbnails are kept by slug: the old slug's are of no use.
+	_ = thumb.ForgetProject(o.From)
 	detail := o.From + " → " + o.To
 	if err := p.WriteRoleFile(); err != nil {
 		note("AGENTS.md not rewritten: %v", err)

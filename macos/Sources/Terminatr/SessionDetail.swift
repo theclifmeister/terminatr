@@ -90,7 +90,8 @@ struct SessionWindow: View {
                          panel = RightPanel.pressed(v, now: shown)
                          if panel == .files { files.askFocus() }
                      },
-                     panelWidth: f.inspector, panelWidthSaved: $panelWidth) {
+                     panelWidth: f.inspector, panelWidthSaved: $panelWidth,
+                     panelLimit: WindowColumns.limit(.inspector, window: g.size.width, sidebarShown: false, inspectorShown: true)) {
                 VStack(spacing: 0) {
                     if app.lost { ConnectionBanner() }
                     SessionDetail(model: model)

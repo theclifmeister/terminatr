@@ -1,8 +1,10 @@
 package peer
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"image/jpeg"
 	"slices"
 	"time"
 
@@ -17,7 +19,8 @@ import (
 // the memory has no method at all.
 
 // CapPages is the link capability of peer.pages, peer.pages.library and
-// peer.pages.library.read.
+// peer.pages.library.read. peer.pages.library.thumbnail came later without
+// a capability of its own: a tm without it answers unknown-method.
 const CapPages = "pages"
 
 // PagesExporter is an Exporter that also serves a shared project's
@@ -31,6 +34,9 @@ type PagesExporter interface {
 	// LibraryRead is a chunk of at most proto.PeerLibraryChunk bytes of
 	// a file Library lists; any other is refused.
 	LibraryRead(c caller.Caller, p proto.PeerLibraryReadParams) (proto.LibraryReadResult, error)
+	// LibraryThumbnail is the thumbnail of a file Library lists; any other
+	// is refused.
+	LibraryThumbnail(c caller.Caller, p proto.PeerLibraryThumbnailParams) (proto.LibraryThumbnailResult, error)
 }
 
 // pagesMethods are the link's methods of project pages, when the
@@ -42,6 +48,7 @@ func (d *dispatcher) pagesMethods(m map[string]handler) {
 	m[proto.MethodPeerPages] = d.pagesRead
 	m[proto.MethodPeerPagesLibrary] = d.pagesLibrary
 	m[proto.MethodPeerPagesLibraryRead] = d.pagesLibraryRead
+	m[proto.MethodPeerPagesLibraryThumbnail] = d.pagesLibraryThumbnail
 }
 
 // errPagesOff refuses a page while the switch is off for the project:
@@ -96,6 +103,17 @@ func (d *dispatcher) pagesLibraryRead(_ context.Context, raw json.RawMessage) (a
 		return nil, errPagesOff(p.Project)
 	}
 	return d.ex.(PagesExporter).LibraryRead(d.caller, p)
+}
+
+func (d *dispatcher) pagesLibraryThumbnail(_ context.Context, raw json.RawMessage) (any, error) {
+	var p proto.PeerLibraryThumbnailParams
+	if err := json.Unmarshal(raw, &p); err != nil || p.Project == "" || p.Thread == "" || p.Name == "" {
+		return nil, proto.Errorf(proto.ErrBadParams, "peer.pages.library.thumbnail needs a project, a thread and a name")
+	}
+	if !d.pages(p.Project) {
+		return nil, errPagesOff(p.Project)
+	}
+	return d.ex.(PagesExporter).LibraryThumbnail(d.caller, p)
 }
 
 // pagesOn is this server's project pages switch for the peer now, for
@@ -199,6 +217,32 @@ func (m *Manager) LibraryRead(ctx context.Context, alias string, p proto.PeerLib
 	}
 	r.Name = p.Name
 	return r, nil
+}
+
+// LibraryThumbnail is the thumbnail of a library file of the paired
+// server alias's shared project. What came is checked to be what was asked
+// for: a JPEG, in bounds, its size read from the JPEG and not from the
+// answer, so a console's decoder sees nothing else from that server.
+func (m *Manager) LibraryThumbnail(ctx context.Context, alias string, p proto.PeerLibraryThumbnailParams) (proto.LibraryThumbnailResult, error) {
+	l, err := m.pagesLink(alias)
+	if err != nil {
+		return proto.LibraryThumbnailResult{}, err
+	}
+	ctx, cancel := context.WithTimeout(ctx, pagesWait)
+	defer cancel()
+	var r proto.LibraryThumbnailResult
+	if err := l.call(ctx, proto.MethodPeerPagesLibraryThumbnail, p, &r); err != nil {
+		return proto.LibraryThumbnailResult{}, err
+	}
+	refused := proto.Errorf(proto.ErrNoThumbnail, "the paired server's thumbnail of %s doesn't add up", textsafe.Line(p.Name, 80))
+	if len(r.Data) == 0 || len(r.Data) > proto.MaxThumbnail {
+		return proto.LibraryThumbnailResult{}, refused
+	}
+	cfg, err := jpeg.DecodeConfig(bytes.NewReader(r.Data))
+	if err != nil || cfg.Width <= 0 || cfg.Height <= 0 || cfg.Width > proto.ThumbnailSide || cfg.Height > proto.ThumbnailSide {
+		return proto.LibraryThumbnailResult{}, refused
+	}
+	return proto.LibraryThumbnailResult{Name: p.Name, Width: cfg.Width, Height: cfg.Height, Data: r.Data}, nil
 }
 
 // cleanPages is a peer.pages answer with every string cleaned, a task's

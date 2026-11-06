@@ -274,7 +274,7 @@ func TestCopies(t *testing.T) {
 		// user as what answers them (checked below); the clock's
 		// offset as the sessions' times.
 		".Peers[].Watch", ".Peers[].Popup",
-		".Peers[].Version", ".Peers[].RTT", ".Peers[].Listed", ".Peers[].Shares",
+		".Peers[].Listed", ".Peers[].Shares",
 		// Whether the paired server takes program messages: the TUI's
 		// program members popup's; program.get says a member there is
 		// dormant.
@@ -375,6 +375,7 @@ func TestCopies(t *testing.T) {
 	check("memory.read", homeOf(memoryTextOf), nil)
 	check("library.list", homeOf(libraryOf), nil)
 	check("library.read", homeOf(libraryChunkOf), nil)
+	check("library.thumbnail", homeOf(libraryThumbnailOf), nil)
 	check("files.list", homeOf(filesListOf), nil)
 	check("files.read", homeOf(filesChunkOf), nil)
 	check("files.stamp", homeOf(filesStampOf), nil)
@@ -660,9 +661,9 @@ func TestAllowlist(t *testing.T) {
 		proto.MethodSessionFile, proto.MethodCoordinatorClear, proto.MethodProjectActive, proto.MethodSessionUpload,
 		proto.MethodLinkAct, proto.MethodPeerShareAnswer, proto.MethodPeerNeedAct, MethodGuardRefusals, MethodGuardDecide, proto.MethodTranscriptPage,
 		proto.MethodProjectPin, proto.MethodProjectNew, proto.MethodSessionAdoptRequest, proto.MethodSessionRemote, proto.MethodLinkSend,
-		proto.MethodMemoryList, proto.MethodMemoryRead, proto.MethodLibraryList, proto.MethodLibraryRead, proto.MethodDesignList, proto.MethodSearchQuery, proto.MethodSearchTimeline, proto.MethodSearchShow, proto.MethodAppReportAdd,
+		proto.MethodMemoryList, proto.MethodMemoryRead, proto.MethodLibraryList, proto.MethodLibraryRead, proto.MethodLibraryThumbnail, proto.MethodDesignList, proto.MethodSearchQuery, proto.MethodSearchTimeline, proto.MethodSearchShow, proto.MethodAppReportAdd,
 		proto.MethodFilesList, proto.MethodFilesRead, proto.MethodFilesStamp, proto.MethodFilesDiff, proto.MethodFilesRepos,
-		proto.MethodPeerPagesRead, proto.MethodPeerLibraryList, proto.MethodPeerLibraryRead, proto.MethodPeerDesignList,
+		proto.MethodPeerPagesRead, proto.MethodPeerLibraryList, proto.MethodPeerLibraryRead, proto.MethodPeerLibraryThumbnail, proto.MethodPeerDesignList,
 		MethodDeviceNonce, MethodDeviceBye, MethodDeviceList, MethodDevicePair, MethodDevicePairWait, MethodDevicePairAnswer, MethodDeviceAccess,
 		MethodDeviceName, MethodDeviceRemove, proto.MethodModsList, proto.MethodModsSet, proto.MethodModsSetting,
 		proto.MethodProgramGet, proto.MethodProgramNeeds, proto.MethodProgramRead, proto.MethodProgramSearch, proto.MethodProgramSearchTimeline,
@@ -692,7 +693,7 @@ func TestAllowlist(t *testing.T) {
 	for name, write := range map[string]bool{MethodPaneInput: true, proto.MethodPaneVT: false, proto.MethodTranscriptWatch: false,
 		proto.MethodSessionFile: false, proto.MethodCoordinatorClear: true, proto.MethodProjectActive: true,
 		proto.MethodLinkAct: true, proto.MethodPeerShareAnswer: true, MethodGuardRefusals: false, MethodGuardDecide: true,
-		proto.MethodMemoryList: false, proto.MethodMemoryRead: false, proto.MethodLibraryList: false, proto.MethodLibraryRead: false,
+		proto.MethodMemoryList: false, proto.MethodMemoryRead: false, proto.MethodLibraryList: false, proto.MethodLibraryRead: false, proto.MethodLibraryThumbnail: false, proto.MethodPeerLibraryThumbnail: false,
 		MethodDeviceList: false, MethodDevicePair: true, MethodDevicePairWait: true, MethodDevicePairAnswer: true,
 		MethodDeviceAccess: true, MethodDeviceName: true, MethodDeviceRemove: true,
 		proto.MethodModsList: false, proto.MethodModsSet: true, proto.MethodModsSetting: true,
@@ -727,14 +728,14 @@ func TestSafe(t *testing.T) {
 // don't.
 func TestPeerListSessions(t *testing.T) {
 	created := time.Date(2026, 10, 26, 12, 0, 0, 0, time.UTC)
-	l := peerListOf(proto.PeerList{Peers: []proto.PeerMirror{{Alias: "mini", Pane: true, Panes: proto.PanesView, Offset: 2000,
+	l := peerListOf(proto.PeerList{Peers: []proto.PeerMirror{{Alias: "mini", Pane: true, Panes: proto.PanesView, Offset: 2000, Version: "0.82.1", RTT: 38,
 		Projects: []proto.PeerMirrorProject{{PeerProject: proto.PeerProject{Project: "demo"}, Sessions: []proto.PeerSession{
-			{ID: "s-1", Role: proto.RoleCoordinator, Project: "demo", Created: created},
+			{ID: "s-1", Role: proto.RoleCoordinator, Project: "demo", Created: created, TurnSince: created},
 			{ID: "s-2", Role: proto.RoleThread, Project: "demo", Thread: "t-0001", Asking: true},
 			{ID: "s-3", Role: "shell", Project: "demo"},
 		}}}}}})
 	p := l.Peers[0]
-	if !p.Pane || p.Panes != proto.PanesView {
+	if !p.Pane || p.Panes != proto.PanesView || p.Version != "0.82.1" || p.RTT != 38 {
 		t.Fatalf("peer %+v", p)
 	}
 	ss := p.Projects[0].Sessions
@@ -743,6 +744,10 @@ func TestPeerListSessions(t *testing.T) {
 	}
 	if want := created.Add(-2 * time.Second); !ss[0].Created.Equal(want) {
 		t.Fatalf("created %v, want %v", ss[0].Created, want)
+	}
+	// A turn's start on this clock; none stays none, not the offset's.
+	if want := created.Add(-2 * time.Second); !ss[0].TurnSince.Equal(want) || !ss[1].TurnSince.IsZero() {
+		t.Fatalf("turn since %v and %v, want %v and none", ss[0].TurnSince, ss[1].TurnSince, want)
 	}
 	if w := p.Projects[0].Watched; w == nil || len(w) != 0 {
 		t.Fatalf("watched %+v before a watch", w)

@@ -29,7 +29,6 @@ struct NeedCard: View {
     @State private var busy = false
     @State private var said: (text: String, failed: Bool)?
     @State private var sendingBack: Need.PeerAct.Choice?
-    @State private var note = ""
     /// A paired server's multi-select's options ticked, by index (T904).
     @State private var ticked: Set<Int> = []
 
@@ -50,15 +49,10 @@ struct NeedCard: View {
         .accessibilityElement(children: .contain)
         .accessibilityLabel(need.title)
         .task(id: need.id) { await check() }
-        .alert("Send \(need.task) back", isPresented: Binding(get: { sendingBack != nil }, set: { if !$0 { sendingBack = nil } })) {
-            TextField("What's missing", text: $note)
-            Button("Send Back") {
-                if let c = sendingBack { send(c.params(note: note)) }
+        .sheet(isPresented: Binding(get: { sendingBack != nil }, set: { if !$0 { sendingBack = nil } })) {
+            if let c = sendingBack {
+                SendBackSheet(task: need.task) { note in send(c.params(note: note)) }
             }
-            .disabled(note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("\(need.peer?.server ?? "Its") coordinator hands your note to the thread.")
         }
     }
 
@@ -272,7 +266,6 @@ struct NeedCard: View {
     /// note first.
     private func peerAct(_ c: Need.PeerAct.Choice) {
         if c.note {
-            note = ""
             sendingBack = c
             return
         }

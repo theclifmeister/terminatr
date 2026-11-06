@@ -274,10 +274,10 @@ struct PhoneComposer: View {
                     // Its bubble says so at the conversation's end; the
                     // card folds to the pill.
                     model.queued(ref, QueuedPrompt(text: t, files: refs.count))
-                    if !r.why.isEmpty { said = (PromptSent.words(r), false) }
+                    if !r.why.isEmpty, let w = PromptSent.words(r) { said = (w, false) }
                     focused = false
-                } else {
-                    said = (PromptSent.words(r), false)
+                } else if let w = PromptSent.words(r) {
+                    said = (w, false)
                 }
             } catch {
                 if let w = NeedActs.words(error) { said = (w, true) }
@@ -294,7 +294,6 @@ struct PhoneComposer: View {
         Task {
             do {
                 try await model.stop(session)
-                said = ("Stopped the turn.", false)
             } catch {
                 if let w = NeedActs.words(error) { said = (w, true) }
             }

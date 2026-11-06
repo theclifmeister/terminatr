@@ -17,8 +17,16 @@ private func session(_ id: String, state: String) -> AppAPI.Session {
 
 @Test func projectTabsFollowWhatTmHas() {
     #expect(ProjectTab.tabs(nil) == [.overview, .board])
-    #expect(ProjectTab.allCases.map(\.rawValue) == ["Overview", "Board", "Memory", "Library", "Mods"])
-    #expect(!ProjectTab.paired.contains(.mods))
+    #expect(ProjectTab.allCases.map(\.rawValue) == ["Overview", "Board", "Memory", "Library", "Designs", "Mods"])
+    #expect(!ProjectTab.paired(nil).contains(.mods))
+    #expect(!ProjectTab.paired(nil).contains(.designs))
+    var h = AppAPI.Hello(appApi: 31, tm: "1", build: "", capabilities: [], methods: ["design.list"])
+    h.server = AppAPI.Server(version: "1", protocol: 28, caps: ["designs"])
+    #expect(ProjectTab.tabs(h).last == .designs)
+    #expect(ProjectTab.paired(h).last == .designs)
+    h.server?.caps = []
+    #expect(!ProjectTab.tabs(h).contains(.designs))
+    #expect(!ProjectTab.paired(h).contains(.designs))
 }
 
 @Test func tileLetters() {

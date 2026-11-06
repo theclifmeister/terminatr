@@ -79,6 +79,10 @@ func init() {
 		unary(proto.MethodPeerPagesRead, false, peerPagesParams, peerPagesOf),
 		unary(proto.MethodPeerLibraryList, false, peerPagesParams, peerLibraryOf),
 		unary(proto.MethodPeerLibraryRead, false, peerLibraryReadParams, libraryChunkOf),
+		// Its library file's thumbnail (app API 53; the server's caps say
+		// library-thumbnails), made on that server; refused no-thumbnail,
+		// as a console draws a row, when that server's tm is too old.
+		unary(proto.MethodPeerLibraryThumbnail, false, peerLibraryThumbnailParams, libraryThumbnailOf),
 		// A paired server's designs, read only (app API 36; the server's
 		// caps say peer-designs), under the same switch: their records
 		// and builds, never their pages or open questions.
@@ -96,6 +100,9 @@ func init() {
 		unary(proto.MethodMemoryRead, false, memoryReadParams, memoryTextOf),
 		unary(proto.MethodLibraryList, false, libraryListParams, libraryOf),
 		unary(proto.MethodLibraryRead, false, libraryReadParams, libraryChunkOf),
+		// A library file's thumbnail, a small JPEG (app API 53; the
+		// server's caps say library-thumbnails).
+		unary(proto.MethodLibraryThumbnail, false, libraryThumbnailParams, libraryThumbnailOf),
 
 		// A session's folder, read only (app API 49; the server's caps
 		// say worktree-files): a thread's worktree or a coordinator's
@@ -615,6 +622,10 @@ func filesStampParams(p FilesStampParams) proto.FilesStampParams {
 
 func filesReposParams(p FilesReposParams) proto.FilesReposParams {
 	return proto.FilesReposParams{Session: p.Session}
+}
+
+func libraryThumbnailParams(p LibraryThumbnailParams) proto.LibraryThumbnailParams {
+	return proto.LibraryThumbnailParams{Project: p.Project, ID: p.ID, Name: p.Name}
 }
 
 func libraryReadParams(p LibraryReadParams) proto.LibraryReadParams {

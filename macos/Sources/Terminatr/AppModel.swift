@@ -35,6 +35,10 @@ final class AppModel {
     private(set) var sessions: [AppAPI.Session] = []
     private(set) var notices: [AppAPI.Notice] = []
     private(set) var peers: [AppAPI.Peer] = []
+    /// Each paired server's latest ping, on its own: a ping alone doesn't
+    /// change peer.list's gen, and only the status bar's menu reads it, so
+    /// the sidebar doesn't draw again for it.
+    private(set) var peerRTT: [String: Double] = [:]
     /// [ui] needs_first, as the last session list said: the sidebar
     /// lists the projects that need the user first, as the TUI's.
     private(set) var needsFirst = false
@@ -102,11 +106,14 @@ final class AppModel {
     var sidebarShown = UserDefaults.standard.object(forKey: AppModel.sidebarKey) as? Bool ?? true {
         didSet { UserDefaults.standard.set(sidebarShown, forKey: Self.sidebarKey) }
     }
-    /// The tab each project shows, while the app runs: by the shown
-    /// project's selection (projectTab).
-    private var projectTabsShown: [Selection: ProjectTab] = [:]
     /// The sidebar's Pair a server: its sheet, shown.
     var pairServer = false
+    /// The server the sidebar should scroll to, each time anew.
+    struct ServerReveal: Equatable {
+        var key = ""
+        var n = 0
+    }
+    var serverReveal = ServerReveal()
     /// Bumped by ⌘L: the shown composer takes the focus.
     private(set) var composerFocus = 0
     /// Text the coordinator's composer of a project takes as it shows,
@@ -420,6 +427,8 @@ final class AppModel {
                 changed()
                 return
             }
+            let rtt = Dictionary(l.peers.map { ($0.alias, $0.rttMs) }, uniquingKeysWith: { a, _ in a })
+            if rtt != peerRTT { peerRTT = rtt }
             if l.gen != gen || !loaded.peers {
                 gen = l.gen
                 peers = l.peers
@@ -652,8 +661,9 @@ final class AppModel {
         projects.first { $0.slug == slug }
     }
 
+    /// ref's thread on this server; nil for a paired server's.
     func thread(_ ref: SessionRef) -> AppAPI.Thread? {
-        project(ref.project)?.threads.first { $0.record.id == ref.thread }
+        ref.ownThread(in: projects)
     }
 
     /// The needs of a project (its badge, its dashboard's Needs you).
@@ -715,6 +725,19 @@ final class AppModel {
         if let s = Selection.route(project: project, session: session, projects: projects, sessions: sessions, peers: peers, programs: programs) {
             nav.select(s)
         }
+        showWindow?()
+    }
+
+    /// The status bar's server: unfolds it in the sidebar, scrolled to,
+    /// and shows its first project unless it shows something of it already.
+    func go(toServer alias: String) {
+        nav.collapsed.remove(Navigation.sectionKey(server: alias))
+        filter = ""
+        sidebarShown = true
+        if let s = ServerList.landing(alias, shown: nav.selection, entries: entries, peers: peers) {
+            nav.select(s)
+        }
+        serverReveal = ServerReveal(key: Navigation.sectionKey(server: alias), n: serverReveal.n + 1)
         showWindow?()
     }
 
@@ -1060,12 +1083,23 @@ final class AppModel {
         return ProjectTab.tabs(nil)
     }
 
-    /// The shown project's tab in the title row: Overview until the user
-    /// picks another.
+    /// The tabs of the project s shows, this server's or a paired one's.
+    func projectTabs(_ s: Selection) -> [ProjectTab] {
+        guard !s.server.isEmpty else { return projectTabs }
+        if case .connected(let h) = phase { return ProjectTab.paired(h) }
+        return ProjectTab.paired(nil)
+    }
+
+    /// The shown project's tab in the title row: the one it was left on,
+    /// across a relaunch too (nav), while this tm has it; else Overview.
     var projectTab: ProjectTab {
-        get { nav.selection.flatMap { projectTabsShown[$0] } ?? .overview }
+        get {
+            guard let s = nav.selection, let t = nav.projectTabs[s].flatMap(ProjectTab.init(rawValue:)),
+                  projectTabs(s).contains(t) else { return .overview }
+            return t
+        }
         set {
-            if let s = nav.selection { projectTabsShown[s] = newValue }
+            if let s = nav.selection { nav.projectTabs[s] = newValue.rawValue }
         }
     }
 

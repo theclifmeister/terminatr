@@ -12,6 +12,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/tasks"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
@@ -429,7 +430,7 @@ type Task struct {
 	Owner    string `json:"owner,omitempty"`
 	Created  string `json:"created,omitempty"`
 	Updated  string `json:"updated,omitempty"`
-	// DoneAt (app API 53) is when a done task finished: a UTC time
+	// DoneAt (app API 54) is when a done task finished: a UTC time
 	// (2026-11-06T09:10:44Z), or a day (2026-11-06) when only that is
 	// known; absent when nothing dates it, and from an older tm.
 	DoneAt string `json:"done_at,omitempty"`
@@ -698,6 +699,11 @@ type Peer struct {
 	// (PeerNeedActParams.Picks); without, such a question is answered
 	// in its pane there.
 	Picks bool `json:"picks,omitempty"`
+	// Version and RTT (T1032) are its tm's release, as far as known, and
+	// the link's last ping in milliseconds while up; a change of RTT
+	// alone doesn't change Gen.
+	Version string  `json:"version,omitempty"`
+	RTT     float64 `json:"rtt_ms,omitempty"`
 }
 
 // PeerProject is a project a paired server shares: its goal line,
@@ -822,6 +828,9 @@ type PeerSession struct {
 	Asking        bool      `json:"asking,omitempty"`
 	Context       int64     `json:"context,omitempty"`
 	ContextWindow int64     `json:"context_window,omitempty"`
+	// TurnSince (T1032) is when its agent's current turn began, on this
+	// server's clock; an older tm sends none.
+	TurnSince time.Time `json:"turn_since,omitzero"`
 }
 
 // The copies. Lists are never null.
@@ -1023,7 +1032,8 @@ func peerListOf(l proto.PeerList) PeerList {
 	for _, p := range l.Peers {
 		peer := Peer{Alias: p.Alias, Name: p.Name, ID: p.ID, State: p.State, Reason: p.Reason, Since: p.Since,
 			Projects: make([]PeerProject, 0, len(p.Projects)), ShareWaits: proto.ShareWaits([]proto.PeerMirror{p}),
-			Pane: p.Pane, Panes: p.Panes, Transcript: p.Transcript, Conversations: p.Conversations, Needs: p.Needs, Picks: p.NeedPicks}
+			Pane: p.Pane, Panes: p.Panes, Transcript: p.Transcript, Conversations: p.Conversations, Needs: p.Needs, Picks: p.NeedPicks,
+			Version: textsafe.Line(p.Version, 40), RTT: p.RTT}
 		for _, q := range p.Shares {
 			if !q.Out && q.Pending() {
 				peer.ShareRequests = append(peer.ShareRequests, shareRequestOf(q))
@@ -1096,10 +1106,14 @@ func peerNeedOf(alias string, offset time.Duration, n proto.PeerNeed) PeerNeed {
 // peerSessionOf is session s of the paired server alias, whose clock
 // is offset ahead of this server's.
 func peerSessionOf(alias string, offset time.Duration, s proto.PeerSession) PeerSession {
+	var turn time.Time
+	if !s.TurnSince.IsZero() {
+		turn = s.TurnSince.Add(-offset)
+	}
 	return PeerSession{ID: alias + "/" + s.ID, Role: s.Role, Agent: s.Agent, Project: s.Project, Thread: s.Thread,
 		Task: s.Task, Created: s.Created.Add(-offset), State: s.State, Reason: s.Reason, TodosDone: s.TodosDone,
 		TodosTotal: s.TodosTotal, Current: s.Current, Queued: s.Queued, RemoteControl: s.RemoteControl, Model: s.Model,
-		Asking: s.Asking, Context: s.Context, ContextWindow: s.ContextWindow}
+		Asking: s.Asking, Context: s.Context, ContextWindow: s.ContextWindow, TurnSince: turn}
 }
 
 // shareRequestOf is a paired server's share request that waits for the
@@ -1185,7 +1199,7 @@ func taskAddedOf(r proto.TaskAddResult) TaskAdded {
 }
 
 // DoneTasks is task.done's result: the board's done tasks, newest first
-// since app API 53 (board order before), without their notes and steps.
+// since app API 54 (board order before), without their notes and steps.
 type DoneTasks struct {
 	Tasks []Task `json:"tasks"`
 }
@@ -1598,6 +1612,13 @@ type (
 		Name    string `json:"name"`
 		Offset  int64  `json:"offset,omitempty"`
 	}
+	// LibraryThumbnailParams are library.thumbnail's: the file of thread
+	// (or message) ID named Name.
+	LibraryThumbnailParams struct {
+		Project string `json:"project"`
+		ID      string `json:"id"`
+		Name    string `json:"name"`
+	}
 )
 
 // MemoryFiles are memory.list's result: CONTEXT.md and MEMORY.md when
@@ -1675,6 +1696,20 @@ func libraryOf(r proto.LibraryListResult) Library {
 			Name: f.Name, Size: f.Size, Time: f.Time, Peer: f.Peer, Message: f.Message})
 	}
 	return out
+}
+
+// LibraryThumbnail is library.thumbnail's result: a JPEG of Width by
+// Height pixels, at most 400 on its long side and 512 KiB. A file that
+// makes none is refused no-thumbnail: a console draws a row.
+type LibraryThumbnail struct {
+	Name   string `json:"name"`
+	Width  int    `json:"width"`
+	Height int    `json:"height"`
+	Data   []byte `json:"data"`
+}
+
+func libraryThumbnailOf(r proto.LibraryThumbnailResult) LibraryThumbnail {
+	return LibraryThumbnail{Name: r.Name, Width: r.Width, Height: r.Height, Data: r.Data}
 }
 
 func libraryChunkOf(r proto.LibraryReadResult) LibraryChunk {

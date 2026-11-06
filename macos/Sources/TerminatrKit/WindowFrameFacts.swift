@@ -8,6 +8,7 @@ public enum ProjectTab: String, CaseIterable, Identifiable, Sendable {
     case board = "Board"
     case memory = "Memory"
     case library = "Library"
+    case designs = "Designs"
     case mods = "Mods"
 
     public var id: String { rawValue }
@@ -17,12 +18,18 @@ public enum ProjectTab: String, CaseIterable, Identifiable, Sendable {
         guard let hello else { return [.overview, .board] }
         var out: [ProjectTab] = [.overview, .board]
         if Compatibility.readsProjectFiles(hello) { out += [.memory, .library] }
+        if Compatibility.listsDesigns(hello) { out.append(.designs) }
         if Compatibility.listsMods(hello) { out.append(.mods) }
         return out
     }
 
-    /// A paired server's project's: its mods are its own, never here.
-    public static let paired: [ProjectTab] = [.overview, .board, .memory, .library]
+    /// A paired server's project's: its mods are its own, never here; its
+    /// designs while hello's tm lists designs at all.
+    public static func paired(_ hello: AppAPI.Hello?) -> [ProjectTab] {
+        var out: [ProjectTab] = [.overview, .board, .memory, .library]
+        if let hello, Compatibility.listsDesigns(hello) { out.append(.designs) }
+        return out
+    }
 }
 
 /// A project's tile: two letters of its name, a hyphenated name's first
@@ -55,21 +62,8 @@ public struct StatusFacts: Equatable, Sendable {
     /// Counts a thread as its row does (Busy), and a paired server's as
     /// its row does while that server is up and its listing fresh.
     public static func of(projects: [AppAPI.Project], sessions: [AppAPI.Session], peers: [AppAPI.Peer], needs: Int) -> StatusFacts {
-        var working = 0
-        for p in projects {
-            for t in p.threads where !t.record.session.isEmpty {
-                if Busy.of(thread: t, session: sessions.first { $0.id == t.record.session }) != nil { working += 1 }
-            }
-        }
-        for peer in peers where peer.state == "up" {
-            for p in peer.projects where !p.stale {
-                for s in p.sessions {
-                    guard let ref = SessionRef(s, of: peer.alias), !ref.isCoordinator, !ref.director else { continue }
-                    if Busy.of(peer: s) != nil { working += 1 }
-                }
-            }
-        }
-        return StatusFacts(servers: 1 + peers.count, working: working, needs: needs)
+        let working = WorkingList.of(projects: projects, sessions: sessions, peers: peers).threads
+        return StatusFacts(servers: 1 + peers.count, working: working.reduce(0) { $0 + $1.rows.count }, needs: needs)
     }
 
     public var server: String { servers > 1 ? "This Mac · \(servers) servers" : "This Mac" }

@@ -40,6 +40,7 @@ const (
 	fileTaskMD   = "taskmd"   // threads/<id>/task.md
 	fileReport   = "report"   // threads/<id>/REPORT.md, reports/<n>.md
 	fileLibrary  = "library"  // threads/<id>/library/<name>
+	fileLibName  = "libname"  // a library file not read as text: found by its name
 	fileInbox    = "inbox"    // inbox/<name>.md, inbox/done/<name>.md
 	fileJournal  = "journal"  // JOURNAL.md
 	fileJournalZ = "journalz" // journal/<yyyy-mm>.md.gz
@@ -227,6 +228,8 @@ func (w *walker) thread(id string) {
 		w.each(base+"library", nil, func(name string, fi fs.FileInfo) {
 			if libraryFile(name) && fi.Size() <= MaxFile {
 				w.add(base+"library/"+name, "library", fileLibrary, fi)
+			} else {
+				w.add(base+"library/"+name, "library", fileLibName, fi)
 			}
 		})
 	}
@@ -289,6 +292,7 @@ type member struct {
 	name  string
 	data  []byte
 	mtime time.Time
+	big   bool // over MaxFile: listed, its data not read
 }
 
 // untar reads a tar.gz archive's regular files of at most MaxFile
@@ -309,7 +313,11 @@ func untar(data []byte) ([]member, error) {
 		if err != nil {
 			return out, err
 		}
-		if h.Typeflag != tar.TypeReg || h.Size > MaxFile {
+		if h.Typeflag != tar.TypeReg {
+			continue
+		}
+		if h.Size > MaxFile {
+			out = append(out, member{name: path.Clean(h.Name), mtime: h.ModTime, big: true})
 			continue
 		}
 		b, err := io.ReadAll(io.LimitReader(tr, MaxFile))
@@ -350,6 +358,10 @@ func parseThreadMeta(data []byte) threadMeta {
 // parse reads a source into its chunks, each with the text it is in;
 // it answers the source's bytes too.
 func parse(dir string, s source) ([]piece, []byte, error) {
+	if s.File == fileLibName {
+		ps, err := parseText(dir, s, "")
+		return ps, nil, err
+	}
 	data, err := readSource(dir, s)
 	if err != nil {
 		return nil, nil, err
@@ -391,6 +403,14 @@ func parseData(dir string, s source, data []byte) ([]piece, error) {
 			if !threadIDRE.MatchString(id) {
 				continue
 			}
+			if name, ok := strings.CutPrefix(rest, "library/"); ok && (m.big || !libraryFile(rest)) {
+				c := Chunk{Path: s.Rel, Member: m.name, Thread: id, Task: meta.Task, Time: m.mtime.UTC()}
+				out = append(out, withText(libraryName(id, name, meta, c), name)...)
+				continue
+			}
+			if m.big {
+				continue
+			}
 			file := ""
 			switch {
 			case rest == "brief.md":
@@ -416,7 +436,7 @@ func parseData(dir string, s source, data []byte) ([]piece, error) {
 		}
 		var out []piece
 		for _, m := range ms {
-			if !strings.HasSuffix(m.name, ".md") || strings.Contains(m.name, "/") {
+			if m.big || !strings.HasSuffix(m.name, ".md") || strings.Contains(m.name, "/") {
 				continue
 			}
 			c := Chunk{Path: s.Rel, Member: m.name, Time: m.mtime.UTC()}
@@ -459,7 +479,7 @@ func parseText(dir string, s source, text string) ([]piece, error) {
 			title = name
 		}
 		return markdown(text, fe, 3, "design:"+name, title, c), nil
-	case fileBrief, fileTaskMD, fileReport, fileLibrary:
+	case fileBrief, fileTaskMD, fileReport, fileLibrary, fileLibName:
 		parts := strings.SplitN(s.Rel, "/", 3) // threads, <id>, rest
 		id, rest := parts[1], parts[2]
 		meta := threadMeta{}
@@ -477,6 +497,10 @@ func parseText(dir string, s source, text string) ([]piece, error) {
 			}
 		}
 		c.Thread, c.Task = id, meta.Task
+		if s.File == fileLibName {
+			name := strings.TrimPrefix(rest, "library/")
+			return withText(libraryName(id, name, meta, c), name), nil
+		}
 		return threadFile(s.File, id, rest, text, meta, reports, c), nil
 	case fileInbox:
 		return inboxItem(path.Base(s.Rel), text, c), nil
@@ -595,6 +619,16 @@ func threadPieces(file, id, rest, text string, meta threadMeta, reports []int, c
 		return plain(text, base, name, c)
 	}
 	return nil
+}
+
+// libraryName is a library file found by its name alone: one chunk
+// whose text is the name, weighed with the thread's title, whatever the
+// file's kind (an image, an archive, a file too big to read).
+func libraryName(id, name string, meta threadMeta, c Chunk) []piece {
+	c.Kind = KindLibrary
+	p := piece{Chunk: c, head: name + " " + meta.Title}
+	p.ID, p.Title, p.Off, p.Len = "lib:"+id+"/"+name, name, 0, len(name)
+	return []piece{p}
 }
 
 // taskMD cuts a thread's task.md into the task as given (<id>/task) and

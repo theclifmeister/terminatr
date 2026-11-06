@@ -22,9 +22,12 @@ import Testing
 @Test func promptSentWords() {
     #expect(PromptSent.words(.init(via: "queued", running: true)) == "Queued: it goes once the turn ends.")
     #expect(PromptSent.words(.init(via: "queued")) == "Queued: it goes once the agent is idle.")
-    #expect(PromptSent.words(.init(via: "steered")) == "Steered into the running turn.")
-    #expect(PromptSent.words(.init(via: "typed", why: "Its pane is on billing.")) == "Typed into its pane. Its pane is on billing.")
-    #expect(PromptSent.words(.init(via: "")) == "Sent.")
+    // Routine sends say nothing; a why, a refusal, still shows.
+    for via in ["steered", "interrupted", "channel", "typed", "", "paste"] {
+        #expect(PromptSent.words(.init(via: via)) == nil)
+    }
+    #expect(PromptSent.words(.init(via: "typed", why: "Its pane is on billing.")) == "Its pane is on billing.")
+    #expect(PromptSent.words(.init(via: "queued", why: "It is busy.")) == "Queued: it goes once the agent is idle. It is busy.")
 }
 
 @Test func queuedPromptWentIn() {

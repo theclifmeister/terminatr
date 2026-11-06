@@ -28,6 +28,14 @@ type (
 		Name    string `json:"name"`
 		Offset  int64  `json:"offset,omitempty"`
 	}
+	// PeerLibraryThumbnailParams are peer.library-thumbnail's: the file of
+	// thread ID named Name, as peer.library-list gave it.
+	PeerLibraryThumbnailParams struct {
+		Alias   string `json:"alias"`
+		Project string `json:"project"`
+		ID      string `json:"id"`
+		Name    string `json:"name"`
+	}
 )
 
 // PeerPages is peer.pages-read's result: the project's goal, PROJECT.md's
@@ -46,6 +54,10 @@ type PeerPages struct {
 
 func peerPagesParams(p PeerPagesParams) proto.PeerPagesReadParams {
 	return proto.PeerPagesReadParams{Alias: p.Alias, Project: p.Project}
+}
+
+func peerLibraryThumbnailParams(p PeerLibraryThumbnailParams) proto.PeerLibraryThumbnailReadParams {
+	return proto.PeerLibraryThumbnailReadParams{Alias: p.Alias, Project: p.Project, Thread: p.ID, Name: p.Name}
 }
 
 func peerLibraryReadParams(p PeerLibraryReadParams) proto.PeerLibraryReadReadParams {

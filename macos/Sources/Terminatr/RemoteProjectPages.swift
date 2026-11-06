@@ -5,7 +5,7 @@ import TerminatrUI
 /// A paired server's shared project in the main pane (T886): the same
 /// tabs as one of this server's, picked in the title row. Overview (its
 /// coordinator and threads, and what it shares of its overview), Board,
-/// Memory and Library, read through this server's link while that
+/// Memory, Library and Designs, read through this server's link while that
 /// server's project pages switch for this one is on. A page it doesn't
 /// share shows "Not shared by <server>"; Memory always does. Nothing on
 /// them writes.
@@ -31,6 +31,8 @@ struct RemoteProjectPages: View {
                 } else {
                     PeerPageEmpty(page: .library, server: server, state: pages)
                 }
+            case .designs:
+                DesignsPane { DesignsSection(peer: peer, project: project) }
             }
         }
         .task(id: PagesRead(alias: peer.alias, project: project.project, pages: project.pages, reads: app.readsPeerPages)) { await read() }

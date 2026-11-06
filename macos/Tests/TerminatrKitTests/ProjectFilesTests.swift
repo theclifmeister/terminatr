@@ -114,3 +114,72 @@ private actor Chunks {
     #expect(o.tasks == "1 needs you · 3 in motion · 5 on deck · 9 done")
     #expect(ProjectOverview(p, coordinator: nil, needs: 2).coordinator == "")
 }
+
+/// A thumbnail stand-in that counts its calls.
+private actor Thumbs {
+    var names: [String] = []
+    func thumb(_ name: String) -> AppAPI.LibraryThumbnail {
+        names.append(name)
+        return AppAPI.LibraryThumbnail(name: name, width: 4, height: 3, data: Data([0xff, 0xd8]))
+    }
+    func refuse(_ name: String) throws -> AppAPI.LibraryThumbnail {
+        names.append(name)
+        throw AppAPI.Error(code: "no-thumbnail", message: "\(name) has no thumbnail")
+    }
+}
+
+@Test func thumbnailsNeedAPI53AndTheCap() {
+    let caps = AppAPI.Server(version: "0.83.0", protocol: 38, caps: ["project-files", "peer-pages", "library-thumbnails"])
+    let methods = ["library.read", "library.thumbnail", "peer.pages-read", "peer.library-read", "peer.library-thumbnail"]
+    var h = AppAPI.Hello(appApi: 53, tm: "0.83.0", build: "", methods: methods, server: caps)
+    #expect(Compatibility.readsThumbnails(h) && Compatibility.readsPeerThumbnails(h))
+    h.appApi = 52
+    #expect(!Compatibility.readsThumbnails(h) && !Compatibility.readsPeerThumbnails(h))
+    h.appApi = 53
+    // A newer tm on an older server: rows.
+    h.server = AppAPI.Server(version: "0.82.0", protocol: 38, caps: ["project-files", "peer-pages"])
+    #expect(!Compatibility.readsThumbnails(h) && !Compatibility.readsPeerThumbnails(h))
+    h.server = caps
+    // A device's list without the method: rows.
+    h.methods = ["library.read"]
+    #expect(!Compatibility.readsThumbnails(h))
+}
+
+@Test func onlyImagesAskForThumbnails() async {
+    for (name, has) in [("a.png", true), ("B.PNG", true), ("c.jpg", true), ("d.JPEG", true), ("e.gif", true),
+                        ("f.svg", false), ("g.md", false), ("h.webp", false), ("png", false), ("i.png.txt", false)] {
+        #expect(LibraryPage.hasThumbnail(lib("t-0001", name, 1)) == has, "\(name)")
+    }
+    // A library with no images makes no call.
+    let t = Thumbs()
+    for f in [lib("t-0001", "notes.md", 1), lib("t-0001", "pic.svg", 1), lib("t-0001", "data.json", 1)] {
+        let out = await LibraryPage.thumbnail({ p in await t.thumb(p.name) }, project: "web", file: f)
+        let peer = await PeerPages.thumbnail({ p in await t.thumb(p.name) }, alias: "studio", project: "web", file: f)
+        #expect(out == nil && peer == nil)
+    }
+    let none = await t.names
+    #expect(none.isEmpty)
+    // An image does, named as library.read names it: a linked project's by its message.
+    let linked = await LibraryPage.thumbnail({ p in
+        #expect(p.project == "web" && p.id == "M-1" && p.name == "shot.png")
+        return await t.thumb(p.name)
+    }, project: "web", file: lib("", "shot.png", 1, peer: "api"))
+    #expect(linked?.width == 4)
+    let paired = await PeerPages.thumbnail({ p in
+        #expect(p.alias == "studio" && p.project == "web" && p.id == "t-0001" && p.name == "shot.png")
+        return await t.thumb(p.name)
+    }, alias: "studio", project: "web", file: lib("t-0001", "shot.png", 1))
+    #expect(paired?.height == 3)
+}
+
+@Test func aRefusedThumbnailIsARow() async {
+    let t = Thumbs()
+    let f = lib("t-0001", "corrupt.png", 1)
+    let out = await LibraryPage.thumbnail({ p in try await t.refuse(p.name) }, project: "web", file: f)
+    #expect(out == nil)
+    // A paired server on an older tm answers the same.
+    let peer = await PeerPages.thumbnail({ p in try await t.refuse(p.name) }, alias: "old", project: "web", file: f)
+    #expect(peer == nil)
+    let names = await t.names
+    #expect(names == ["corrupt.png", "corrupt.png"])
+}

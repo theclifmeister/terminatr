@@ -16,6 +16,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/home"
+	"github.com/theclifmeister/terminatr/internal/thumb"
 )
 
 // SetFlag sets the project's "active", "paused", "archived" or "pinned"
@@ -96,6 +97,8 @@ func (p *Project) Trash(c caller.Caller, now time.Time) (string, error) {
 	if err := os.Rename(p.Dir, dst); err != nil {
 		return "", err
 	}
+	// Its library thumbnails would still show what its deleted files showed.
+	_ = thumb.ForgetProject(p.Slug)
 	if err := config.ClearProject(p.Slug, "active", "archived", "paused", "pinned", "share", "repos"); err != nil {
 		return dst, fmt.Errorf("moved to %s, but its settings stay: %w", dst, err)
 	}

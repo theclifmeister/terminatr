@@ -7,9 +7,9 @@ import UniformTypeIdentifiers
 
 /// A project of this server in the main pane: the tab the title row picks.
 /// Overview, its dashboard and what the TUI's Overview says; Board, its
-/// tasks; Memory and Library (T794), read only; and Mods (T869), its mods
-/// on or off for it and their settings for it, as the TUI's project Mods
-/// tab.
+/// tasks; Memory and Library (T794), read only; Designs, as the TUI's
+/// Designs tab; and Mods (T869), its mods on or off for it and their
+/// settings for it, as the TUI's project Mods tab.
 struct ProjectPages: View {
     @Environment(AppModel.self) private var app
     let project: AppAPI.Project
@@ -18,14 +18,15 @@ struct ProjectPages: View {
 
     var body: some View {
         Group {
-            let tabs = app.projectTabs
-            switch tabs.contains(app.projectTab) ? app.projectTab : .overview {
+            switch app.projectTab {
             case .overview, .board:
                 ProjectDashboard(project: project, board: app.projectTab == .board)
             case .memory:
                 MemoryPane(project: project.slug, note: note)
             case .library:
                 LibraryPane(project: project.slug)
+            case .designs:
+                DesignsPane { DesignsSection(project: project) }
             case .mods:
                 ModsPane(project: project.slug)
             }

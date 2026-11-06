@@ -13,6 +13,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/thread"
+	"github.com/theclifmeister/terminatr/internal/thumb"
 )
 
 // The Library tab's groups of files from linked projects (docs/SPEC.md
@@ -151,5 +152,6 @@ func RemoveFile(p *project.Project, c caller.Caller, id, name string) error {
 		return err
 	}
 	os.Remove(filepath.Dir(path)) // when it is empty
+	_ = thumb.Forget(p.Slug, id, name)
 	return p.Journal(c, "library.rm", id, name)
 }
