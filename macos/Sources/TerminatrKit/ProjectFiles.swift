@@ -81,10 +81,7 @@ public enum LibraryPage {
 
         /// "T12 · Fix the build", or "from web" for a linked project's.
         public var title: String {
-            guard let f = files.first else { return id }
-            if !f.peer.isEmpty { return "from \(f.peer)" }
-            if LibraryPage.isSeat(f) { return f.title }
-            return [f.task, f.title].filter { !$0.isEmpty }.joined(separator: " · ")
+            files.first.map(LibraryPage.source) ?? id
         }
 
         /// "t-0003 · archived" (its thread and state), or how many a
@@ -149,6 +146,47 @@ public enum LibraryPage {
             if open { return Listing(strip: strip, rows: rows, more: 0, fewer: true) }
             return Listing(strip: Array(strip.prefix(LibraryPage.stripAt)), rows: Array(rows.prefix(LibraryPage.foldAt)), more: more, fewer: false)
         }
+    }
+
+    /// How the page lists (T1056): by group, newest first, or flat, biggest
+    /// first.
+    public enum Sort: String, CaseIterable, Sendable {
+        case newest = "Newest", biggest = "Biggest"
+    }
+
+    /// Whether a library has anything to sort: two files. The TUI's
+    /// libShowsSort.
+    public static func showsSort(_ files: [AppAPI.LibraryFile]) -> Bool { files.count >= 2 }
+
+    /// Whether it lists biggest first: asked for, and for as long as the
+    /// library has two files.
+    public static func isFlat(_ files: [AppAPI.LibraryFile], _ sort: Sort) -> Bool {
+        sort == .biggest && showsSort(files)
+    }
+
+    /// The flat list's rows: every file its own, so a stack comes apart, each
+    /// half under its full name and its own size. The sort is there to show
+    /// what takes the room, and a pair has no one size to rank by.
+    public static func biggestRows(_ files: [AppAPI.LibraryFile]) -> [Row] {
+        biggestFirst(files).map { Row(files: [$0], words: [], title: $0.name) }
+    }
+
+    /// The files by size, the biggest first; equal sizes keep their order,
+    /// the list's, newest first. The TUI's libBiggestFirst, the offset
+    /// because Swift's sort doesn't promise to be stable.
+    public static func biggestFirst(_ files: [AppAPI.LibraryFile]) -> [AppAPI.LibraryFile] {
+        files.enumerated()
+            .sorted { $0.element.size != $1.element.size ? $0.element.size > $1.element.size : $0.offset < $1.offset }
+            .map(\.element)
+    }
+
+    /// What a file came with: "T12 · Fix the build", its thread when it has
+    /// neither, or "from web" for a linked project's.
+    public static func source(_ f: AppAPI.LibraryFile) -> String {
+        if !f.peer.isEmpty { return "from \(f.peer)" }
+        if isSeat(f) { return f.title }
+        let s = [f.task, f.title].filter { !$0.isEmpty }.joined(separator: " · ")
+        return s.isEmpty ? f.thread : s
     }
 
     /// A row of a group: one file, or a stack's two, the same picture twice
@@ -268,6 +306,9 @@ public enum LibraryPage {
         /// What it shows, top to bottom.
         public var all: [Row] { strip + rows }
         public var folds: Bool { more > 0 || fewer }
+
+        /// The row that lists this file: a stack's for either half.
+        public func row(of f: AppAPI.LibraryFile) -> Row? { all.first { $0.files.contains(f) } }
     }
 
     /// How many thumbnails a folded group shows.
