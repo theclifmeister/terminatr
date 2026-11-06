@@ -24,6 +24,8 @@ type fakeLinks struct {
 	calls   []string
 	changes chan struct{}
 	panes   string // the peers' pane switch, in peer.projects
+	pages   bool   // the project pages switch of every project, in peer.projects
+	files   bool   // the worktrees switch of every project, in peer.projects
 }
 
 func newFakeLinks(skew time.Duration, threads map[string]int, peers ...proto.PeerLink) *fakeLinks {
@@ -99,7 +101,7 @@ func (f *fakeLinks) Call(ctx context.Context, alias, method string, params, resu
 		case proto.MethodPeerProjects:
 			var ps proto.PeerProjects
 			for _, slug := range slices.Sorted(maps.Keys(f.threads)) {
-				ps.Projects = append(ps.Projects, proto.PeerProject{Project: slug, Goal: "goal of " + slug, Threads: f.threads[slug]})
+				ps.Projects = append(ps.Projects, proto.PeerProject{Project: slug, Goal: "goal of " + slug, Threads: f.threads[slug], Pages: f.pages, Files: f.files})
 			}
 			ps.Now, ps.Panes = now, f.panes
 			f.mu.Unlock()
@@ -300,6 +302,35 @@ func TestMirrorProjectsComeAndGo(t *testing.T) {
 	})
 	f.set("mini", "")
 	waitList(t, m, "dropped mini", func(l proto.PeerList) bool { return len(l.Peers) == 0 })
+}
+
+// TestMirrorProjectSwitchesFollow: a project's pages and worktrees switches
+// change while it is watched, and the next peer.projects says so: the
+// watch's snapshot carries neither.
+func TestMirrorProjectSwitchesFollow(t *testing.T) {
+	fastMirror(t)
+	f := newFakeLinks(0, map[string]int{"web": 1}, upLink("mini", CapWatch))
+	m := startMirror(f, MirrorOptions{Logf: t.Logf})
+	defer m.Close()
+	waitList(t, m, "synced web", func(l proto.PeerList) bool {
+		w := projectOf(l, "mini", "web")
+		return w != nil && !w.Stale && !w.Pages && !w.Files
+	})
+	set := func(on bool) {
+		f.mu.Lock()
+		f.pages, f.files = on, on
+		f.mu.Unlock()
+	}
+	set(true)
+	waitList(t, m, "switches on", func(l proto.PeerList) bool {
+		w := projectOf(l, "mini", "web")
+		return w != nil && w.Pages && w.Files
+	})
+	set(false)
+	waitList(t, m, "switches off", func(l proto.PeerList) bool {
+		w := projectOf(l, "mini", "web")
+		return w != nil && !w.Pages && !w.Files
+	})
 }
 
 // TestMirrorPeerWithoutWatch: a peer whose hello lacks the watch

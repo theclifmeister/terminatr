@@ -101,6 +101,7 @@ struct MainWindow: View {
             }
         }
         .sheet(item: $app.taskShown) { TaskSheet(shown: $0) }
+        .sheet(item: $app.peerTaskShown) { PeerTaskSheet(shown: $0) }
         .sheet(isPresented: $app.searchShown) {
             if let m = app.search {
                 SearchSheet(model: m)

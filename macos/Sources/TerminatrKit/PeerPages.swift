@@ -83,6 +83,13 @@ public enum PeerPages {
     /// The board's tasks in motion, in board order.
     public static func moving(_ p: AppAPI.PeerPages) -> [AppAPI.Task] { p.tasks.filter { inMotion.contains($0.status) } }
 
+    /// A board's task as the paired task view shows it; a task the board
+    /// no longer has says so.
+    public static func task(_ ref: String, in p: AppAPI.PeerPages, server: String) -> State<AppAPI.Task> {
+        p.tasks.first { $0.ref == ref }.map { .shared($0) }
+            ?? .failed("\(ref) isn't on \(p.project)'s board on \(server) any more.")
+    }
+
     /// The stat tiles' counts and words, as a project of this server's
     /// shows them; nil counts while not shared (the tiles show –).
     public static func stats(_ p: AppAPI.PeerPages?) -> [(Int?, String)] {

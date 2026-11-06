@@ -369,8 +369,8 @@ func (m *Mirror) setProjects(ctx context.Context, id, alias string, ps proto.Pee
 			// Counted from the snapshot once there is one.
 			pr.line = line
 			changed = true
-		} else if pr.line.Goal != line.Goal || pr.line.Paused != line.Paused {
-			pr.line.Goal, pr.line.Paused = line.Goal, line.Paused
+		} else if pr.line.Goal != line.Goal || pr.line.Paused != line.Paused || pr.line.Pages != line.Pages || pr.line.Files != line.Files {
+			pr.line.Goal, pr.line.Paused, pr.line.Pages, pr.line.Files = line.Goal, line.Paused, line.Pages, line.Files
 			changed = true
 		}
 		pr.line.Project = slug

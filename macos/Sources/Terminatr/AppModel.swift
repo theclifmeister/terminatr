@@ -158,6 +158,10 @@ final class AppModel {
     var newTask: String?
     /// The task the task view shows (TaskSheet), nil for none.
     var taskShown: TaskShown?
+    /// A paired server's task the window shows, read only.
+    var peerTaskShown: PeerTaskShown?
+    /// The paired boards the command palette searches.
+    var paletteBoards = PaletteBoards()
     /// What the bridge did: Settings › Advanced shows it.
     private(set) var log = BridgeLog()
     /// The need ⌥⌘↓ or ⌥⌘↑ showed last (Need.step).
@@ -440,6 +444,7 @@ final class AppModel {
             if l.gen != gen || !loaded.peers {
                 gen = l.gen
                 peers = l.peers
+                paletteBoards.prune(peers: peers, reads: readsPeerPages)
                 loaded.peers = true
                 changed()
             }
@@ -1051,6 +1056,20 @@ final class AppModel {
     var readsPeerPages: Bool {
         if case .connected(let h) = phase { return Compatibility.readsPeerPages(h) }
         return false
+    }
+
+    /// Reads the paired boards due (PaletteBoards), each on its own so a
+    /// slow server holds up only its own rows.
+    func readPaletteBoards() {
+        for key in paletteBoards.due(peers: peers, reads: readsPeerPages, now: Date()) {
+            Task {
+                do {
+                    paletteBoards.store(try await peerPages(key.alias, key.project), for: key)
+                } catch {
+                    paletteBoards.failed(key)
+                }
+            }
+        }
     }
 
     /// A paired server's project's board and overview (peer.pages-read):
