@@ -54,6 +54,8 @@ type Opts struct {
 	Timeout time.Duration
 	// Max caps stdout (0: DefaultMax). Run fails on more; Output cuts.
 	Max int
+	// Stdin is what git reads on its standard input.
+	Stdin string
 	// Config are key=value settings, each passed as -c before args.
 	Config []string
 	// Env are variables added to the base environment.
@@ -163,6 +165,9 @@ func Output(ctx context.Context, dir string, o Opts, args ...string) (string, bo
 	cmd.Env = append(env, o.Env...)
 	stdout, stderr := &Capped{N: orDefault(o.Max, DefaultMax)}, &Capped{N: maxStderr}
 	cmd.Stdout, cmd.Stderr = stdout, stderr
+	if o.Stdin != "" {
+		cmd.Stdin = strings.NewReader(o.Stdin)
+	}
 	cmd.WaitDelay = 2 * time.Second
 	proc.Group(cmd)
 	err := cmd.Run()

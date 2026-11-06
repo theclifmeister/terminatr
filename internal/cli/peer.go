@@ -611,8 +611,8 @@ func (e *Env) peerPages(dir, alias, slug, word string) error {
 // peerFiles turns the files switch for the paired server alias on or off for
 // project (docs/SPEC.md §16.18): on, it reads the project's threads' worktrees
 // and its listed repos at their main checkouts, read-only, uncommitted work
-// included. Never git-ignored files or the contents of those named like
-// secrets. It needs the project shared, and sharing going off clears it.
+// included. Never git-ignored files or the contents of those with common
+// secret names. It needs the project shared, and sharing going off clears it.
 func (e *Env) peerFiles(dir, alias, slug, word string) error {
 	if word != "on" && word != "off" {
 		return usagef("tm peer files ALIAS PROJECT on|off: %q isn't one", word)
@@ -655,7 +655,7 @@ func (e *Env) peerFiles(dir, alias, slug, word string) error {
 		}
 	}
 	if on {
-		fmt.Fprintf(e.Stdout, "Files on for %s on %s: it reads the project's worktrees and repos, read-only, not git-ignored files or files named like secrets.\n", alias, slug)
+		fmt.Fprintf(e.Stdout, "Files on for %s on %s: it reads the project's worktrees and repos, read-only, not git-ignored files or files with common secret names.\n", alias, slug)
 	} else {
 		fmt.Fprintf(e.Stdout, "Files off for %s on %s: its next read is refused, and what shows there leaves.\n", alias, slug)
 	}

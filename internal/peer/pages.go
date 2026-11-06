@@ -299,6 +299,7 @@ func cleanLibrary(lib proto.PeerLibrary) proto.PeerLibrary {
 		}
 		f.Name = textsafe.Line(f.Name, 200)
 		f.Title = textsafe.Line(f.Title, 200)
+		f.DocTitle = textsafe.Line(f.DocTitle, 200)
 		f.Task, f.TaskStatus, f.State = word(peerWord, f.Task), word(peerWord, f.TaskStatus), word(peerWord, f.State)
 		f.Size = max(f.Size, 0)
 		fs = append(fs, f)

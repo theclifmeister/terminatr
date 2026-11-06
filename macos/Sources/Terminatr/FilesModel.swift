@@ -119,7 +119,7 @@ final class FilesModel {
 
     private static func withheldWords(_ e: AppAPI.FileEntry, far: String) -> String {
         e.kind == "dir" ? "\(e.name) may hold secrets, or be a checkout of its own, so it stays on \(far)."
-            : "Its name says it may hold secrets, so it stays on \(far)."
+            : "It may hold secrets, so it stays on \(far)."
     }
 
     /// What shows comes from one search of the whole folder, not from the

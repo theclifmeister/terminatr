@@ -24,7 +24,8 @@ import (
 // this console's look) in its own frame, and keeps
 // the cursor, filter and scroll. Only a declared key and a click on a
 // row or a key hint reach the mod, as ui.key and ui.click, and where the
-// cursor went, as ui.cursor (one at a time per view). The console
+// cursor went, as ui.cursor (one at a time per view), and what its filter
+// says, as ui.filter, for a mod with rows it doesn't draw. The console
 // polls the trees (mod.views) and says there which views it shows, so
 // the mods get view.opened and view.closed. A mod whose host failed
 // shows that, with its log, never its stale tree.
@@ -266,7 +267,7 @@ func (m *dash) panelKeyPress(v proto.ModView, project, k string) (bool, tea.Cmd)
 	if a := host.Unbound(k); !used && a != nil {
 		return true, m.whyNot(*a)
 	}
-	return used, tea.Batch(m.sendInput(v, project, ev), m.sendCursor(v, project, host.Moved()))
+	return used, tea.Batch(m.sendInput(v, project, ev), m.sendCursor(v, project, host.Moved()), m.sendCursor(v, project, host.Filtered()))
 }
 
 // panelClick clicks cell x of line y of v's view.
@@ -299,9 +300,10 @@ func (m *dash) sendInput(v proto.ModView, project string, ev *widget.Event) tea.
 	return func() tea.Msg { return modInputMsg{err: src.ModViewInput(p)} }
 }
 
-// sendCursor sends ev, a move of v's cursor (widget.View.Moved), if any,
-// to v's mod as ui.cursor. One send per view is on its way at a time,
-// so the mod hears the moves in order; moves made meanwhile come down to
+// sendCursor sends ev, a move of v's cursor (widget.View.Moved) or a
+// change of its filter (widget.View.Filtered), if any, to v's mod as
+// ui.cursor or ui.filter. One send of each per view is on its way at a
+// time, so the mod hears them in order; those made meanwhile come down to
 // the latest. An error is dropped: the mod misses a move, the human
 // nothing.
 func (m *dash) sendCursor(v proto.ModView, project string, ev *widget.Event) tea.Cmd {
@@ -311,13 +313,13 @@ func (m *dash) sendCursor(v proto.ModView, project string, ev *widget.Event) tea
 	if m.mv.cursors == nil {
 		m.mv.cursors = map[string]*cursorSend{}
 	}
-	k := panelKey(v, project)
+	k := panelKey(v, project) + "/" + ev.Kind
 	c := m.mv.cursors[k]
 	if c == nil {
 		c = &cursorSend{}
 		m.mv.cursors[k] = c
 	}
-	p := proto.ModViewInputParams{Mod: v.Mod, View: v.View, Project: project, Kind: ev.Kind, Widget: ev.Widget, Row: ev.Row}
+	p := proto.ModViewInputParams{Mod: v.Mod, View: v.View, Project: project, Kind: ev.Kind, Widget: ev.Widget, Row: ev.Row, Filter: ev.Filter}
 	if c.busy {
 		c.next = &p
 		return nil
@@ -349,9 +351,9 @@ func (m *dash) cursorSent(msg modCursorMsg) tea.Cmd {
 	return m.cursorCmd(msg.key, p)
 }
 
-// tellCursors tells each mod view on show where its cursor is, when that
-// changed since it was last told (a new tree moved it, or the view just
-// showed), and forgets what was told to those no longer on show, whose
+// tellCursors tells each mod view on show where its cursor is and what
+// its filter says, when that changed since it was last told (a new tree
+// moved it, or the view just showed), and forgets what was told to those no longer on show, whose
 // mods heard view.closed.
 func (m *dash) tellCursors() tea.Cmd {
 	shown := map[string]bool{}
@@ -364,7 +366,7 @@ func (m *dash) tellCursors() tea.Cmd {
 		v := m.mv.list[i]
 		shown[panelKey(v, s.Project)] = true
 		if host := m.mv.host(v, s.Project); host != nil {
-			cmds = append(cmds, m.sendCursor(v, s.Project, host.Moved()))
+			cmds = append(cmds, m.sendCursor(v, s.Project, host.Moved()), m.sendCursor(v, s.Project, host.Filtered()))
 		}
 	}
 	for k, h := range m.mv.hosted {

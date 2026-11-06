@@ -188,6 +188,11 @@ type Row struct {
 	// (mod API 1.2), such as a task's steps: the console shows them as
 	// the cursor moves, without asking the mod.
 	More [][]Span `json:"more,omitempty"`
+	// Find (mod API 1.20) is what the filter looks in, instead of the
+	// row's drawn text: it passes when each of the filter's words is in
+	// it, whatever their case and accents (Matches). A row the mod drew
+	// for the filter (ui.filter) stays out of what its words hide.
+	Find string `json:"find,omitempty"`
 }
 
 // Action is a core action id and its target, such as task.delegate on
@@ -505,6 +510,7 @@ func (c *checker) rowsOf(w *Widget, at string) {
 		for j := range r.More {
 			c.spans(r.More[j], fmt.Sprintf("%s[%d]", join(rat, "more"), j))
 		}
+		c.str(&r.Find, join(rat, "find"))
 		c.actions(r.Actions, join(rat, "actions"))
 	}
 }

@@ -115,7 +115,13 @@ func (s *Scope) Diff(ctx context.Context, rel string, ignored bool, cs *changes.
 		res.TooBig = true
 		return res, nil
 	}
-	return res, s.diffHunks(ctx, cs.From, real, &res)
+	if err := s.diffHunks(ctx, cs.From, real, &res); err != nil {
+		return res, err
+	}
+	if s.far && hunksHoldKey(res.Hunks) {
+		return proto.FilesDiffResult{}, fmt.Errorf("%w: %s", ErrWithheld, rel)
+	}
+	return res, nil
 }
 
 // diffStat fills in the size, time and text of real path rel, opened by

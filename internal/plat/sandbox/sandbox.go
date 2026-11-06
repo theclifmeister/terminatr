@@ -4,6 +4,14 @@
 // wall, behind goja's language sandbox and the supervisor's process
 // limits: a host needs no file or network access of its own, since the
 // broker does its I/O over the protocol pipes.
+//
+// Seatbelt, here and in an approved command's run (the server's runProfile):
+// a process in a profile can't exec a setuid program (EPERM, nothing in the
+// sandbox log) unless the profile starts it (with no-sandbox). One in a
+// profile with deny rules can't apply another (sandbox_apply: EPERM), so
+// sandbox-exec doesn't nest under tm run: a probe of another profile runs
+// in the macOS VM. (deny network* (subpath DIR)) refuses connecting to a
+// unix socket below DIR.
 package sandbox
 
 import (

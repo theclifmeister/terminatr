@@ -170,7 +170,7 @@ func tasksTabRow(slug string, t *tasks.Task, asked, prio bool) widget.Row {
 	if prio {
 		cells = append(cells, tasksTabPriority(t.Priority))
 	}
-	r := widget.Row{ID: t.Ref(), Actions: acts, Cells: append(cells, []widget.Span{{Text: t.Title}}, []widget.Span{{Icon: icon, Role: role}, {Text: " " + string(t.Status), Role: role}}, rest)}
+	r := widget.Row{ID: t.Ref(), Find: t.Ref() + " " + t.Title + " " + string(t.Status), Actions: acts, Cells: append(cells, []widget.Span{{Text: t.Title}}, []widget.Span{{Icon: icon, Role: role}, {Text: " " + string(t.Status), Role: role}}, rest)}
 	if !t.Status.Closed() {
 		for _, s := range t.Steps {
 			icon, role := "todo.open", "faint"

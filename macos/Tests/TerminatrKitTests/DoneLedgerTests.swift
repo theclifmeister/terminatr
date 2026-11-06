@@ -92,3 +92,43 @@ private func group(_ title: String, _ from: String, _ to: String, count: Int, op
     """#.utf8))
     #expect(new.groups[0].key == "2026-09-01:2026-09-30" && new.groups[0].archived == 2 && new.groups[0].tasks[0].archived && !new.groups[0].open)
 }
+
+/// The line at the user's last action: among an open group's rows, gone with
+/// the fold, above a heading for a day no group holds, or below them all.
+@Test func theLineStandsWhereTmSays() {
+    let day = AppAPI.DoneGroup(kind: "day", title: "Today", from: "2026-11-06", to: "2026-11-06", count: 3, open: true, tasks: (1...3).map(task))
+    let week = AppAPI.DoneGroup(kind: "week", title: "19–25 Oct", from: "2026-10-19", to: "2026-10-25", count: 2)
+    var l = DoneLedger()
+    _ = l.take(AppAPI.DoneTasks(tasks: [], groups: [day, week], total: 5))
+    #expect(l.mark == nil && l.markBelow == nil && l.markAbove(day) == nil && l.markRows(in: day) == nil)
+
+    func read(_ mark: AppAPI.DoneMark) { _ = l.take(AppAPI.DoneTasks(tasks: [], groups: [day, week], total: 5, mark: mark)) }
+    read(AppAPI.DoneMark(at: "x", title: "you last acted at 10:00", group: 0, rows: 2))
+    #expect(l.markRows(in: day) == 2 && l.markRows(in: week) == nil && l.markAbove(day) == nil && l.markBelow == nil)
+    let folded = l.press(day)
+    #expect(!folded && l.markRows(in: day) == nil)
+    let opened = l.press(day)
+    #expect(!opened && l.markRows(in: day) == 2)
+
+    // Fewer rows read than tm counted: the line stays below what is there.
+    read(AppAPI.DoneMark(at: "x", title: "t", group: 0, rows: 9))
+    #expect(l.markRows(in: day) == 3)
+
+    read(AppAPI.DoneMark(at: "x", title: "t", group: 1, between: true))
+    #expect(l.markAbove(week)?.title == "t" && l.markAbove(day) == nil && l.markRows(in: week) == nil && l.markBelow == nil)
+
+    read(AppAPI.DoneMark(at: "x", title: "t", group: 2, between: true))
+    #expect(l.markBelow?.title == "t" && l.markAbove(day) == nil && l.markAbove(week) == nil)
+
+    // The answer without it clears it.
+    _ = l.take(AppAPI.DoneTasks(tasks: [], groups: [day, week], total: 5))
+    #expect(l.mark == nil && l.markBelow == nil)
+}
+
+/// A tm before app API 67 sends no line; one that does says where it stands.
+@Test func aMarkDecodes() throws {
+    let old = try JSONDecoder().decode(AppAPI.DoneTasks.self, from: Data(#"{"tasks":[],"total":1}"#.utf8))
+    #expect(old.mark == nil)
+    let new = try JSONDecoder().decode(AppAPI.DoneTasks.self, from: Data(#"{"tasks":[],"mark":{"at":"2026-11-05T22:14:00Z","title":"you last acted at 23:14 on the iPhone","group":1}}"#.utf8))
+    #expect(new.mark?.title == "you last acted at 23:14 on the iPhone" && new.mark?.rows == 0 && new.mark?.between == false)
+}

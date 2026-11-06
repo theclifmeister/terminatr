@@ -750,7 +750,7 @@ func (nv *networkView) setFiles(m *dash, e PeerEntry, slug string, on bool) tea.
 	if !on {
 		return set()
 	}
-	m.confirmNo("Let "+name+" read "+slug+"'s files?", "It can then read this project's code: every thread's worktree and every repo on the project's list at its main checkout, uncommitted work included, now and as the list grows.\n\nGit-ignored files and files named like secrets stay here. A secret committed under another name does not. It can't change anything, and what it has read can't be called back.",
+	m.confirmNo("Let "+name+" read "+slug+"'s files?", "It can then read this project's code: every thread's worktree and every repo on the project's list at its main checkout, uncommitted work included, now and as the list grows.\n\nGit-ignored files and files with common secret names stay here. A secret committed under another name does not. It can't change anything, and what it has read can't be called back.",
 		"files unchanged for "+name, set)
 	return nil
 }

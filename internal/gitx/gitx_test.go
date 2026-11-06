@@ -60,6 +60,22 @@ func TestEnv(t *testing.T) {
 	}
 }
 
+// TestStdin: git reads what Opts.Stdin holds.
+func TestStdin(t *testing.T) {
+	repo, _ := gittest.Repo(t)
+	out, err := Run(bg, repo, Opts{Stdin: "from stdin\n"}, "hash-object", "--stdin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := Run(bg, repo, Opts{Stdin: "from stdin\n"}, "hash-object", "--stdin", "--no-filters")
+	if err != nil || out != want || len(out) < 40 {
+		t.Errorf("%q, %q, %v", out, want, err)
+	}
+	if empty, err := Run(bg, repo, Opts{}, "hash-object", "--stdin"); err != nil || empty == out {
+		t.Errorf("no stdin: %q %v", empty, err)
+	}
+}
+
 // TestOutputCap: Output cuts at Max and says so; Run refuses it.
 func TestOutputCap(t *testing.T) {
 	repo, _ := gittest.Repo(t)

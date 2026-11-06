@@ -77,7 +77,7 @@ var peerWorktreeWords = map[string]string{
 	ErrInvalidPath:    "that isn't a path in the folder",
 	ErrLinkOut:        "that link leads out of the folder",
 	ErrIgnored:        "git-ignored files stay on this server",
-	ErrWithheld:       "that name may hold secrets, so it stays on this server",
+	ErrWithheld:       "that may hold secrets, so it stays on this server",
 	ErrFileGone:       "that is no longer there",
 	ErrNotFile:        "that isn't the kind of file asked for",
 	ErrRateLimited:    "too many requests just now",

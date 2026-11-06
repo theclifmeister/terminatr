@@ -6,6 +6,9 @@ import "os"
 
 // Other systems: the link count and the owner are unknown.
 
+// Links is fi's hard link count, unknown (1) here.
+func Links(os.FileInfo) uint64 { return 1 }
+
 // FileLinks is the open file f's hard link count, unknown (1) here.
 func FileLinks(f *os.File) (uint64, error) { return 1, nil }
 

@@ -92,7 +92,7 @@ func projectLibrary(p *project.Project) ([]thread.LibFile, error) {
 
 func libraryFileOf(f thread.LibFile) proto.LibraryFile {
 	return proto.LibraryFile{Thread: f.Thread, Task: f.Task, TaskStatus: f.TaskStatus, Title: f.Title, Repo: f.Repo, State: f.State,
-		Name: f.Name, Size: f.Size, Time: f.Time, Peer: f.Peer, Message: f.Message, Project: f.Project, Server: f.Server}
+		Name: f.Name, DocTitle: f.DocTitle, Published: f.Published, Size: f.Size, Time: f.Time, Peer: f.Peer, Message: f.Message, Project: f.Project, Server: f.Server}
 }
 
 // sizeWords is a byte count as the app's rows say it: 812 bytes, 3.4 KB,

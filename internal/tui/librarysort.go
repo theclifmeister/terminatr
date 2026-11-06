@@ -69,8 +69,9 @@ func libFlatName(rows []libRow, w int) int {
 	return min(n, libRowRoom(w)*3/5)
 }
 
-// libFlatRow is a file's row in the flat list: its name, the title in the
-// cells left (none when under eight) and its size. plain leaves the title
+// libFlatRow is a file's row in the flat list: its name, its own title if
+// any and what it came with in the cells left (none when under eight) and its
+// size. plain leaves the title
 // unstyled, for a selected row.
 func libFlatRow(f thread.LibFile, nameW, w int, plain bool) string {
 	room := libRowRoom(w)
@@ -78,7 +79,11 @@ func libFlatRow(f thread.LibFile, nameW, w int, plain bool) string {
 	if title < 8 {
 		return "  " + fit(oneLine(f.Name), max(room, 4)) + "  " + libSizeWords(f.Size)
 	}
-	source := fit(libSource(f), title)
+	source := libSource(f)
+	if f.DocTitle != "" {
+		source = oneLine(f.DocTitle) + " · " + source
+	}
+	source = fit(source, title)
 	if !plain {
 		source = th().Faint.Render(source)
 	}

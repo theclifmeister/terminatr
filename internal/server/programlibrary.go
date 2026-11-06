@@ -144,7 +144,7 @@ func (s *Server) pairedLibrary(alias, slug string) (files []thread.LibFile, unre
 	}
 	for _, f := range lib.Files {
 		files = append(files, thread.LibFile{Thread: f.Thread, Task: f.Task, TaskStatus: f.TaskStatus, Title: f.Title, State: f.State,
-			Name: f.Name, Size: f.Size, Time: f.Time, Project: slug, Server: alias})
+			Name: f.Name, DocTitle: f.DocTitle, Size: f.Size, Time: f.Time, Project: slug, Server: alias})
 	}
 	return files, ""
 }

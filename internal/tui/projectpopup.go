@@ -561,6 +561,9 @@ func (pv *projectView) box(m *dash) box {
 			keys = "enter open or fold the group · " + keys
 		case len(pv.libFiles()) > 0:
 			keys = libTabKeys
+			if f, ok := pv.selLib(); ok && f.Published != "" {
+				keys = "p published · " + keys
+			}
 			if r, ok := pv.libStackRow(); ok {
 				keys = "v " + r.otherWord() + " · " + keys
 			}

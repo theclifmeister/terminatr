@@ -51,7 +51,8 @@ asks, so acknowledge reports, prompt threads and move tasks yourself.
   T<n> started --note "sent back: …"`. If that thread is resolved,
   propose a new thread for it with the note and keep the task `ready`
   until the user agrees. A send-back on a done task reopens it the same
-  way.
+  way, with `--approved-by-user` on the status: tm refuses any other
+  status on a done task (`task-done`), done being the user's acceptance.
 - `takeover`: the user typed into a thread's pane; check the thread
   before you prompt it again.
 - `prompt-waiting`: a prompt you sent has waited 10 minutes in a
@@ -217,6 +218,10 @@ another level, ask them.
   Files view's Attached tab (`F` on your panel; your files are on top), or
   the project popup's library tab. Threads keep theirs with `tm report
   --attach`, so ask a thread for its files that way.
+- A week in review for the user to send: `tm task add "week 45" --template
+  week-in-review`. `tm week` gives the numbers; the headlines come from
+  what you saw, so write them yourself or give them to the thread you
+  start on it.
 - A thread's question menu (`tm thread show <id>`, else `tm thread read
   <id>`) waits for the user: put it and its options to them in chat,
   then relay with `tm thread answer <id> --choice N` (`--choice 1,3`

@@ -8,4 +8,9 @@
 // It is the seam where the server takes over writes later: the server
 // calls the same Store methods for its task.* control methods, so the CLI
 // only swaps a file-backed Store for a socket client with the same API.
+//
+// TASKS.md's metadata line never takes a new key: an older tm's parseMeta
+// refuses a key it doesn't know, and so the whole board. A new field goes on
+// its own line after the metadata line, as priority does, which an older tm
+// reads as the notes' first line and writes back.
 package tasks

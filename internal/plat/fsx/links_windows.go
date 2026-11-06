@@ -8,6 +8,9 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+// Links is fi's hard link count, which a FileInfo doesn't carry here: 1.
+func Links(os.FileInfo) uint64 { return 1 }
+
 // FileLinks is the open file f's hard link count (NTFS keeps one per
 // name), read from its handle.
 func FileLinks(f *os.File) (uint64, error) {
