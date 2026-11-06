@@ -198,3 +198,47 @@ func TestLibraryProgram(t *testing.T) {
 	h.env[caller.EnvProject] = "demo"
 	h.ok(caller.Caller{Kind: caller.Coordinator, Project: "demo"}, "library", "list")
 }
+
+// TestLibraryAddSources: what a seat may keep is what it may name: a file of
+// its own folder or its own scratch folder, not another's, not tm's settings,
+// not through a link.
+func TestLibraryAddSources(t *testing.T) {
+	h, g := programHarness(t)
+	tmp := t.TempDir()
+	prev := tempRoots
+	tempRoots = func(*Env) ([]string, []string, bool) { return []string{tmp}, nil, true }
+	t.Cleanup(func() { tempRoots = prev })
+	member, err := project.Open("demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	scratch := func(dir string) string {
+		t.Helper()
+		pad := filepath.Join(tmp, scratchName(dir), "sess", "scratchpad")
+		if err := os.MkdirAll(pad, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		f := filepath.Join(pad, "page.html")
+		if err := os.WriteFile(f, []byte("<p>page</p>"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return f
+	}
+	config := filepath.Join(h.root, "config.toml")
+
+	h.env[caller.EnvProject] = "acme"
+	h.ok(directorAcme, "library", "add", scratch(g.Dir))
+	h.expect(1, "invalid-attachment", directorAcme, "library", "add", scratch(member.Dir))
+	h.expect(1, "invalid-attachment", directorAcme, "library", "add", config)
+	link := g.Path("linked.toml")
+	if err := os.Symlink(config, link); err != nil {
+		t.Fatal(err)
+	}
+	h.expect(1, "invalid-attachment", directorAcme, "library", "add", link)
+
+	coordDemo := caller.Caller{Kind: caller.Coordinator, Project: "demo"}
+	h.env[caller.EnvProject] = "demo"
+	h.ok(coordDemo, "library", "add", scratch(member.Dir))
+	h.expect(1, "invalid-attachment", coordDemo, "library", "add", scratch(g.Dir))
+	h.expect(1, "invalid-attachment", coordDemo, "library", "add", config)
+}
