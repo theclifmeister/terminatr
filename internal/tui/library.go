@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -12,15 +13,20 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/theclifmeister/terminatr/internal/link"
+	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"github.com/theclifmeister/terminatr/internal/thread"
+	"github.com/theclifmeister/terminatr/internal/thumb"
 )
 
 // The project popup's Library tab (docs/SPEC.md §4): the files every
 // thread of the project attached to its reports, the resolved and
 // archived threads' too, grouped by task and thread, newest first, and a
 // group per linked project for the files it sent (§16.13). enter reads
-// one in the popup; X deletes the selected file and D the files of its
-// thread, each after y. A file shows by name and size, never a path.
+// one in the popup, o opens one in this computer's viewer, an image shows
+// in half-blocks (imagepreview.go); X deletes the selected file and D the
+// files of its thread, each after y; / filters and t steps through the
+// kinds (libraryfilter.go). A file shows by name and size, never a path.
 
 // libraryOrder are the library's files grouped by thread (or linked
 // project), the group with the newest file first and each group's files
@@ -41,8 +47,147 @@ func libraryOrder(files []thread.LibFile) []thread.LibFile {
 	return out
 }
 
-// libFiles are the Library tab's files, in the order they are listed.
-func (pv *projectView) libFiles() []thread.LibFile { return libraryOrder(pv.library) }
+// libFiles are the Library tab's files the filter and kind leave, in the
+// order they are listed.
+func (pv *projectView) libFiles() []thread.LibFile {
+	return libraryOrder(libShown(pv.library, pv.libFilter, pv.libPick))
+}
+
+// narrowLib sets the filter and the kind; the selection stays on its file
+// while that still shows, else it goes to the first.
+func (pv *projectView) narrowLib(query, pick string) {
+	at, ok := pv.selLib()
+	pv.libFilter, pv.libPick = query, pick
+	pv.sel[tabLibrary] = 0
+	if ok {
+		i := slices.IndexFunc(pv.libFiles(), func(f thread.LibFile) bool { return f.Group() == at.Group() && f.Name == at.Name })
+		pv.sel[tabLibrary] = max(i, 0)
+	}
+}
+
+// libraryTyping: the keyboard is in the filter. Enter keeps the words,
+// esc drops them.
+func (pv *projectView) libraryTyping(k tea.KeyPressMsg) {
+	switch k.String() {
+	case "enter":
+		pv.libTyping = false
+	case "esc":
+		pv.libTyping = false
+		pv.narrowLib("", pv.libPick)
+	case "backspace":
+		if r := []rune(pv.libFilter); len(r) > 0 {
+			pv.narrowLib(string(r[:len(r)-1]), pv.libPick)
+		}
+	default:
+		if t := textsafe.Clean(k.Text, false); t != "" && len(pv.libFilter)+len(t) <= proto.MaxFilesQuery {
+			pv.narrowLib(pv.libFilter+t, pv.libPick)
+		}
+	}
+}
+
+// libFilterHit and libChipHit are clicks on the Library's head: the
+// filter's line, and a line of chips (libChipHit less the line; the
+// column picks the chip).
+const (
+	libFilterHit = -3
+	libChipHit   = -4
+)
+
+// libChipLine is a line of chips: where each one starts and ends.
+type libChipLine struct {
+	text  string
+	spans []libChipSpan
+}
+
+type libChipSpan struct {
+	from, to int
+	kind     string
+}
+
+// libChipLines are the chips laid out on lines of w cells, the picked one
+// marked: every kind stays in reach at any width.
+func (pv *projectView) libChipLines(w int) []libChipLine {
+	chips := libChips(pv.library, pv.libFilter, pv.libPick)
+	if chips == nil {
+		return nil
+	}
+	pick := libPicked(pv.library, pv.libPick)
+	var out []libChipLine
+	cur := libChipLine{}
+	x := 0
+	add := func(word, styled string, kind string, chip bool) {
+		n := ansi.StringWidth(word)
+		if x > 0 && x+n > w {
+			out = append(out, cur)
+			cur, x = libChipLine{}, 0
+		}
+		cur.text += styled
+		if chip {
+			cur.spans = append(cur.spans, libChipSpan{x, x + n, kind})
+		}
+		x += n
+		if chip {
+			cur.text += "  "
+			x += 2
+		}
+	}
+	for _, c := range chips {
+		word := c.kind
+		if word == "" {
+			word = "all"
+		}
+		word = fmt.Sprintf(" %s %d ", word, c.n)
+		if c.kind == pick {
+			add(word, th().Sel.Render(word), c.kind, true)
+		} else {
+			add(word, word, c.kind, true)
+		}
+	}
+	add("t kinds", th().Faint.Render("t kinds"), "", false)
+	return append(out, cur)
+}
+
+// libraryHead are the lines above the list, which stay when it scrolls:
+// the chips and the filter, when they show; and what a click on each picks.
+func (pv *projectView) libraryHead(w int) ([]string, []int) {
+	if !pv.libOK || pv.libErr != nil {
+		return nil, nil
+	}
+	var head []string
+	var hits []int
+	for i, l := range pv.libChipLines(w) {
+		head, hits = append(head, l.text), append(hits, libChipHit-i)
+	}
+	switch {
+	case pv.libTyping:
+		head = append(head, th().Accent.Render("/")+" "+oneLine(pv.libFilter)+th().Accent.Render("▏"))
+	case pv.libFilter != "":
+		n := len(libShown(pv.library, pv.libFilter, ""))
+		head = append(head, th().Faint.Render("/ ")+oneLine(pv.libFilter)+th().Faint.Render(fmt.Sprintf(" · %d of %d · esc clears", n, len(pv.library))))
+	case libShowsFilter(pv.library, pv.libFilter):
+		head = append(head, th().Faint.Render("/ filter"))
+	}
+	if len(head) > len(hits) {
+		hits = append(hits, libFilterHit)
+	}
+	if len(head) > 0 {
+		head, hits = append(head, ""), append(hits, noHit)
+	}
+	return head, hits
+}
+
+// clickLibChip picks the chip at column col of the head's chip line.
+func (pv *projectView) clickLibChip(w, line, col int) {
+	ls := pv.libChipLines(w)
+	if line >= len(ls) {
+		return
+	}
+	for _, s := range ls[line].spans {
+		if col >= s.from && col < s.to {
+			pv.narrowLib(pv.libFilter, s.kind)
+		}
+	}
+}
 
 // selLib is the selected file, false for none.
 func (pv *projectView) selLib() (thread.LibFile, bool) {
@@ -91,9 +236,12 @@ func (pv *projectView) libraryLines(w int) ([]string, int, []int) {
 	case !pv.libOK:
 		return []string{th().Faint.Render("loading…")}, -1, nil
 	}
+	if len(pv.library) == 0 {
+		return []string{th().Faint.Render("no files: a thread's report attaches them (tm report --attach)")}, -1, nil
+	}
 	files := pv.libFiles()
 	if len(files) == 0 {
-		return []string{th().Faint.Render("no files: a thread's report attaches them (tm report --attach)")}, -1, nil
+		return []string{th().Faint.Render("nothing matches: esc clears")}, -1, nil
 	}
 	var out []string
 	var hits []int
@@ -124,9 +272,19 @@ func (pv *projectView) libraryLines(w int) ([]string, int, []int) {
 	return out, sel, hits
 }
 
-// libraryKey: enter reads the selected file, X deletes it and D its
-// thread's files, each after y.
+// libraryKey: / filters and t steps through the kinds; enter reads the
+// selected file, X deletes it and D its thread's files, each after y.
 func (pv *projectView) libraryKey(m *dash, k tea.KeyPressMsg) tea.Cmd {
+	switch k.String() {
+	case "/":
+		pv.libTyping = libShowsFilter(pv.library, pv.libFilter)
+		return nil
+	case "t":
+		if chips := libChips(pv.library, pv.libFilter, pv.libPick); chips != nil {
+			pv.narrowLib(pv.libFilter, libNextKind(chips, libPicked(pv.library, pv.libPick)))
+		}
+		return nil
+	}
 	f, ok := pv.selLib()
 	if !ok {
 		return nil
@@ -134,6 +292,8 @@ func (pv *projectView) libraryKey(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	switch k.String() {
 	case "enter":
 		return m.openLibFile(pv, f)
+	case "o":
+		return m.openLibCopy(pv.slug, libFileID(f), f.Name)
 	case "X":
 		if f.Peer != "" {
 			m.confirm("Delete a file", "Delete "+oneLine(f.Name)+" ("+sizeWords(f.Size)+"), which "+f.Peer+" sent with "+f.Message+"? It can't be brought back.", func() tea.Cmd {
@@ -196,6 +356,11 @@ type textView struct {
 	diff     []diffLine
 	changeAt int
 	seek     bool
+
+	// image is an image's cells in place of text (imagepreview.go), and
+	// open, on a file o opens, opens it in this computer's viewer.
+	image *imagePreview
+	open  func(m *dash) tea.Cmd
 }
 
 // scrollKey scrolls *scroll for key k over n lines; it says whether k
@@ -210,10 +375,24 @@ func scrollKey(scroll *int, k tea.KeyPressMsg, n int) bool {
 
 func (m *dash) openLibFile(pv *projectView, f thread.LibFile) tea.Cmd {
 	tv := &textView{title: oneLine(f.Name) + " · " + sizeWords(f.Size)}
-	id := f.Thread
+	id := libFileID(f)
 	if f.Peer != "" {
-		// Another project's: data, shown as text or not at all.
-		id, tv.title = f.Message, oneLine(f.Name)+" · "+sizeWords(f.Size)+" · from "+f.Peer
+		// Another project's: data, shown as its cells, as text or not at all.
+		tv.title = oneLine(f.Name) + " · " + sizeWords(f.Size) + " · from " + f.Peer
+	}
+	tv.open = func(m *dash) tea.Cmd { return m.openLibCopy(pv.slug, id, f.Name) }
+	if previewable() && thumb.Supported(f.Name) {
+		key := thumbKey(f)
+		img, known := pv.thumbs[key]
+		if !known {
+			img = fetchThumb(m.src, pv.slug, id, f.Name)
+			pv.keepThumb(key, img)
+		}
+		if img != nil {
+			tv.image = img
+			m.push(tv)
+			return nil
+		}
 	}
 	data, truncated, err := m.src.LibraryRead(pv.slug, id, f.Name, libMax)
 	switch {
@@ -230,6 +409,14 @@ func (m *dash) openLibFile(pv *projectView, f thread.LibFile) tea.Cmd {
 // slug's link to other, as the Library tab shows one.
 func (m *dash) openLinkFile(slug, other string, msg *link.Message) tea.Cmd {
 	tv := &textView{title: oneLine(msg.File) + " · " + link.MB(msg.FileSize) + " · from " + other}
+	tv.open = func(m *dash) tea.Cmd { return m.openLibCopy(slug, msg.ID, msg.File) }
+	if previewable() && thumb.Supported(msg.File) {
+		if img := fetchThumb(m.src, slug, msg.ID, msg.File); img != nil {
+			tv.image = img
+			m.push(tv)
+			return nil
+		}
+	}
 	data, truncated, err := m.src.LibraryRead(slug, msg.ID, msg.File, libMax)
 	if err != nil {
 		tv.note = "can't read it: " + oneLine(err.Error())
@@ -326,7 +513,11 @@ func (tv *textView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		tv.bottom = false
 		return nil
 	}
-	if s := k.String(); s == "esc" || s == "q" && tv.quit {
+	s := k.String()
+	if s == "o" && tv.open != nil {
+		return tv.open(m)
+	}
+	if s == "esc" || s == "q" && tv.quit {
 		m.pop()
 	}
 	return nil
@@ -334,13 +525,30 @@ func (tv *textView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 
 func (tv *textView) wheel(m *dash, d int) { tv.key(m, arrow(d)) }
 
+// keyHints are the viewer's action row.
+func (tv *textView) keyHints() string {
+	keys := "↑ ↓ scroll · esc back"
+	if tv.image != nil {
+		keys = "esc back"
+	}
+	if tv.open != nil {
+		keys = "o open · " + keys
+	}
+	return keys
+}
+
 func (tv *textView) render(m *dash) string {
+	if tv.image != nil {
+		b := box{title: tv.title, sel: -1, keys: tv.keyHints()}
+		b.body = tv.image.lines(m.inner(viewWidth), m.boxRows(b))
+		return m.popup(b)
+	}
 	lines := tv.lines(m.inner(viewWidth))
 	if tv.seek {
 		tv.seek = false
 		tv.scroll = clampScroll(tv.changeAt-diffLeadIn, len(lines))
 	}
-	b := box{title: tv.title, body: lines, sel: -1, scroll: tv.scroll, keys: "↑ ↓ scroll · esc back"}
+	b := box{title: tv.title, body: lines, sel: -1, scroll: tv.scroll, keys: tv.keyHints()}
 	if tv.bottom {
 		// From the end: as many lines as the box shows.
 		tv.scroll = max(len(lines)-m.boxRows(b), 0)

@@ -656,7 +656,9 @@ struct Sidebar: View {
         }
         .padding(.leading, CGFloat(SidebarGrid.inset) + indent)
         .padding(.trailing, 8)
-        .foregroundStyle(on || leads ? theme.ink : theme.muted)
+        // A working row reads one step brighter (muted to ink), no weight or
+        // size change, so nothing moves.
+        .foregroundStyle(on || leads || busy != nil ? theme.ink : theme.muted)
         .help(sleep == .asleep ? Sleep.words : "")
         // One element that says the row and its state: "T6 Network popup
         // polish, needs approval".

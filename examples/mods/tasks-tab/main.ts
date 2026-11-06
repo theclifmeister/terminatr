@@ -2,7 +2,8 @@
 // the board's tasks grouped as tm groups them (needs you, in motion, on
 // deck, backlog, done, dropped), the done and dropped ones folded until b,
 // each section by priority (must, should, could, none) as tm lists it,
-// and p narrows the list to one priority. Each row names the
+// done ones newest first by when they finished, each saying when instead
+// of its priority, and p narrows the list to one priority. Each row names the
 // core actions its keys run: enter shows the task, D delegates, A
 // accepts, x sends back, P sets the priority, c opens the coordinator; + (a new task) is
 // bound in the whole view, as no row stands for it. The mod only names
@@ -83,7 +84,7 @@ function actions(project: string, t: TM.Task): { id: string; target: Record<stri
 
 // status is a task's status cell: its icon and word, as tm's own task
 // rows draw them.
-function status(s: string): TM.Span[] {
+function status(s: string, finished?: string): TM.Span[] {
   const look: Record<string, [TM.Icon, TM.Role | undefined]> = {
     started: ["working", "good"],
     blocked: ["blocked", "bad"],
@@ -95,7 +96,7 @@ function status(s: string): TM.Span[] {
   const [icon, role]: [TM.Icon, TM.Role | undefined] = look[s] ?? ["other", "faint"];
   return [
     { icon, role },
-    { text: " " + s, role },
+    { text: " " + ((s === "done" && finished) || s), role },
   ];
 }
 
@@ -120,7 +121,7 @@ function waitWords(t: TM.Task): string {
 function row(project: string, t: TM.Task, prio: boolean): TM.Value {
   const rest: TM.Span[] = [];
   if (t.asked) rest.push({ text: "asked the coordinator", role: "warn" });
-  // Waits-for (mod API 1.14): "after T9" while a link is unmet, "2 wait"
+  // Waits-for (mod API 1.15): "after T9" while a link is unmet, "2 wait"
   // on the task they wait for; nothing once the link is met.
   const waits = waitWords(t);
   if (waits) rest.push({ text: (rest.length > 0 ? "  " : "") + waits, role: "faint" });
@@ -128,7 +129,7 @@ function row(project: string, t: TM.Task, prio: boolean): TM.Value {
   if (more) rest.push({ text: (rest.length > 0 ? "  " : "") + more, role: "faint" });
   const r: Record<string, TM.Value> = {
     id: t.id,
-    cells: [[{ text: t.id }], ...(prio ? [priority(t.priority)] : []), [{ text: t.title }], status(t.status), rest] as TM.Value,
+    cells: [[{ text: t.id }], ...(prio ? [t.status === "done" ? [] : priority(t.priority)] : []), [{ text: t.title }], status(t.status, t.done_label), rest] as TM.Value,
     actions: actions(project, t) as TM.Value,
   };
   // The selected task's steps, under it, unless it is done or dropped.
@@ -144,8 +145,8 @@ function row(project: string, t: TM.Task, prio: boolean): TM.Value {
 
 // shown are the tasks listed, by section, each by priority then id
 // (tasks.list's board order): the done and dropped ones last, newest
-// first (by updated date, then id), so x can still send a done one
-// back; left out while folded. With p, only one priority's.
+// first (a done one by when it finished, else by updated date, then
+// id), so x can still send a done one back; left out while folded. With p, only one priority's.
 function shown(t: Tab): TM.Task[] {
   const out: TM.Task[] = [];
   for (const g of GROUPS) {
@@ -155,7 +156,8 @@ function shown(t: Tab): TM.Task[] {
       in_.sort((a, b) => rank(a.priority) - rank(b.priority) || num(a.id) - num(b.id));
     }
     if (closed(g.id)) {
-      in_.sort((a, b) => (b.updated ?? "").localeCompare(a.updated ?? "") || num(b.id) - num(a.id));
+      const when = (x: TM.Task) => x.done_at ?? x.updated ?? "";
+      in_.sort((a, b) => (when(a) === when(b) ? 0 : when(a) < when(b) ? 1 : -1) || num(b.id) - num(a.id));
     }
     out.push(...in_);
   }
@@ -184,8 +186,8 @@ function tree(project: string, t: Tab): TM.Widget {
   const rows: TM.Value[] = [];
   let group = "";
   const list = shown(t);
-  // The priority column, only while a listed task has one.
-  const prio = list.some((x) => !!x.priority);
+  // The priority column, only while a listed task shows one.
+  const prio = list.some((x) => !!x.priority && x.status !== "done");
   for (const task of list) {
     const g = groupOf(task.status);
     if (g !== group) {

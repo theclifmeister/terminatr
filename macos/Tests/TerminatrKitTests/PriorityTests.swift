@@ -43,3 +43,29 @@ import Testing
     older.appApi = 41
     #expect(!Priority.sets(older))
 }
+
+// A done row's time (T1043): in the viewer's zone, the day only when only
+// that is known, nothing when nothing dates it.
+@Test func doneRowsSayWhenTheyFinished() {
+    var cal = Calendar(identifier: .gregorian)
+    cal.timeZone = TimeZone(secondsFromGMT: 3600)!
+    let now = try! Date("2026-11-06T11:00:00Z", strategy: .iso8601)
+    for (at, want) in [("", ""), ("soon", ""), ("2026-13-99x", ""),
+                       ("2026-11-06T09:10:44Z", "10:10"),
+                       ("2026-11-05T23:30:00Z", "00:30"), // today here, yesterday in UTC
+                       ("2026-11-05T09:10:44Z", "5 Nov 10:10"),
+                       ("2025-11-06T09:10:44Z", "6 Nov 2025 10:10"),
+                       ("2026-10-05", "5 Oct"), ("2025-10-05", "5 Oct 2025")] {
+        #expect(Dashboard.finished(at, now: now, calendar: cal) == want, "\(at)")
+    }
+}
+
+// An older tm's task.done has no done_at: its tasks decode with none and
+// keep the order they came in, filtered or not.
+@Test func olderTMsDoneTasksKeepTheirOrder() throws {
+    let json = #"{"tasks":[{"id":3,"ref":"T3","title":"Must","status":"done","priority":"must"},{"id":1,"ref":"T1","title":"Other","status":"done"},{"id":2,"ref":"T2","title":"Other too","status":"done"}]}"#
+    let done = try JSONDecoder().decode(AppAPI.DoneTasks.self, from: Data(json.utf8)).tasks
+    #expect(done.map(\.id) == [3, 1, 2])
+    #expect(done.allSatisfy { $0.doneAt.isEmpty && Dashboard.finished($0.doneAt).isEmpty })
+    #expect(Dashboard.filtered(done, by: "other").map(\.id) == [1, 2])
+}

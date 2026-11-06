@@ -3,6 +3,7 @@ package server
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -82,5 +83,34 @@ func TestProjectFiles(t *testing.T) {
 		if err := app.Call(c.method, c.params, nil); !errors.As(err, &perr) || perr.Code != c.code {
 			t.Errorf("%s %+v: %v, want %s", c.method, c.params, err, c.code)
 		}
+	}
+}
+
+// TestLibraryListRepo: library.list names a file's repository by its
+// folder in a project with several, never by its path.
+func TestLibraryListRepo(t *testing.T) {
+	p := testPaths(t)
+	startServer(t, p)
+	api, site := filepath.Join(t.TempDir(), "api"), filepath.Join(t.TempDir(), "site")
+	os.MkdirAll(api, 0o755)
+	os.MkdirAll(site, 0o755)
+	pr, err := project.New(project.Options{Slug: "web", Repos: []string{api, site}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	th, err := thread.Create(pr, thread.Record{Title: "Report", State: thread.Running, Repo: site})
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.MkdirAll(thread.Path(pr, th.ID, "library"), 0o755)
+	os.WriteFile(thread.Path(pr, th.ID, "library", "a.md"), []byte("a"), 0o644)
+	app, err := client.DialAs(p, proto.ClientApp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+	var lib proto.LibraryListResult
+	if err := app.Call(proto.MethodLibraryList, proto.ProjectFilesParams{Project: "web"}, &lib); err != nil || len(lib.Files) != 1 || lib.Files[0].Repo != "site" {
+		t.Fatalf("library.list: %+v %v", lib, err)
 	}
 }

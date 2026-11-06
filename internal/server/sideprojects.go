@@ -143,6 +143,8 @@ type SideTask struct {
 	Created  string         `json:"created,omitempty"`
 	Updated  string         `json:"updated,omitempty"`
 	Archived bool           `json:"archived,omitempty"`
+	// DoneAt is when a done task finished (tasks.Task.DoneAt).
+	DoneAt string `json:"done_at,omitempty"`
 	// After are the tasks it comes after, with their states (task.get
 	// only; programs design §6.3).
 	After []SideAfter `json:"after,omitempty"`
@@ -156,13 +158,13 @@ type SideTask struct {
 // sideTask is t on the wire.
 func sideTask(t *tasks.Task) SideTask {
 	return SideTask{ID: t.ID, Title: t.Title, Status: t.Status, Priority: t.Priority, Notes: t.Notes, Steps: t.Steps, Thread: t.Thread,
-		Owner: t.Owner, Created: t.Created, Updated: t.Updated, Archived: t.Archived}
+		Owner: t.Owner, Created: t.Created, Updated: t.Updated, DoneAt: t.DoneAt, Archived: t.Archived}
 }
 
 // Task is the task t is on the wire.
 func (t SideTask) Task() *tasks.Task {
 	return &tasks.Task{ID: t.ID, Title: t.Title, Status: t.Status, Priority: t.Priority, Notes: t.Notes, Steps: t.Steps, Thread: t.Thread,
-		Owner: t.Owner, Created: t.Created, Updated: t.Updated, Archived: t.Archived}
+		Owner: t.Owner, Created: t.Created, Updated: t.Updated, DoneAt: t.DoneAt, Archived: t.Archived}
 }
 
 // sideHub is the projects as the sidebars show them, and as the

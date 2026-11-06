@@ -1571,7 +1571,7 @@ func TestLibraryTab(t *testing.T) {
 	}
 	out := screen(m)
 	for _, want := range []string{"8 library", "T2  Newer · t-0002 · 2026-10-08", "T1  Older · t-0001 · 2026-10-07 · archived",
-		"notes.md", "1.5 KB", "shot.png", "2.5 MB", "data.json", "7 B", "enter read · X delete"} {
+		"notes.md", "1.5 KB", "shot.png", "2.5 MB", "data.json", "7 B", "enter read · o open · X delete"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("library tab lacks %q:\n%s", want, out)
 		}

@@ -4,19 +4,21 @@ import (
 	"errors"
 	"fmt"
 	"path"
-	"path/filepath"
 	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
 	tmclient "github.com/theclifmeister/terminatr/internal/client"
+	"github.com/theclifmeister/terminatr/internal/filetree"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"github.com/theclifmeister/terminatr/internal/thread"
+	"github.com/theclifmeister/terminatr/internal/thumb"
 )
 
 // The Files view of the info panel (docs/SPEC.md §4): the panel's other
@@ -859,7 +861,7 @@ func (c *client) filesKeyboard(k uv.Key) {
 		c.filesFetch()
 	}
 	if read != nil {
-		c.filesRead(*read)
+		filesGo(func() { c.filesRead(*read) })
 	}
 }
 
@@ -929,7 +931,7 @@ func (c *client) filesClick(h infoHit) {
 		c.filesFetch()
 	}
 	if read != nil {
-		c.filesRead(*read)
+		filesGo(func() { c.filesRead(*read) })
 	}
 }
 
@@ -966,7 +968,7 @@ func (c *client) filesRead(r fileRow) {
 	c.mu.Unlock()
 	var tv *textView
 	if r.lib != nil {
-		tv = attachedViewer(slug, *r.lib)
+		tv = attachedViewer(paths, slug, *r.lib)
 	} else {
 		tv = worktreeViewer(paths, session, repo, r.e, ignored)
 	}
@@ -982,11 +984,20 @@ func (c *client) filesRead(r fileRow) {
 }
 
 // attachedViewer is the viewer on a Library file.
-func attachedViewer(slug string, f thread.LibFile) *textView {
+func attachedViewer(paths tmclient.Paths, slug string, f thread.LibFile) *textView {
 	tv := &textView{title: oneLine(f.Name) + " · " + sizeWords(f.Size)}
-	id := f.Thread
+	id := libFileID(f)
 	if f.Peer != "" {
-		id, tv.title = f.Message, tv.title+" · from "+oneLine(f.Peer)
+		tv.title += " · from " + oneLine(f.Peer)
+	}
+	tv.open = func(m *dash) tea.Cmd { return m.openLibCopy(slug, id, f.Name) }
+	if previewable() && thumb.Supported(f.Name) {
+		var res proto.LibraryThumbnailResult
+		if filesCall(paths, proto.MethodLibraryThumbnail, proto.LibraryThumbnailParams{Project: slug, ID: id, Name: f.Name}, &res) == nil {
+			if tv.image = newImagePreview(res.Data); tv.image != nil {
+				return tv
+			}
+		}
 	}
 	data, truncated, err := filesLibRead(slug, id, f.Name)
 	if err != nil {
@@ -1022,6 +1033,17 @@ func worktreeViewer(paths tmclient.Paths, session, repo string, e proto.FileEntr
 			if d := fileDiff(paths, session, repo, e.Path, ignored); d.Status != "" {
 				tv.title += " · " + changeWords(d)
 			}
+			if thumb.Supported(e.Name) {
+				tv.open = func(m *dash) tea.Cmd {
+					return m.openCopy(e.Name, func() ([]byte, bool, error) { return worktreeBytes(paths, session, repo, e.Path, ignored) })
+				}
+				if tv.image = worktreeImage(paths, session, repo, e, ignored, res.Size); tv.image != nil {
+					tv.note = ""
+					if c := fileCaution(e); c != "" {
+						tv.title += " · " + c
+					}
+				}
+			}
 			return tv
 		}
 		data = append(data, res.Data...)
@@ -1047,6 +1069,44 @@ func worktreeViewer(paths tmclient.Paths, session, repo string, e proto.FileEntr
 	return tv
 }
 
+// worktreeBytes reads a file of the session's folder whatever it holds,
+// the first proto.MaxFilesRead bytes; truncated says it was longer.
+func worktreeBytes(paths tmclient.Paths, session, repo, path string, ignored bool) ([]byte, bool, error) {
+	var data []byte
+	for {
+		var res proto.FilesReadResult
+		err := filesCall(paths, proto.MethodFilesRead, proto.FilesReadParams{Session: session, Repo: repo, Path: path, Offset: int64(len(data)), Ignored: ignored, Binary: true}, &res)
+		if err != nil {
+			return nil, false, err
+		}
+		if res.Binary && len(res.Data) == 0 && len(data) == 0 && res.Size > 0 {
+			return nil, false, errors.New("this server's tm doesn't send a file that isn't text")
+		}
+		data = append(data, res.Data...)
+		if len(res.Data) == 0 || int64(len(data)) >= min(res.Size, proto.MaxFilesRead) {
+			return data, res.Truncated, nil
+		}
+	}
+}
+
+// worktreeImage is the preview of an image in the session's folder, nil
+// for none: a worktree's files have no thumbnails on the server, so this
+// console makes one, under thumb's limits, when the viewer opens.
+func worktreeImage(paths tmclient.Paths, session, repo string, e proto.FileEntry, ignored bool, size int64) *imagePreview {
+	if !previewable() || size > thumb.MaxSource {
+		return nil
+	}
+	data, truncated, err := worktreeBytes(paths, session, repo, e.Path, ignored)
+	if err != nil || truncated {
+		return nil
+	}
+	t, err := thumb.Make(data)
+	if err != nil {
+		return nil
+	}
+	return newImagePreview(t.Data)
+}
+
 // fileCaution is what the viewer's title says of a file that may hold a
 // secret: said, not asked, since it opens only for the human who picked it,
 // on this machine, and ignored files were asked for first. The title
@@ -1055,32 +1115,8 @@ func fileCaution(e proto.FileEntry) string {
 	switch {
 	case e.Ignored:
 		return "git-ignored: may hold secrets"
-	case secretName(e.Name):
+	case filetree.SecretName(e.Name):
 		return "its name says it may hold secrets"
 	}
 	return ""
-}
-
-// secretName says a file's name is one that usually holds a secret. It
-// is a hint for the eye, not a rule: nothing is refused by it.
-func secretName(name string) bool {
-	n := strings.ToLower(name)
-	if n == ".env" || strings.HasPrefix(n, ".env.") {
-		for _, safe := range []string{".example", ".sample", ".template", ".dist"} {
-			if strings.HasSuffix(n, safe) {
-				return false
-			}
-		}
-		return true
-	}
-	switch n {
-	case ".netrc", ".npmrc", ".pypirc", ".git-credentials", "credentials", "credentials.json",
-		"id_rsa", "id_dsa", "id_ecdsa", "id_ed25519":
-		return true
-	}
-	switch filepath.Ext(n) {
-	case ".pem", ".key", ".p12", ".pfx", ".keystore", ".jks", ".kdbx":
-		return true
-	}
-	return strings.HasPrefix(n, "secrets.") || strings.HasPrefix(n, "secret.")
 }

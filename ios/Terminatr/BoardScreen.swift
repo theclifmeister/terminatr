@@ -122,7 +122,11 @@ struct BoardScreen: View {
                                 .font(theme.monoSized(12.5))
                                 .foregroundStyle(theme.muted)
                                 .frame(minWidth: 34 * theme.scale, alignment: .leading)
-                            PriorityTag(t.priority)
+                            if t.status == "done" {
+                                FinishedTag(task: t)
+                            } else {
+                                PriorityTag(t.priority)
+                            }
                         }
                         Text(t.title)
                             .font(theme.sized(Flat.text))
@@ -280,6 +284,25 @@ struct TaskScreen: View {
         } catch {
             full = nil
             fetchError = Dashboard.words(error, task: ref)
+        }
+    }
+}
+
+/// When a done task finished, in a row where a live task has its priority
+/// tag; nothing when nothing dates it.
+struct FinishedTag: View {
+    @Environment(\.theme) private var theme
+    let task: AppAPI.Task
+
+    var body: some View {
+        let label = Dashboard.finished(task.doneAt)
+        if !label.isEmpty {
+            Text(label)
+                .font(theme.mono(.caption2))
+                .foregroundStyle(theme.muted)
+                .lineLimit(1)
+                .fixedSize()
+                .accessibilityLabel("finished \(label)")
         }
     }
 }

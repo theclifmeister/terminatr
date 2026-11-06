@@ -33,9 +33,9 @@ func TestPeerPagesAllowlist(t *testing.T) {
 	if z := zeroFields(reflect.ValueOf(pt)); len(z) > 0 {
 		t.Errorf("task fields not copied: %v", z)
 	}
-	// Title, status ("ready"), thread, created, updated and the step's
+	// Title, status ("ready"), thread, created, updated, done_at and the step's
 	// text: never the notes, owner, repo or design.
-	if b, _ := json.Marshal(pt); strings.Count(string(b), "SECRET") != 5 {
+	if b, _ := json.Marshal(pt); strings.Count(string(b), "SECRET") != 6 {
 		t.Errorf("a task's other words crossed: %s", b)
 	}
 	// Priority (T927) stays home: a paired server's board lists in its
@@ -43,7 +43,7 @@ func TestPeerPagesAllowlist(t *testing.T) {
 	// to other projects, which may name this server's other projects or
 	// its paired servers' aliases. Parts (programs B10) stay home: only a
 	// program's umbrella tasks have them, and programs aren't shared.
-	if want := []string{"After", "AfterX", "Archived", "Created", "Design", "ID", "Notes", "Owner", "Parts", "Priority", "Repo", "Status", "Steps", "Thread", "Title", "Updated"}; !slices.Equal(fieldNames(reflect.TypeFor[tasks.Task]()), want) {
+	if want := []string{"After", "AfterX", "Archived", "Created", "Design", "DoneAt", "ID", "Notes", "Owner", "Parts", "Priority", "Repo", "Status", "Steps", "Thread", "Title", "Updated"}; !slices.Equal(fieldNames(reflect.TypeFor[tasks.Task]()), want) {
 		t.Errorf("tasks.Task has %v: decide what of a new field a paired server's board sees (peerPageTaskOf)", fieldNames(reflect.TypeFor[tasks.Task]()))
 	}
 	if want := []string{"Done", "N", "Text"}; !slices.Equal(fieldNames(reflect.TypeFor[tasks.Step]()), want) {
@@ -56,14 +56,14 @@ func TestPeerPagesAllowlist(t *testing.T) {
 	if z := zeroFields(reflect.ValueOf(pf)); len(z) > 0 {
 		t.Errorf("library file fields not copied: %v", z)
 	}
-	if want := []string{"Message", "Name", "Peer", "Size", "State", "Task", "Thread", "Time", "Title"}; !slices.Equal(fieldNames(reflect.TypeFor[thread.LibFile]()), want) {
+	if want := []string{"Message", "Name", "Peer", "Repo", "Size", "State", "Task", "Thread", "Time", "Title"}; !slices.Equal(fieldNames(reflect.TypeFor[thread.LibFile]()), want) {
 		t.Errorf("thread.LibFile has %v: decide what a paired server's library sees (peerLibraryFileOf)", fieldNames(reflect.TypeFor[thread.LibFile]()))
 	}
 
 	for typ, want := range map[reflect.Type][]string{
 		reflect.TypeFor[proto.PeerPages]():       {"Now", "Overview", "Project", "Tasks", "Truncated"},
 		reflect.TypeFor[proto.PeerOverview]():    {"Body", "Goal", "Repos"},
-		reflect.TypeFor[proto.PeerPageTask]():    {"Created", "ID", "Status", "Steps", "Thread", "Title", "Updated"},
+		reflect.TypeFor[proto.PeerPageTask]():    {"Created", "DoneAt", "ID", "Status", "Steps", "Thread", "Title", "Updated"},
 		reflect.TypeFor[proto.PeerStep]():        {"Done", "Text"},
 		reflect.TypeFor[proto.PeerLibrary]():     {"Files"},
 		reflect.TypeFor[proto.PeerLibraryFile](): {"Name", "Size", "State", "Task", "Thread", "Time", "Title"},
@@ -258,6 +258,32 @@ func TestPeerPageTasksBudget(t *testing.T) {
 	}
 	if !cut || !slices.Equal(ids, []int{1, 2, 3, 5}) {
 		t.Errorf("budget for four: %v (truncated %v), want the three live ones and the first done, in board order", ids, cut)
+	}
+}
+
+// TestPeerPageTasksNewestDone: a paired server's board lists its done
+// tasks newest first with their times, and when they don't all fit the
+// oldest stay home; the other tasks keep board order.
+func TestPeerPageTasksNewestDone(t *testing.T) {
+	ts := []*tasks.Task{
+		{ID: 1, Title: "live", Status: tasks.Ready},
+		{ID: 2, Title: "oldest", Status: tasks.Done, DoneAt: "2026-10-01T10:00:00Z"},
+		{ID: 3, Title: "newest", Status: tasks.Done, DoneAt: "2026-10-03T10:00:00Z"},
+		{ID: 4, Title: "middle", Status: tasks.Done, DoneAt: "2026-10-02"},
+	}
+	ids := func(ps []proto.PeerPageTask) (out []int) {
+		for _, pt := range ps {
+			out = append(out, pt.ID)
+		}
+		return out
+	}
+	all, cut := peerPageTasks(tasks.NewestDoneFirst(ts), 1<<20)
+	if got := ids(all); cut || !slices.Equal(got, []int{1, 3, 4, 2}) || all[1].DoneAt != "2026-10-03T10:00:00Z" {
+		t.Fatalf("all: %v (truncated %v) %+v", got, cut, all)
+	}
+	some, cut := peerPageTasks(tasks.NewestDoneFirst(ts), pageTaskBytes(all[0])+pageTaskBytes(all[1])+pageTaskBytes(all[2]))
+	if got := ids(some); !cut || !slices.Equal(got, []int{1, 3, 4}) {
+		t.Errorf("budget for three: %v (truncated %v), want the oldest left out", got, cut)
 	}
 }
 

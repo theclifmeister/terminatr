@@ -541,3 +541,21 @@ func (t *Theme) appendSGR(dst, p []byte) []byte {
 // the theme or scheme, as a camera reads it best; the one style drawn
 // outside the theme's roles.
 var qrLook = lipgloss.NewStyle().Foreground(lipgloss.Color("#000000")).Background(lipgloss.Color("#FFFFFF"))
+
+// pixelRow draws two rows of an image's pixels as ▀ cells, the top row
+// the foreground and the bottom the background: an image's own colours,
+// no role's, and the only colours here that don't come from a theme. A
+// run of one colour takes one SGR.
+func pixelRow(top, bottom []color.RGBA) string {
+	var b strings.Builder
+	var last [2]color.RGBA
+	for i := range top {
+		if pair := [2]color.RGBA{top[i], bottom[i]}; i == 0 || pair != last {
+			fmt.Fprintf(&b, "\x1b[38;2;%d;%d;%d;48;2;%d;%d;%dm", top[i].R, top[i].G, top[i].B, bottom[i].R, bottom[i].G, bottom[i].B)
+			last = pair
+		}
+		b.WriteString("▀")
+	}
+	b.WriteString(reset)
+	return b.String()
+}

@@ -6,7 +6,8 @@ import TerminatrUI
 /// A paired server's shared project (T846, T886), drawn as one of this
 /// server's (ProjectScreen): its header, its board's counts as
 /// StatTiles, its coordinator, running there or not, its pages as
-/// one PageRow, its designs, then its threads (SidebarTree.sessions). The
+/// one PageRow, one line of its designs under way, then its threads
+/// (SidebarTree.sessions). The
 /// counts and the pages come from that server while its project pages
 /// switch for this one is on (peer.pages-read); otherwise the counts
 /// show – and each page "Not shared by <server>"; Memory always does.
@@ -38,9 +39,8 @@ struct PeerProjectScreen: View {
                 stats
                 if let peer, let p {
                     pageTiles(server: PeerPages.server(peer))
-                    if model.listsDesigns {
-                        DesignsTiles(alias: alias, project: p, generation: model.generation)
-                    }
+                        .designsLine(model.listsDesigns ? DesignsSource(alias: alias, project: p, generation: model.generation) : nil,
+                                     opens: .peerPage(alias: alias, project: project, page: .designs))
                     SectionHeading("Threads", detail: threads.isEmpty ? "" : "\(threads.count)")
                     if threads.isEmpty {
                         notShared("No threads")
@@ -86,7 +86,7 @@ struct PeerProjectScreen: View {
     private func pageTiles(server: String) -> some View {
         let tiles: [(PeerPages.Page, FlatGlyph)] = [
             (.overview, .info), (.board, .board), (.memory, .mark), (.library, .books),
-        ]
+        ] + (model.listsDesigns ? [(.designs, .designs)] : [])
         return PageRow {
             ForEach(Array(tiles.enumerated()), id: \.element.0) { i, tile in
                 let (page, glyph) = tile
@@ -145,12 +145,9 @@ struct PeerPageScreen: View {
             case (.memory, _):
                 PeerNotShared(page: page, server: server)
             case (.designs, _):
-                ScrollView {
-                    if let p = model.peers.first(where: { $0.alias == alias })?.projects.first(where: { $0.project == project }) {
-                        DesignsTiles(alias: alias, project: p, generation: model.generation)
-                            .padding(.horizontal, Spacing.gutter)
-                    }
-                }
+                DesignsPage(source: model.peers.first(where: { $0.alias == alias })?.projects.first(where: { $0.project == project })
+                    .map { DesignsSource(alias: alias, project: $0, generation: model.generation) },
+                    route: .peerPage(alias: alias, project: project, page: .designs))
             case (.library, .shared):
                 LibraryScreen(slug: project, peer: alias)
             case (.overview, .shared(let p)):
@@ -292,6 +289,9 @@ private struct PeerBoardPage: View {
                             Text("\(t.steps.filter(\.done).count)/\(t.steps.count)")
                                 .font(theme.monoSized(12.5))
                                 .foregroundStyle(theme.muted)
+                        }
+                        if t.status == "done" {
+                            FinishedTag(task: t)
                         }
                     }
                 }

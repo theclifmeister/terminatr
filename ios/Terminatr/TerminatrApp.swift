@@ -118,7 +118,7 @@ extension Route {
     var searchSlug: String? {
         switch base {
         case .project(let s), .overview(let s), .board(let s), .memory(let s), .memoryFile(let s, _),
-             .library(let s), .task(let s, _), .mods(let s), .mod(let s, _), .design(let s, _),
+             .library(let s), .task(let s, _), .mods(let s), .mod(let s, _), .designs(let s), .design(let s, _),
              .search(let s), .searchHit(let s, _):
             s
         case .session(let ref), .need(let ref): ref.isRemote || ref.director ? nil : ref.project
@@ -154,8 +154,9 @@ indirect enum Route: Hashable {
     /// for the project, and its settings for it.
     case mods(String)
     case mod(String, id: String)
-    /// A project's design by its name (T864): its answers, open
-    /// questions and build.
+    /// A project's designs (T1068), and one by its name (T864): its
+    /// answers, open questions and build.
+    case designs(String)
     case design(String, name: String)
     /// A project's history searched (T924), and one hit by its chunk's
     /// id: its text and its timeline.
@@ -173,7 +174,7 @@ indirect enum Route: Hashable {
     /// question or approval); "overview:SLUG",
     /// "board:SLUG", "memory:SLUG", "memory:SLUG/PATH", "library:SLUG",
     /// "mods:SLUG", "mods:SLUG/ID",
-    /// "program:SLUG", "task:SLUG/REF", "design:SLUG/NAME", "search:SLUG",
+    /// "program:SLUG", "task:SLUG/REF", "designs:SLUG", "design:SLUG/NAME", "search:SLUG",
     /// "search:SLUG/ID", or a paired server's
     /// "peer:ALIAS/PROJECT", "peer:ALIAS/PROJECT/PAGE" and
     /// "peer:ALIAS/PROJECT/designs/NAME".
@@ -194,6 +195,7 @@ indirect enum Route: Hashable {
         case "library": return .library(slug)
         case "mods": return rest.isEmpty ? .mods(slug) : .mod(slug, id: rest)
         case "task": return rest.isEmpty ? nil : .task(slug, ref: rest)
+        case "designs": return .designs(slug)
         case "design": return rest.isEmpty ? nil : .design(slug, name: rest)
         case "search": return rest.isEmpty ? .search(slug) : .searchHit(slug, id: rest)
         // "peer:ALIAS/PROJECT", "peer:ALIAS/PROJECT/PAGE" (overview,
@@ -213,19 +215,21 @@ indirect enum Route: Hashable {
 
     /// The Projects tab's path to it, as taps would have it: a project's
     /// screens under the project, a memory file under Memory, a task
-    /// under the board.
+    /// under the board, a design under Designs.
     var path: [Route] {
         switch self {
         case .on(let key, let r): r.path.map { $0.on(key) }
         case .project, .peerProject, .program: [self]
         case .session(let ref), .need(let ref):
             [ref.isRemote ? .peerProject(alias: ref.server, project: ref.project) : ref.director ? .program(ref.project) : .project(ref.project), self]
-        case .overview(let s), .board(let s), .memory(let s), .library(let s), .design(let s, _), .mods(let s), .search(let s): [.project(s), self]
+        case .overview(let s), .board(let s), .memory(let s), .library(let s), .designs(let s), .mods(let s), .search(let s): [.project(s), self]
+        case .design(let s, _): [.project(s), .designs(s), self]
         case .searchHit(let s, _): [.project(s), .search(s), self]
         case .mod(let s, _): [.project(s), .mods(s), self]
         case .memoryFile(let s, _): [.project(s), .memory(s), self]
         case .task(let s, _): [.project(s), .board(s), self]
-        case .peerPage(let alias, let project, _), .peerDesign(let alias, let project, _): [.peerProject(alias: alias, project: project), self]
+        case .peerPage(let alias, let project, _): [.peerProject(alias: alias, project: project), self]
+        case .peerDesign(let alias, let project, _): [.peerProject(alias: alias, project: project), .peerPage(alias: alias, project: project, page: .designs), self]
         }
     }
 }
@@ -626,6 +630,7 @@ struct RouteScreen: View {
             } else {
                 ContentUnavailableView("Not paired with this server now", systemImage: "iphone.slash")
                     .backdrop()
+                    .screenBar(bare: true) { EmptyView() }
             }
         } else {
             BaseRouteScreen(route: route)
@@ -653,6 +658,7 @@ private struct BaseRouteScreen: View {
         case .mods(let slug): ModsScreen(slug: slug)
         case .mod(let slug, let id): ModScreen(slug: slug, id: id)
         case .task(let slug, let ref): TaskScreen(slug: slug, ref: ref)
+        case .designs(let slug): DesignsScreen(slug: slug)
         case .design(let slug, let name): DesignScreen(slug: slug, name: name)
         case .search(let slug): SearchScreen(slug: slug)
         case .searchHit(let slug, let id): SearchHitScreen(slug: slug, id: id)
@@ -679,9 +685,9 @@ private struct BackdropModifier: ViewModifier {
 /// colour across the width under it, with the line over it, so nothing
 /// scrolls behind the bar's glass. iOS draws the bar itself and keeps its
 /// glass capsule (ios/README.md, Flat look); on the solid band it shows the
-/// band's colour. Only under a bar: a screen that hides it (a session on a
-/// phone's width) has only the home indicator's inset, and its composer's
-/// colour. Not the keyboard's height: it covers the band.
+/// band's colour. Only under a bar: a Duo's rail is beside the screen, which
+/// has only the home indicator's inset below it, and its composer's colour.
+/// Not the keyboard's height: it covers the band.
 private struct TabBand: ViewModifier {
     @Environment(\.theme) private var theme
     @State private var inset: CGFloat = 0
@@ -697,7 +703,8 @@ private struct TabBand: ViewModifier {
                     theme.chrome
                         .frame(height: inset)
                         .overlay(alignment: .top) { theme.line.frame(height: 1) }
-                        .ignoresSafeArea(.container, edges: .bottom)
+                        // Behind the keyboard, not over what stands on it.
+                        .ignoresSafeArea(edges: .bottom)
                         .allowsHitTesting(false)
                         .accessibilityHidden(true)
                 }
