@@ -240,7 +240,7 @@ struct LibraryPane: View {
                             PickRow(id: r.id, selection: $picked, open: { look(f) }) {
                                 LibraryFileRow(f, source: LibraryPage.source(f))
                             }
-                            .contextMenu { actions(r) }
+                            .contextMenu { menu(r) }
                         }
                     } else {
                         ForEach(groups) { g in
@@ -263,7 +263,7 @@ struct LibraryPane: View {
                                         LibraryFileRow(r.files[0])
                                     }
                                 }
-                                .contextMenu { actions(r) }
+                                .contextMenu { menu(r) }
                             }
                             if l.folds, !foldBeside(l) {
                                 PickRow(id: Self.foldKey(g), selection: $picked, act: { toggle(g) }) {
@@ -294,6 +294,13 @@ struct LibraryPane: View {
                 if busy || row(picked) != nil {
                     HStack(spacing: 7) {
                         if busy { ProgressView().controlSize(.small) }
+                        if let r = row(picked), let over = FileImage.overLimit(showing(r).size) {
+                            Text(over)
+                                .font(theme.sized(Flat.text))
+                                .foregroundStyle(theme.muted)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                        }
                         Spacer()
                         if let r = row(picked) { actions(r) }
                     }
@@ -333,7 +340,7 @@ struct LibraryPane: View {
                     LibraryTile(f, image: thumbs[Self.thumbKey(project, peer, f)], stack: r.isStack ? r : nil) { pick(r, $0) }
                 }
                 .help("\(f.name) · \(Attachment.size(f.size))")
-                .contextMenu { actions(r) }
+                .contextMenu { menu(r) }
                 .task(id: Self.thumbKey(project, peer, f)) { await draw(f) }
             }
             ForEach(row.count..<columns, id: \.self) { _ in
@@ -438,22 +445,35 @@ struct LibraryPane: View {
         }
     }
 
+    /// A row's menu: its acts, under why they're off for a file over the cap.
+    @ViewBuilder
+    private func menu(_ r: LibraryPage.Row) -> some View {
+        if let over = FileImage.overLimit(showing(r).size) { Text(over) }
+        actions(r)
+    }
+
     /// The picked row's acts, on the file it shows.
     @ViewBuilder
     private func actions(_ r: LibraryPage.Row) -> some View {
         let f = showing(r)
         if r.opensSideBySide {
             Button("Side by Side") { comparing = r }
-                .help("Shows before and after together")
+                .disabled(!r.readable)
+                .help(r.readable ? "Shows before and after together" : "One of them is over what tm reads")
         }
+        let unreadable = FileImage.unreadable(name: f.name, size: f.size)
         Button("Quick Look") { look(f) }
+            .disabled(unreadable != nil)
+            .help(unreadable ?? "")
         Button("Open") {
             guard !FileCaution.launches(f.name) else { return }
             Task { if let url = await copy(f) { NSWorkspace.shared.open(url) } }
         }
-        .disabled(FileCaution.launches(f.name))
-        .help(FileCaution.launches(f.name) ? "Open would run this file: Quick Look it or Save As…" : "")
+        .disabled(unreadable != nil || FileCaution.launches(f.name))
+        .help(unreadable ?? (FileCaution.launches(f.name) ? "Open would run this file: Quick Look it or Save As…" : ""))
         Button("Save As…") { Task { await saveAs(f) } }
+            .disabled(unreadable != nil)
+            .help(unreadable ?? "")
     }
 
     static func key(_ f: AppAPI.LibraryFile) -> String { LibraryPage.id(f) + "/" + f.name }
@@ -491,7 +511,7 @@ struct LibraryPane: View {
     /// A row's double click, or space: before and after side by side, any
     /// other file in Quick Look.
     private func open(_ r: LibraryPage.Row) {
-        if r.opensSideBySide {
+        if r.opensSideBySide, r.readable {
             comparing = r
         } else {
             look(showing(r))

@@ -2,6 +2,7 @@ package server
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 	"time"
 
@@ -94,6 +95,20 @@ func libraryFileOf(f thread.LibFile) proto.LibraryFile {
 		Name: f.Name, Size: f.Size, Time: f.Time, Peer: f.Peer, Message: f.Message, Project: f.Project, Server: f.Server}
 }
 
+// sizeWords is a byte count as the app's rows say it: 812 bytes, 3.4 KB,
+// 175.1 MB, 1.44 GB.
+func sizeWords(n int64) string {
+	switch {
+	case n < 1000:
+		return fmt.Sprintf("%d bytes", n)
+	case n < 1_000_000:
+		return fmt.Sprintf("%.1f KB", float64(n)/1000)
+	case n < 1_000_000_000:
+		return fmt.Sprintf("%.1f MB", float64(n)/1_000_000)
+	}
+	return fmt.Sprintf("%.2f GB", float64(n)/1_000_000_000)
+}
+
 // libraryRead is a chunk of a thread's library file, or, for ID a
 // message's, of the file it brought.
 func (s *Server) libraryRead(pp proto.LibraryReadParams) (any, *proto.Error) {
@@ -116,7 +131,7 @@ func (s *Server) libraryRead(pp proto.LibraryReadParams) (any, *proto.Error) {
 		return nil, taskError(err)
 	}
 	if size > proto.MaxLibraryRead {
-		return nil, proto.Errorf("too-large", "%s is %d bytes, over the %d the app reads", pp.Name, size, proto.MaxLibraryRead)
+		return nil, proto.Errorf("too-large", "%s is %s, over the %s the app reads", pp.Name, sizeWords(size), sizeWords(proto.MaxLibraryRead))
 	}
 	return proto.LibraryReadResult{Name: pp.Name, Size: size, MTime: mod, Offset: pp.Offset, Data: data}, nil
 }

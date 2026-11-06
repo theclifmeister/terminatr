@@ -465,18 +465,27 @@ struct FilesPanel: View {
         }
     }
 
+    /// Why f's bytes can't be had for Quick Look, Open and Save As.
+    private func unreadable(_ f: OpenedFile) -> String? {
+        var hasPath = false
+        if case .worktree = f.source { hasPath = true }
+        return FileImage.unreadable(name: f.name, size: f.size, hasPath: hasPath)
+    }
+
     private func localFooter(_ f: OpenedFile) -> some View {
         HStack(spacing: 8) {
             Button("Quick Look") { look(f) }
-                .help("Quick Look (space)")
+                .disabled(unreadable(f) != nil)
+                .help(unreadable(f) ?? "Quick Look (space)")
             Button("Open") { openElsewhere(f) }
-                .disabled(FileCaution.launches(f.name))
-                .help(FileCaution.launches(f.name) ? "Opening it would run it: Save As or Reveal in Finder instead" : "Opens it in its app")
+                .disabled(unreadable(f) != nil || FileCaution.launches(f.name))
+                .help(unreadable(f) ?? (FileCaution.launches(f.name) ? "Opening it would run it: Save As or Reveal in Finder instead" : "Opens it in its app"))
             mentionButton(f.source, short: true)
             if model.busy { ProgressView().controlSize(.small) }
             Spacer(minLength: 0)
             Menu {
                 Button("Save As…") { saveAs(f) }
+                    .disabled(unreadable(f) != nil)
                 if case .worktree(let e, _) = f.source {
                     Divider()
                     pathActions(e)
@@ -503,9 +512,11 @@ struct FilesPanel: View {
     private func openActions(_ f: OpenedFile) -> some View {
         Button("Open in Pane") { openInPane(f) }
         Button("Quick Look") { look(f) }
+            .disabled(unreadable(f) != nil)
         Button("Open") { openElsewhere(f) }
-            .disabled(FileCaution.launches(f.name))
+            .disabled(unreadable(f) != nil || FileCaution.launches(f.name))
         Button("Save As…") { saveAs(f) }
+            .disabled(unreadable(f) != nil)
     }
 
     /// Worktree files alone have a path here: a Library file's stays with
@@ -831,7 +842,7 @@ struct FileBody: View {
                     if case .notDrawn(let why) = s?.picture {
                         empty(FileImage.message(name: file.name, size: size, why: why, hasPath: hasPath))
                     } else {
-                        empty(FileImage.message(name: file.name, size: size))
+                        empty(FileImage.message(name: file.name, size: size, hasPath: hasPath))
                     }
                 }
             case .gone:

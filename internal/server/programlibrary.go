@@ -172,7 +172,7 @@ func (s *Server) programLibraryRead(pp proto.LibraryReadParams) (any, *proto.Err
 		return nil, taskError(err)
 	}
 	if size > proto.MaxLibraryRead {
-		return nil, proto.Errorf("too-large", "%s is %d bytes, over the %d the app reads", pp.Name, size, proto.MaxLibraryRead)
+		return nil, proto.Errorf("too-large", "%s is %s, over the %s the app reads", pp.Name, sizeWords(size), sizeWords(proto.MaxLibraryRead))
 	}
 	return proto.LibraryReadResult{Name: pp.Name, Size: size, MTime: mod, Offset: pp.Offset, Data: data}, nil
 }

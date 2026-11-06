@@ -575,6 +575,11 @@ final class FilesModel {
                 actionProblem = place?.why ?? "Not connected to terminatr."
                 return nil
             }
+            // Space asks too, with no button in the way.
+            if let why = FileImage.unreadable(name: f.name, size: f.size, hasPath: true) {
+                actionProblem = why
+                return nil
+            }
             outcome = await WorktreeRead.bytes({ p in try await b.call(AppAPI.Methods.filesRead, p) }, session: session, repo: f.repo, path: e.path, ignored: ignored)
         case .attached(let a):
             outcome = await attachedBytes(a, app)
