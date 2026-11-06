@@ -115,6 +115,8 @@ func TestPeerPagesNeverLeaks(t *testing.T) {
 	os.MkdirAll(thread.Path(web, r.ID, "library"), 0o755)
 	os.WriteFile(thread.Path(web, r.ID, "library", "notes.md"), []byte("# the findings\n"), 0o644)
 	os.WriteFile(thread.Path(web, r.ID, "library", ".hidden"), []byte("SECRET-HIDDEN"), 0o644)
+	os.WriteFile(thread.Path(web, r.ID, "library", "shot.png"), testPNG(t, 800, 400), 0o644)
+	os.WriteFile(thread.Path(web, r.ID, "library", "corrupt.png"), []byte("\x89PNG\r\n\x1a\nnope"), 0o644)
 
 	ticker := filepath.Join(t.TempDir(), "ticker.json")
 	ex := peerExport{
@@ -174,7 +176,7 @@ func TestPeerPagesNeverLeaks(t *testing.T) {
 	}
 	var lib proto.PeerLibrary
 	json.Unmarshal(libRaw, &lib)
-	if len(lib.Files) != 1 || lib.Files[0].Name != "notes.md" || lib.Files[0].Thread != r.ID {
+	if len(lib.Files) != 3 || lib.Files[0].Thread != r.ID {
 		t.Errorf("library: %+v", lib)
 	}
 	chunk, err := on.LibraryRead(ctx, "mini", proto.PeerLibraryReadParams{Project: "web", Thread: r.ID, Name: "notes.md"})
@@ -190,6 +192,28 @@ func TestPeerPagesNeverLeaks(t *testing.T) {
 		if c, err := on.LibraryRead(ctx, "mini", bad); err == nil {
 			t.Errorf("%+v read: %q", bad, c.Data)
 		}
+	}
+	// Thumbnails: made there, of a thread's file only, under the switch.
+	if _, err := off.LibraryThumbnail(ctx, "mini", proto.PeerLibraryThumbnailParams{Project: "web", Thread: r.ID, Name: "shot.png"}); code(err) != proto.ErrPagesOff {
+		t.Errorf("thumbnail, pages off: %v, want pages-off", err)
+	}
+	th, err := on.LibraryThumbnail(ctx, "mini", proto.PeerLibraryThumbnailParams{Project: "web", Thread: r.ID, Name: "shot.png"})
+	if err != nil || th.Name != "shot.png" || th.Width != 400 || th.Height != 200 || len(th.Data) == 0 {
+		t.Errorf("thumbnail: %dx%d %v", th.Width, th.Height, err)
+	}
+	for _, bad := range []proto.PeerLibraryThumbnailParams{
+		{Project: "web", Thread: r.ID, Name: ".hidden.png"},
+		{Project: "web", Thread: r.ID, Name: "../shot.png"},
+		{Project: "web", Thread: "M-AB12-1", Name: "shot.png"},
+		{Project: "web", Thread: r.ID, Name: "notes.md"},
+		{Project: "secret-proj", Thread: r.ID, Name: "shot.png"},
+	} {
+		if c, err := on.LibraryThumbnail(ctx, "mini", bad); err == nil {
+			t.Errorf("%+v thumbnail: %dx%d", bad, c.Width, c.Height)
+		}
+	}
+	if _, err := on.LibraryThumbnail(ctx, "mini", proto.PeerLibraryThumbnailParams{Project: "web", Thread: r.ID, Name: "corrupt.png"}); code(err) != proto.ErrNoThumbnail {
+		t.Errorf("corrupt: %v, want no-thumbnail", err)
 	}
 	// On for a project that isn't shared: not-shared, as any other.
 	if _, err := on.Pages(ctx, "mini", "secret-proj"); code(err) != proto.ErrNotShared {
@@ -277,5 +301,26 @@ func TestPeerPagesOlderPeer(t *testing.T) {
 	var list proto.PeerProjects
 	if err := studio.Call(ctx, "mini", proto.MethodPeerProjects, nil, &list); err != nil || len(list.Projects) != 1 || list.Projects[0].Pages {
 		t.Errorf("an old peer's projects: %+v %v", list, err)
+	}
+}
+
+// TestPeerThumbnailOlderTM: a paired tm too old for thumbnails, or for
+// project pages at all, is a file with no thumbnail for the console (it
+// draws rows), not a project that stopped sharing; pages turned off stay
+// that.
+func TestPeerThumbnailOlderTM(t *testing.T) {
+	for _, c := range []struct {
+		err  error
+		want string
+	}{
+		{proto.Errorf(proto.ErrUnknownMethod, "unknown link method"), proto.ErrNoThumbnail},
+		{proto.Errorf(proto.ErrNoPages, "no pages"), proto.ErrNoThumbnail},
+		{proto.Errorf(proto.ErrNoThumbnail, "none"), proto.ErrNoThumbnail},
+		{proto.Errorf(proto.ErrPagesOff, "off"), proto.ErrPagesOff},
+		{proto.Errorf(proto.ErrNotShared, "not shared"), proto.ErrNotShared},
+	} {
+		if got := peerThumbnailError("mini", c.err); got.Code != c.want {
+			t.Errorf("%v: %s, want %s", c.err, got.Code, c.want)
+		}
 	}
 }

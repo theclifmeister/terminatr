@@ -375,6 +375,7 @@ func TestCopies(t *testing.T) {
 	check("memory.read", homeOf(memoryTextOf), nil)
 	check("library.list", homeOf(libraryOf), nil)
 	check("library.read", homeOf(libraryChunkOf), nil)
+	check("library.thumbnail", homeOf(libraryThumbnailOf), nil)
 	check("files.list", homeOf(filesListOf), nil)
 	check("files.read", homeOf(filesChunkOf), nil)
 	check("files.stamp", homeOf(filesStampOf), nil)
@@ -660,9 +661,9 @@ func TestAllowlist(t *testing.T) {
 		proto.MethodSessionFile, proto.MethodCoordinatorClear, proto.MethodProjectActive, proto.MethodSessionUpload,
 		proto.MethodLinkAct, proto.MethodPeerShareAnswer, proto.MethodPeerNeedAct, MethodGuardRefusals, MethodGuardDecide, proto.MethodTranscriptPage,
 		proto.MethodProjectPin, proto.MethodProjectNew, proto.MethodSessionAdoptRequest, proto.MethodSessionRemote, proto.MethodLinkSend,
-		proto.MethodMemoryList, proto.MethodMemoryRead, proto.MethodLibraryList, proto.MethodLibraryRead, proto.MethodDesignList, proto.MethodSearchQuery, proto.MethodSearchTimeline, proto.MethodSearchShow, proto.MethodAppReportAdd,
+		proto.MethodMemoryList, proto.MethodMemoryRead, proto.MethodLibraryList, proto.MethodLibraryRead, proto.MethodLibraryThumbnail, proto.MethodDesignList, proto.MethodSearchQuery, proto.MethodSearchTimeline, proto.MethodSearchShow, proto.MethodAppReportAdd,
 		proto.MethodFilesList, proto.MethodFilesRead, proto.MethodFilesStamp, proto.MethodFilesDiff, proto.MethodFilesRepos,
-		proto.MethodPeerPagesRead, proto.MethodPeerLibraryList, proto.MethodPeerLibraryRead, proto.MethodPeerDesignList,
+		proto.MethodPeerPagesRead, proto.MethodPeerLibraryList, proto.MethodPeerLibraryRead, proto.MethodPeerLibraryThumbnail, proto.MethodPeerDesignList,
 		MethodDeviceNonce, MethodDeviceBye, MethodDeviceList, MethodDevicePair, MethodDevicePairWait, MethodDevicePairAnswer, MethodDeviceAccess,
 		MethodDeviceName, MethodDeviceRemove, proto.MethodModsList, proto.MethodModsSet, proto.MethodModsSetting,
 		proto.MethodProgramGet, proto.MethodProgramNeeds, proto.MethodProgramRead, proto.MethodProgramSearch, proto.MethodProgramSearchTimeline,
@@ -692,7 +693,7 @@ func TestAllowlist(t *testing.T) {
 	for name, write := range map[string]bool{MethodPaneInput: true, proto.MethodPaneVT: false, proto.MethodTranscriptWatch: false,
 		proto.MethodSessionFile: false, proto.MethodCoordinatorClear: true, proto.MethodProjectActive: true,
 		proto.MethodLinkAct: true, proto.MethodPeerShareAnswer: true, MethodGuardRefusals: false, MethodGuardDecide: true,
-		proto.MethodMemoryList: false, proto.MethodMemoryRead: false, proto.MethodLibraryList: false, proto.MethodLibraryRead: false,
+		proto.MethodMemoryList: false, proto.MethodMemoryRead: false, proto.MethodLibraryList: false, proto.MethodLibraryRead: false, proto.MethodLibraryThumbnail: false, proto.MethodPeerLibraryThumbnail: false,
 		MethodDeviceList: false, MethodDevicePair: true, MethodDevicePairWait: true, MethodDevicePairAnswer: true,
 		MethodDeviceAccess: true, MethodDeviceName: true, MethodDeviceRemove: true,
 		proto.MethodModsList: false, proto.MethodModsSet: true, proto.MethodModsSetting: true,

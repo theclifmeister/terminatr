@@ -3,11 +3,13 @@ package server
 import (
 	"errors"
 	"slices"
+	"time"
 
 	"github.com/theclifmeister/terminatr/internal/link"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/thread"
+	"github.com/theclifmeister/terminatr/internal/thumb"
 )
 
 // A project's memory and library for a console off this machine's files
@@ -97,4 +99,60 @@ func (s *Server) libraryRead(pp proto.LibraryReadParams) (any, *proto.Error) {
 		return nil, proto.Errorf("too-large", "%s is %d bytes, over the %d the app reads", pp.Name, size, proto.MaxLibraryRead)
 	}
 	return proto.LibraryReadResult{Name: pp.Name, Size: size, MTime: mod, Offset: pp.Offset, Data: data}, nil
+}
+
+// libraryThumbnail is library.thumbnail: for ID a message, of the file it
+// brought, else of a thread's library file, packed or not.
+func (s *Server) libraryThumbnail(pp proto.LibraryThumbnailParams) (any, *proto.Error) {
+	p, perr := openProject(pp.Project)
+	if perr != nil {
+		return nil, perr
+	}
+	info, read := thread.LibraryFileInfo, thread.ReadLibraryChunk
+	if link.ValidID(pp.ID) {
+		read = link.ReadFileChunk
+		info = func(p *project.Project, id, name string) (int64, time.Time, error) {
+			_, size, mod, err := link.ReadFileChunk(p, id, name, 0, 0)
+			return size, mod, err
+		}
+	}
+	t, err := thumbnailOf(p, pp.ID, pp.Name, info, read)
+	if err != nil {
+		return nil, thumbnailError(pp.Name, err)
+	}
+	return thumbnailResult(pp.Name, t), nil
+}
+
+// thumbnailOf is a library file's thumbnail: cached, without reading the
+// file, else made from it.
+func thumbnailOf(p *project.Project, id, name string,
+	info func(*project.Project, string, string) (int64, time.Time, error),
+	read func(*project.Project, string, string, int64, int64) ([]byte, int64, time.Time, error)) (thumb.Thumb, error) {
+	if !thumb.Supported(name) {
+		return thumb.Thumb{}, thumb.ErrNoThumbnail
+	}
+	size, mod, err := info(p, id, name)
+	if err != nil {
+		return thumb.Thumb{}, err
+	}
+	return thumb.Get(thumb.Key{Project: p.Slug, ID: id, Name: name}, size, mod, func() ([]byte, error) {
+		data, _, _, err := read(p, id, name, 0, thumb.MaxSource)
+		return data, err
+	})
+}
+
+func thumbnailResult(name string, t thumb.Thumb) proto.LibraryThumbnailResult {
+	return proto.LibraryThumbnailResult{Name: name, Width: t.Width, Height: t.Height, Data: t.Data}
+}
+
+// thumbnailError is a thumbnail refused, with the thread library's codes
+// for a bad name or thread.
+func thumbnailError(name string, err error) *proto.Error {
+	switch {
+	case errors.Is(err, thumb.ErrNoThumbnail):
+		return proto.Errorf(proto.ErrNoThumbnail, "%s has no thumbnail", name)
+	case errors.Is(err, thumb.ErrBusy):
+		return proto.Errorf(proto.ErrRefused, "%v; try again", err)
+	}
+	return taskError(err)
 }

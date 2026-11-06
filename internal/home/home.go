@@ -120,6 +120,11 @@ func ProgramSearchDir() (string, error) { return sub(filepath.Join("state", "sea
 // last host said (the mod supervisor's, never the mod's).
 func ModCacheDir() (string, error) { return sub(filepath.Join("cache", "mods")) }
 
+// ThumbCacheDir is <home>/cache/thumbs, the library's thumbnails in
+// <project>/<thread or message>/ (internal/thumb): derived, made again at
+// will, never in the project folder.
+func ThumbCacheDir() (string, error) { return sub(filepath.Join("cache", "thumbs")) }
+
 // ModLogsDir is <home>/logs/mods, each mod's <id>.log.
 func ModLogsDir() (string, error) { return sub(filepath.Join("logs", "mods")) }
 

@@ -317,6 +317,9 @@ func init() {
 		proto.MethodLibraryRead: {gate: gateHuman, call: typed(func(s *Server, p proto.LibraryReadParams, _ callCtx) (any, *proto.Error) {
 			return s.libraryRead(p)
 		})},
+		proto.MethodLibraryThumbnail: {gate: gateHuman, call: typed(func(s *Server, p proto.LibraryThumbnailParams, _ callCtx) (any, *proto.Error) {
+			return s.libraryThumbnail(p)
+		})},
 		// A session's folder, read only (CapWorktreeFiles).
 		proto.MethodFilesList: {gate: gateHuman, call: typed(func(s *Server, p proto.FilesListParams, _ callCtx) (any, *proto.Error) {
 			return s.filesList(p)
@@ -427,9 +430,10 @@ func init() {
 			return s.readPeerPopup(p)
 		})},
 		// A paired server's project pages, read only (CapPeerPages).
-		proto.MethodPeerPagesRead:   {gate: gateHuman, call: typed((*Server).readPeerPages)},
-		proto.MethodPeerLibraryList: {gate: gateHuman, call: typed((*Server).listPeerLibrary)},
-		proto.MethodPeerLibraryRead: {gate: gateHuman, call: typed((*Server).readPeerLibrary)},
+		proto.MethodPeerPagesRead:        {gate: gateHuman, call: typed((*Server).readPeerPages)},
+		proto.MethodPeerLibraryList:      {gate: gateHuman, call: typed((*Server).listPeerLibrary)},
+		proto.MethodPeerLibraryRead:      {gate: gateHuman, call: typed((*Server).readPeerLibrary)},
+		proto.MethodPeerLibraryThumbnail: {gate: gateHuman, call: typed((*Server).readPeerThumbnail)},
 		// A paired server's designs, read only (CapPeerDesigns, T888).
 		proto.MethodPeerDesignList: {gate: gateHuman, call: typed((*Server).listPeerDesigns)},
 		proto.MethodPeerNeedAct: {gate: gateHuman, call: typed(func(s *Server, p proto.PeerNeedActParams, c callCtx) (any, *proto.Error) {

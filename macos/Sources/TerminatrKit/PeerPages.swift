@@ -103,4 +103,14 @@ public enum PeerPages {
             try await fetch(AppAPI.PeerLibraryReadParams(alias: alias, project: project, id: p.id, name: p.name, offset: p.offset))
         }, project: project, file: f)
     }
+
+    /// A paired server's library file's thumbnail, or nil for a plain row:
+    /// as LibraryPage.thumbnail, that server's tm being too old among the
+    /// reasons (no-thumbnail).
+    public static func thumbnail(_ fetch: @Sendable (AppAPI.PeerLibraryThumbnailParams) async throws -> AppAPI.LibraryThumbnail,
+                                 alias: String, project: String, file f: AppAPI.LibraryFile) async -> AppAPI.LibraryThumbnail? {
+        await LibraryPage.thumbnail({ p in
+            try await fetch(AppAPI.PeerLibraryThumbnailParams(alias: alias, project: project, id: p.id, name: p.name))
+        }, project: project, file: f)
+    }
 }
