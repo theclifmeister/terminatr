@@ -583,8 +583,8 @@ func memoryReadParams(p MemoryReadParams) proto.MemoryReadParams {
 	return proto.MemoryReadParams{Project: p.Project, Path: p.Path}
 }
 
-func libraryListParams(p ProjectParams) proto.ProjectFilesParams {
-	return proto.ProjectFilesParams{Project: p.Project}
+func libraryListParams(p LibraryListParams) proto.ProjectFilesParams {
+	return proto.ProjectFilesParams{Project: p.Project, Program: p.Program.slug()}
 }
 
 func designListParams(p ProjectParams) proto.DesignListParams {
@@ -625,9 +625,9 @@ func filesReposParams(p FilesReposParams) proto.FilesReposParams {
 }
 
 func libraryThumbnailParams(p LibraryThumbnailParams) proto.LibraryThumbnailParams {
-	return proto.LibraryThumbnailParams{Project: p.Project, ID: p.ID, Name: p.Name}
+	return proto.LibraryThumbnailParams{Project: p.Project, Program: p.Program.slug(), ID: p.ID, Name: p.Name}
 }
 
 func libraryReadParams(p LibraryReadParams) proto.LibraryReadParams {
-	return proto.LibraryReadParams{Project: p.Project, ID: p.ID, Name: p.Name, Offset: p.Offset}
+	return proto.LibraryReadParams{Project: p.Project, Program: p.Program.slug(), ID: p.ID, Name: p.Name, Offset: p.Offset}
 }

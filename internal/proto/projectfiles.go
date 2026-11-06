@@ -67,8 +67,13 @@ const (
 )
 
 // ProjectFilesParams name the project of memory.list and library.list.
+// library.list's program form names Program instead: the director's own
+// files, then its members' (LibraryFile.Project), those on a paired server
+// only where that project's pages switch is on (§16.17). It is refused
+// while programs are off.
 type ProjectFilesParams struct {
-	Project string `json:"project"`
+	Project string `json:"project,omitempty"`
+	Program string `json:"program,omitempty"`
 }
 
 // MemoryFile is one of a project's memory files: its path in the
@@ -104,7 +109,10 @@ type MemoryReadResult struct {
 // attached it (with the thread's Task, Title and State: running,
 // stopped, resolved or archived), or linked project Peer sent it with
 // Message (State received). Repo is the folder name of the thread's
-// repository in a project with several. It carries no path.
+// repository in a project with several. A coordinator's or director's own
+// file has LibrarySeatID for its Thread. In a program's listing Project is
+// the member it is in and Server that member's paired server, both empty
+// for the director's own. It carries no path.
 type LibraryFile struct {
 	Thread  string    `json:"thread,omitempty"`
 	Task    string    `json:"task,omitempty"`
@@ -116,18 +124,35 @@ type LibraryFile struct {
 	Time    time.Time `json:"time"`
 	Peer    string    `json:"peer,omitempty"`
 	Message string    `json:"message,omitempty"`
+	Project string    `json:"project,omitempty"`
+	Server  string    `json:"server,omitempty"`
 }
 
-// LibraryListResult is a project's library, newest file first.
+// LibrarySeatID is the library id of a coordinator's or director's own
+// files, where a thread's id goes.
+const LibrarySeatID = "seat"
+
+// LibraryListResult is a project's library, newest file first. A program's
+// lists the director's own, then each member's in the program's order,
+// each newest first. Note says what a program's leaves out for now: a
+// paired member that can't be reached, a list cut to MaxProgramLibrary.
 type LibraryListResult struct {
 	Files []LibraryFile `json:"files"`
+	Note  string        `json:"note,omitempty"`
 }
+
+// MaxProgramLibrary is the most files a program's listing carries, the
+// newest kept, so it stays under the 1 MiB a device's link carries in a
+// line.
+const MaxProgramLibrary = 2000
 
 // LibraryReadParams name a library file by its thread, or the message
 // a linked project sent it with (ID), and its name; the chunk read is
-// from Offset.
+// from Offset. Program names the program whose director's own file it is
+// (ID LibrarySeatID), in place of Project.
 type LibraryReadParams struct {
-	Project string `json:"project"`
+	Project string `json:"project,omitempty"`
+	Program string `json:"program,omitempty"`
 	ID      string `json:"id"`
 	Name    string `json:"name"`
 	Offset  int64  `json:"offset,omitempty"`
@@ -135,7 +160,8 @@ type LibraryReadParams struct {
 
 // LibraryThumbnailParams name a library file as LibraryReadParams do.
 type LibraryThumbnailParams struct {
-	Project string `json:"project"`
+	Project string `json:"project,omitempty"`
+	Program string `json:"program,omitempty"`
 	ID      string `json:"id"`
 	Name    string `json:"name"`
 }
