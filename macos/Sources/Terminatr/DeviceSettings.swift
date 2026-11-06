@@ -15,7 +15,6 @@ struct DeviceSettings: View {
     @State private var failure: String?
     @State private var pairing = false
     @State private var renaming: AppAPI.Device?
-    @State private var newName = ""
     @State private var removing: AppAPI.Device?
     /// Bumped to read the list again at once.
     @State private var reload = 0
@@ -32,7 +31,6 @@ struct DeviceSettings: View {
         Form {
             if manages {
                 DeviceList(list: list, failure: failure, setLevel: setLevel, rename: { d in
-                    newName = d.name
                     renaming = d
                 }, remove: { removing = $0 })
                 Section {
@@ -66,13 +64,8 @@ struct DeviceSettings: View {
         .sheet(isPresented: $pairing, onDismiss: { reload += 1 }) {
             PairPhoneSheet()
         }
-        .alert("Rename Device", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } }), presenting: renaming) { d in
-            TextField("Name", text: $newName)
-            Button("Rename") { rename(d, to: newName) }
-                .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
-            Button("Cancel", role: .cancel) {}
-        } message: { _ in
-            Text("Its link connects again under the new name; the journal names it so.")
+        .sheet(item: $renaming) { d in
+            RenameDeviceSheet(name: d.name) { rename(d, to: $0) }
         }
         .confirmationDialog(removing.map { "Remove “\($0.name)”?" } ?? "",
                             isPresented: Binding(get: { removing != nil }, set: { if !$0 { removing = nil } }), presenting: removing) { d in
@@ -221,6 +214,50 @@ enum PairStep {
     case adding
     case paired(AppAPI.Device)
     case failed(String)
+}
+
+/// Rename Device's name: the link connects again under the new one.
+struct RenameDeviceSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let rename: (String) -> Void
+    @State private var name: String
+    @FocusState private var focused: Bool
+
+    init(name: String, rename: @escaping (String) -> Void) {
+        self.rename = rename
+        _name = State(initialValue: name)
+    }
+
+    /// What Rename sends: the name without its edges; empty means no.
+    static func clean(_ name: String) -> String { name.trimmingCharacters(in: .whitespaces) }
+
+    var body: some View {
+        FlatSheet(width: 440) {
+            SheetTitle("Rename Device", detail: "Its link connects again under the new name; the journal names it so.")
+        } content: {
+            SheetBody {
+                TextField("Name", text: $name)
+                    .sheetField()
+                    .focused($focused)
+                    .accessibilityLabel("Name")
+                    .onSubmit(commit)
+            }
+        } footer: {
+            Button("Cancel", role: .cancel) { dismiss() }
+                .keyboardShortcut(.cancelAction)
+            Button("Rename", action: commit)
+                .buttonStyle(.flatPrimary)
+                .keyboardShortcut(.defaultAction)
+                .disabled(Self.clean(name).isEmpty)
+        }
+        .onAppear { focused = true }
+    }
+
+    private func commit() {
+        guard !Self.clean(name).isEmpty else { return }
+        rename(Self.clean(name))
+        dismiss()
+    }
 }
 
 /// Pair iPhone…: a code from device.pair shown as a QR code with its
