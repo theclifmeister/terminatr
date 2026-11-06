@@ -140,6 +140,51 @@ func TestModViewCursor(t *testing.T) {
 	}
 }
 
+// TestModViewFilter: a mod hears what its view's filter says as ui.filter,
+// on each change, one send at a time with those typed meanwhile down to
+// the latest; not at all while there is none, and again once the view was
+// hidden and shows again with one.
+func TestModViewFilter(t *testing.T) {
+	src, m := panelDash(t)
+	m.openTab("alpha", tabCount, 0)
+	filters := func() (out []string) {
+		for _, p := range src.inputs {
+			if p.Kind == widget.EventFilter {
+				if p.Mod != "panel" || p.View != "queue" || p.Project != "alpha" || p.Widget != "q" {
+					t.Fatalf("input %+v", p)
+				}
+				out = append(out, p.Filter)
+			}
+		}
+		return out
+	}
+	drain(t, m, m.setModViews(modViewsMsg{res: src.modViews}))
+	if got := filters(); len(got) != 0 {
+		t.Fatalf("no filter, yet told: %q", got)
+	}
+	press(m, "/")
+	sent := press(m, "f")
+	if press(m, "i", "x") != nil {
+		t.Error("a second send while one is on its way")
+	}
+	drain(t, m, sent)
+	if got := filters(); !slices.Equal(got, []string{"f", "fix"}) {
+		t.Fatalf("typed: %q", got)
+	}
+	press(m, "enter")
+	m.pop()
+	drain(t, m, m.setModViews(modViewsMsg{res: src.modViews}))
+	m.openTab("alpha", tabCount, 0)
+	drain(t, m, m.setModViews(modViewsMsg{res: src.modViews}))
+	if got := filters(); !slices.Equal(got, []string{"f", "fix", "fix"}) {
+		t.Fatalf("shown again: %q", got)
+	}
+	drain(t, m, press(m, "esc"))
+	if got := filters(); !slices.Equal(got, []string{"f", "fix", "fix", ""}) {
+		t.Fatalf("dropped: %q", got)
+	}
+}
+
 // TestModViewFailed: a failed mod's tab and card say so, with its log,
 // and show no stale tree.
 func TestModViewFailed(t *testing.T) {
