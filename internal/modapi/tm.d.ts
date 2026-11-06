@@ -28,7 +28,7 @@ export interface TM {
   tasks: {
     /** A project's tasks, in board order. Needs the project_read grant. */
     list(slug: string): Promise<TM.Task[]>;
-    /** A project's done tasks, newest first (mod API 1.16), from tm's task records only, no git, in the server's time zone: with options.groups Done's headings, the newest 7 days with work (at most 30 rows open), then older work by week, then by month, the archive's tasks counted; empty spans have no heading. Otherwise a page of the tasks, by days from options.from to options.to, the archive's too with options.archived, only those with each word of options.query in their id, title or status (mod API 1.20), whatever its case and accents. Needs the project_read grant. */
+    /** A project's done tasks, newest first (mod API 1.16), from tm's task records only, no git, in the server's time zone: with options.groups Done's headings, the newest 7 days with work (at most 30 rows open), then older work by week, then by month, the archive's tasks counted; empty spans have no heading; and mark (mod API 1.21), the line at the human's last action in the journal, when work has finished since. Otherwise a page of the tasks, by days from options.from to options.to, the archive's too with options.archived, only those with each word of options.query in their id, title or status (mod API 1.20), whatever its case and accents. Needs the project_read grant. */
     done(slug: string, options?: TM.DoneOptions): Promise<TM.DoneTasks>;
   };
   designs: {
@@ -383,6 +383,14 @@ export declare namespace TM {
     next: number;
   }
 
+  interface DoneMark {
+    at: string;
+    title: string;
+    group: number;
+    rows: number;
+    between: boolean;
+  }
+
   interface DoneOptions {
     groups?: boolean;
     reveal?: string;
@@ -399,6 +407,7 @@ export declare namespace TM {
     groups: DoneGroup[];
     total: number;
     next: number;
+    mark?: DoneMark;
   }
 
   interface FetchOptions {

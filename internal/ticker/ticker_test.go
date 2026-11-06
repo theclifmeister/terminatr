@@ -1203,3 +1203,51 @@ func (h *fakeHost) Wake(slug string) (string, bool) {
 	}
 	return "", false
 }
+
+// TestIdleNoReport: a thread whose turn ended short (T960's API error) is
+// told once after a rest, and the item goes when it moves on (T1100).
+func TestIdleNoReport(t *testing.T) {
+	r := newRig(t)
+	r.sweep(0)
+	r.host.set("s-2", "idle", "")
+	r.sweep(time.Second)
+	r.sweep(idleNoReportAfter - 2*time.Second)
+	if k := r.kinds(); k != "" {
+		t.Fatalf("told too soon: %s", k)
+	}
+	r.sweep(2 * time.Second)
+	items := r.items()
+	if len(items) != 1 || items[0].Kind != KindIdleNoReport || items[0].NeedsUser || !strings.Contains(items[0].Summary, "(t-0001) is idle with no report") {
+		t.Fatalf("idle with no report: %+v", items)
+	}
+	r.sweep(time.Hour)
+	if k := r.kinds(); k != KindIdleNoReport {
+		t.Fatalf("told twice: %s", k)
+	}
+	// It carries on: the item goes, and a new rest is told anew.
+	r.host.set("s-2", "working", "")
+	r.sweep(time.Second)
+	if k := r.kinds(); k != "" {
+		t.Fatalf("item stayed: %s", k)
+	}
+	// A question for the user has its own item; a report ends it.
+	r.host.set("s-2", "idle", "")
+	if _, err := thread.UpdateStatus(r.p, "t-0001", func(st *thread.Status) error { st.NeedsYou = "which?"; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	r.sweep(time.Second)
+	r.sweep(2 * idleNoReportAfter)
+	if k := r.kinds(); k != "" {
+		t.Fatalf("told while waiting for the user: %s", k)
+	}
+	if _, err := thread.UpdateStatus(r.p, "t-0001", func(st *thread.Status) error { st.NeedsYou = ""; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	thread.Update(r.p, "t-0001", func(x *thread.Record) error { x.Reports, x.ReportAt = 1, r.now; return nil })
+	r.sweep(2 * idleNoReportAfter)
+	for _, it := range r.items() {
+		if it.Kind == KindIdleNoReport {
+			t.Fatalf("told after a report: %+v", it)
+		}
+	}
+}

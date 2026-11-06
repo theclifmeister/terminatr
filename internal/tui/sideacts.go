@@ -144,6 +144,8 @@ func sideMenuItems(r treeRow, popups bool) []sideMenuItem {
 	case treeCoordinator:
 		add(sideMenuItem{label: coordLabel(r), enter: true, act: menuOpen})
 		popup("project popup", "A")
+	case treePeerTask:
+		add(sideMenuItem{label: "show its project's dashboard", enter: true, act: menuOpen})
 	case treePeerProject:
 		// A paired server's: its read-only dashboard, and its fold.
 		add(sideMenuItem{label: "show its dashboard", enter: true, act: menuOpen})

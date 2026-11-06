@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -90,9 +91,14 @@ type fakeSource struct {
 	selfSet []string
 	// popup and popupErr are PeerPopup's answer; popups its calls,
 	// "alias/slug".
-	popup        proto.PeerPopup
-	popupErr     error
-	popups       []string
+	popup    proto.PeerPopup
+	popupErr error
+	popups   []string
+	// boards and boardErr are PeerBoard's answers, by "alias/slug";
+	// boardReads counts its calls.
+	boards       map[string]proto.PeerPages
+	boardErr     error
+	boardReads   atomic.Int32
 	unpinned     []string                  // aliases unpaired in the Network popup
 	panesSet     []string                  // "alias level" set in the Network popup
 	convSet      []string                  // "alias on" set in the Network popup
@@ -428,6 +434,13 @@ func (f *fakeSource) Peers() (PeerList, error) { return f.peers, f.peerErr }
 func (f *fakeSource) PeerPopup(alias, slug string) (proto.PeerPopup, error) {
 	f.popups = append(f.popups, alias+"/"+slug)
 	return f.popup, f.popupErr
+}
+func (f *fakeSource) PeerBoard(alias, slug string) (proto.PeerPages, error) {
+	f.boardReads.Add(1)
+	if f.boardErr != nil {
+		return proto.PeerPages{}, f.boardErr
+	}
+	return f.boards[alias+"/"+slug], nil
 }
 func (f *fakeSource) SetPeerPanes(alias, level string) error {
 	f.panesSet = append(f.panesSet, alias+" "+level)

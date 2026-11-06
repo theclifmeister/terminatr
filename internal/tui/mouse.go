@@ -547,6 +547,8 @@ func (m *dash) sideMenu(mo tea.Mouse) tea.Cmd {
 		title = r.slug + " director"
 	case treePeerProject:
 		title = r.server() + " / " + r.slug
+	case treePeerTask:
+		title = r.server() + " / " + r.name
 	default:
 		title = r.thread
 	}

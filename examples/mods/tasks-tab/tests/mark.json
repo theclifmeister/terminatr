@@ -1,0 +1,227 @@
+{
+  "name": "the line at the user's last action stands among a group's rows, a rule the cursor skips; folding the group hides it",
+  "answers": [
+    {
+      "method": "tasks.list",
+      "params": {
+        "slug": "demo"
+      },
+      "result": []
+    },
+    {
+      "method": "tasks.done",
+      "params": {
+        "slug": "demo",
+        "options": {
+          "groups": true,
+          "reveal": ""
+        }
+      },
+      "result": {
+        "tasks": [],
+        "total": 4,
+        "next": 0,
+        "groups": [
+          {
+            "kind": "day",
+            "title": "Today",
+            "from": "2026-11-06",
+            "to": "2026-11-06",
+            "count": 1,
+            "archived": 0,
+            "open": true,
+            "tasks": [
+              {
+                "id": "T4",
+                "title": "Task 4",
+                "status": "done",
+                "steps_done": 0,
+                "steps_total": 0,
+                "steps": [],
+                "updated": "2026-11-06",
+                "done_at": "2026-11-06T09:16:00Z",
+                "done_label": "09:16"
+              }
+            ],
+            "next": 0
+          },
+          {
+            "kind": "day",
+            "title": "Yesterday",
+            "from": "2026-11-05",
+            "to": "2026-11-05",
+            "count": 3,
+            "archived": 0,
+            "open": true,
+            "tasks": [
+              {
+                "id": "T3",
+                "title": "Task 3",
+                "status": "done",
+                "steps_done": 0,
+                "steps_total": 0,
+                "steps": [],
+                "updated": "2026-11-05",
+                "done_at": "2026-11-05T23:39:00Z",
+                "done_label": "5 Nov 23:39"
+              },
+              {
+                "id": "T2",
+                "title": "Task 2",
+                "status": "done",
+                "steps_done": 0,
+                "steps_total": 0,
+                "steps": [],
+                "updated": "2026-11-05",
+                "done_at": "2026-11-05T22:53:00Z",
+                "done_label": "5 Nov 22:53"
+              },
+              {
+                "id": "T1",
+                "title": "Task 1",
+                "status": "done",
+                "steps_done": 0,
+                "steps_total": 0,
+                "steps": [],
+                "updated": "2026-11-05",
+                "done_at": "2026-11-05T09:00:00Z",
+                "done_label": "5 Nov 09:00"
+              }
+            ],
+            "next": 0
+          }
+        ],
+        "mark": {
+          "at": "2026-11-05T22:14:00Z",
+          "title": "you last acted at 23:14 on the iPhone",
+          "group": 1,
+          "rows": 1,
+          "between": false
+        }
+      }
+    }
+  ],
+  "events": [
+    {
+      "name": "view.opened",
+      "project": "demo",
+      "data": {
+        "view": "tasks",
+        "slot": "project.tab",
+        "project": "demo",
+        "width": 70,
+        "height": 20
+      }
+    },
+    {
+      "name": "ui.key",
+      "project": "demo",
+      "data": {
+        "view": "tasks",
+        "widget": "tasks",
+        "key": "b",
+        "target": {
+          "project": "demo"
+        }
+      }
+    },
+    {
+      "name": "ui.key",
+      "project": "demo",
+      "data": {
+        "view": "tasks",
+        "widget": "tasks",
+        "key": "enter",
+        "row": "f:2026-11-05:2026-11-05",
+        "target": {
+          "project": "demo"
+        }
+      }
+    }
+  ],
+  "expect": {
+    "calls": [
+      {
+        "method": "ui.view.set",
+        "params": {
+          "view": "tasks",
+          "widget": {
+            "kind": "stack",
+            "children": [
+              {
+                "kind": "table",
+                "rows": [
+                  {
+                    "id": "g:done"
+                  },
+                  {
+                    "id": "f:2026-11-06:2026-11-06"
+                  },
+                  {
+                    "id": "T4"
+                  },
+                  {
+                    "id": "f:2026-11-05:2026-11-05"
+                  },
+                  {
+                    "id": "T3"
+                  },
+                  {
+                    "id": "y:mark",
+                    "head": true,
+                    "spans": [
+                      {
+                        "text": "── you last acted at 23:14 on the iPhone",
+                        "role": "accent"
+                      }
+                    ]
+                  },
+                  {
+                    "id": "T2"
+                  },
+                  {
+                    "id": "T1"
+                  }
+                ]
+              },
+              {
+                "kind": "keys"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "method": "ui.view.set",
+        "params": {
+          "view": "tasks",
+          "widget": {
+            "kind": "stack",
+            "children": [
+              {
+                "kind": "table",
+                "rows": [
+                  {
+                    "id": "g:done"
+                  },
+                  {
+                    "id": "f:2026-11-06:2026-11-06"
+                  },
+                  {
+                    "id": "T4"
+                  },
+                  {
+                    "id": "f:2026-11-05:2026-11-05"
+                  }
+                ]
+              },
+              {
+                "kind": "keys"
+              }
+            ]
+          }
+        }
+      }
+    ]
+  }
+}

@@ -35,6 +35,9 @@ type AgentConfig struct {
 	// Kickoff says the agent was launched with a first prompt: it reads
 	// as working until it starts on it (agent.Tracker.AwaitKickoff).
 	Kickoff bool
+	// CountRuns says a background command the agent started reads as
+	// working (agent.Tracker.CountRuns): a thread's.
+	CountRuns bool
 	// Home is the user's home directory, for status-file and snapshot
 	// path templates.
 	Home string
@@ -269,6 +272,9 @@ func newAgentRT(cfg AgentConfig, pid int, observed bool) (*agentRT, error) {
 	}
 	if cfg.Kickoff && !observed {
 		rt.tr.AwaitKickoff()
+	}
+	if cfg.CountRuns {
+		rt.tr.CountRuns()
 	}
 	return rt, nil
 }
@@ -1194,7 +1200,7 @@ func (c *screenClock) due(now time.Time, output *atomic.Bool, paste bool) bool {
 // pasteWaits reports whether a queued prompt waits for the paste
 // injector: the agent idle, so deliverPrompts may paste it this tick.
 func (rt *agentRT) pasteWaits() bool {
-	if rt.tr.State().State != agent.StateIdle {
+	if !rt.tr.State().AtPrompt() {
 		return false
 	}
 	rt.mu.Lock()
@@ -1295,7 +1301,7 @@ func (s *Session) SetPromptToken(token string) {
 // queue forever: through the channel when it allows that, else dropped.
 func (s *Session) deliverPrompts(rt *agentRT, now time.Time) {
 	st := rt.tr.State()
-	idle := st.State == agent.StateIdle
+	idle := st.AtPrompt()
 	rt.mu.Lock()
 	if len(rt.prompts) == 0 {
 		rt.heldSince, rt.heldWhy = time.Time{}, ""

@@ -1461,7 +1461,7 @@ func TestGuardIgnoresNoFields(t *testing.T) {
 				t.Errorf("%s: an ignored event set state %+v", name, s)
 			}
 		}
-		if out := FailClosed(a, "PreToolUse", payload); !strings.Contains(string(out), "tm couldn't check this call") {
+		if out := FailClosed(a, "PreToolUse", payload, guard.CauseNoServer); !strings.Contains(string(out), "tm couldn't check this call (its server isn't running)") {
 			t.Errorf("%s: fail closed with agent_id: %q", name, out)
 		}
 	}

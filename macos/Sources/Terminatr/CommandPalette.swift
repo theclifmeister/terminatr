@@ -194,7 +194,8 @@ struct CommandPalette: View {
         if let c = r.command {
             // These take the keyboard themselves.
             switch c {
-            case .filter, .find, .files: sections.forget()
+            case .filter: sections.handOff()
+            case .find, .files: sections.forget()
             default: break
             }
             run(c)

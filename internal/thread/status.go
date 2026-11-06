@@ -155,7 +155,8 @@ func ReadStatus(p *project.Project, id string) (*Status, error) {
 // UpdateStatus is a locked read-modify-write of STATUS.md: fn changes the
 // inputs (todos, self-report, done), then the derived fields are
 // recomputed from the linked task's steps. fn may be nil to refresh after
-// a step change.
+// a step change. Done follows the record (Record.DoneSince), so call this
+// after a prompt too: tm done counts until the next one.
 func UpdateStatus(p *project.Project, id string, fn func(st *Status) error) (*Status, error) {
 	r, err := Load(p, id)
 	if err != nil {
@@ -180,6 +181,8 @@ func UpdateStatus(p *project.Project, id string, fn func(st *Status) error) (*St
 				return nil, err
 			}
 		}
+		// The record says: a later prompt gives the thread work again.
+		st.Done = !r.DoneSince().IsZero()
 		before := *st
 		now := time.Now().UTC().Truncate(time.Second)
 		st.Derive(steps, now)

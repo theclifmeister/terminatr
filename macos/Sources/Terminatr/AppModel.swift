@@ -126,6 +126,8 @@ final class AppModel {
     private(set) var firstChoice = 0
     /// Bumped by ⌥⌘F: the sidebar's filter field takes the focus.
     private(set) var filterFocus = 0
+    /// ⌥⌘F opened the sidebar's filter; it stays while it has words.
+    var filterOpen = false
     /// The sidebar's filter: what its rows must match.
     var filter = ""
     /// Whether the command palette (⌘K) shows.
@@ -797,9 +799,26 @@ final class AppModel {
         find = FindRequest(n: find.n + 1, step: step)
     }
 
-    /// ⌥⌘F: the sidebar's filter field.
+    /// ⌥⌘F: the sidebar's filter field, on the main window, which takes the
+    /// keys for it as for the palette. It opens from the model: the sidebar
+    /// may not be there to hear it, its window closed or itself hidden.
     func focusFilter() {
-        filterFocus += 1
+        // A sidebar that appears as its window becomes key has no keys for
+        // its field: the window goes first, the sidebar a pass later.
+        let late = !sidebarShown && NSApp.keyWindow?.identifier?.rawValue.hasPrefix(TerminatrApp.mainWindow) != true
+        let open = {
+            self.sidebarShown = true
+            self.filterOpen = true
+            self.filterFocus += 1
+        }
+        showWindow?()
+        if late {
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated { open() }
+            }
+        } else {
+            open()
+        }
     }
 
     func goBack() { nav.goBack() }

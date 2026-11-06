@@ -649,7 +649,7 @@ func (s *Server) hookGuardOf(id string) func(string, map[string]any) *guard.Deni
 		rec, ok := s.records[id]
 		s.mu.Unlock()
 		if !ok {
-			return guard.Unchecked()
+			return guard.CauseNoSession.Denial()
 		}
 		judge, limit := judgeCall, judgeLimit
 		deadline := time.Now().Add(limit)

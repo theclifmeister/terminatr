@@ -28,6 +28,8 @@ final class SectionFocusOwner {
     private(set) var ask: (section: WindowSection, id: Int)?
     /// What had the keyboard when the palette took it.
     @ObservationIgnored private var covered: KeyboardHolder?
+    /// The palette is closing on a field that takes the keyboard (handOff).
+    @ObservationIgnored private var handedOff = false
     @ObservationIgnored fileprivate var marks: [WindowSection: WeakView] = [:]
     @ObservationIgnored fileprivate weak var window: NSWindow?
 
@@ -49,6 +51,13 @@ final class SectionFocusOwner {
     /// The palette closes on something that takes the keyboard itself.
     func forget() { covered = nil }
 
+    /// It may not have it yet as the palette goes: the rehome of that close
+    /// would send the keyboard home ahead of it.
+    func handOff() {
+        forget()
+        handedOff = true
+    }
+
     /// After the pass that takes the palette's field away. What has gone too
     /// is left to rehome.
     fileprivate func uncover() {
@@ -65,6 +74,10 @@ final class SectionFocusOwner {
     /// has it, where it belongs takes it back, so the border never says a
     /// section holds keys that reach nothing.
     func rehome() {
+        if handedOff {
+            handedOff = false
+            return
+        }
         DispatchQueue.main.async { [weak self] in
             MainActor.assumeIsolated {
                 guard let self, let window = self.window, !self.paused, self.windowHasKeys,

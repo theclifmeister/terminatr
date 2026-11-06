@@ -62,7 +62,11 @@ func (s *Session) PromptNow(text string, interrupt bool) (via, why string, err e
 	if rt == nil {
 		return "", "", ErrNoAgent
 	}
-	st := rt.tr.State().State
+	m := rt.tr.State()
+	st := m.State
+	if m.AtPrompt() {
+		st = agent.StateIdle
+	}
 	switch {
 	case st == agent.StateExited:
 		return "", "", ErrExited

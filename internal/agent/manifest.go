@@ -715,7 +715,11 @@ func (m *Manifest) validate() error {
 			}
 		}
 		for i, r := range t.Rules {
-			if !valid[r.State] || r.State == "" {
+			if r.Counter != "" {
+				if err := r.validateCounter(); err != nil {
+					errs = append(errs, fmt.Errorf("jsonl_tail.rules[%d]: %w", i, err))
+				}
+			} else if !valid[r.State] || r.State == "" {
 				errs = append(errs, fmt.Errorf("jsonl_tail.rules[%d]: unknown state %q", i, r.State))
 			}
 		}
@@ -1028,10 +1032,10 @@ func GuardEvent(a Agent, event string) bool {
 
 // FailClosed is what agent a's hook answers to event when the guard's
 // verdict didn't come (no server, a timeout, a refusal, a payload tm
-// hook couldn't read): its own response with guard.Unchecked as the
+// hook couldn't read): its own response with why's refusal as the
 // verdict, so the call is refused, never let through unjudged; nil for
 // an event the guard doesn't answer. payload may be nil.
-func FailClosed(a Agent, event string, payload map[string]any) []byte {
+func FailClosed(a Agent, event string, payload map[string]any, why guard.Cause) []byte {
 	if !GuardEvent(a, event) {
 		return nil
 	}
@@ -1046,7 +1050,7 @@ func FailClosed(a Agent, event string, payload map[string]any) []byte {
 		p[m.Hook.ToolField()] = "unknown"
 	}
 	_, res, err := a.Hook(HookEvent{Agent: a.Name(), Event: event, Payload: p},
-		HookEnv{Guard: func(string, map[string]any) *guard.Denial { return guard.Unchecked() }})
+		HookEnv{Guard: func(string, map[string]any) *guard.Denial { return why.Denial() }})
 	if err != nil {
 		return nil
 	}
@@ -1448,7 +1452,7 @@ func (d *respondData) Guard() *guard.Denial {
 	input, _ := d.ev.Payload[d.hook.InputField()].(map[string]any)
 	if tool == "" {
 		// A call that names no tool can't be judged: refused.
-		d.denial = guard.Unchecked()
+		d.denial = guard.CauseNoTool.Denial()
 		return d.denial
 	}
 	d.denial = d.env.Guard(tool, d.located(tool, input))

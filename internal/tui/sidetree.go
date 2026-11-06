@@ -35,6 +35,9 @@ const (
 	treePeerProject
 	treePeerCoord
 	treePeerThread
+	// A paired project's open task: only among a filter's matches
+	// (sideboards.go), drawn as a thread.
+	treePeerTask
 	// The PROJECTS header as the cursor's row (headRow): never in the
 	// tree, drawn as its header.
 	treeHead
@@ -157,6 +160,8 @@ type treeRow struct {
 	// have it too: the same mirror entry as under its server group, with
 	// keys and folds of their own (sideprograms.go).
 	prog string
+	// pages: a paired project whose pages switch is on for this server.
+	pages bool
 	// label is a project row's name in place of its slug: a paired
 	// member under its program, alias/slug. tag is a dim word after the
 	// name: the program of a paired project under its server's group.
@@ -205,7 +210,7 @@ func (r treeRow) key() string {
 		return dividerKey
 	case treeSection:
 		return "s:" + r.sec.id
-	case treeServer, treePeerProject, treePeerCoord, treePeerThread:
+	case treeServer, treePeerProject, treePeerCoord, treePeerThread, treePeerTask:
 		return peerKey(r)
 	case treeHead:
 		return headKey
@@ -1120,7 +1125,7 @@ func (r treeRow) target() (t Target, ok bool, why string) {
 		// Every project's NEEDS YOU.
 		return Target{Project: allProjects}, true, ""
 	}
-	if r.kind == treePeerProject {
+	if r.kind == treePeerProject || r.kind == treePeerTask {
 		// Its read-only dashboard (peerdash.go).
 		return Target{Project: peerFold(r.peer, r.slug)}, true, ""
 	}
@@ -1167,7 +1172,7 @@ const previewDelay = 200 * time.Millisecond
 // anything. ok is false on the row you are on, which already shows, and
 // on the inactive divider, which shows nothing.
 func (r treeRow) preview() (t Target, ok bool) {
-	if r.kind == treePeerProject && !r.here {
+	if (r.kind == treePeerProject || r.kind == treePeerTask) && !r.here {
 		return Target{Project: peerFold(r.peer, r.slug)}, true
 	}
 	if r.kind == treeHead && !r.here {

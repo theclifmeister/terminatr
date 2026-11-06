@@ -154,16 +154,27 @@
     const mark = isOpen(t, g) ? "" : "  ▸";
     return { id: "f:" + key(g), spans: [{ text: g.title, role: isOpen(t, g) ? void 0 : "faint" }, { text: ` · ${g.count}${mark}`, role: "faint" }] };
   }
+  function markRow(m) {
+    return { id: "y:mark", head: true, spans: [{ text: `── ${m.title}`, role: "accent" }] };
+  }
   function doneRows(project, t, prio) {
     const rows = [{ id: "g:done", head: true, spans: [{ text: `DONE · ${t.total}`, role: "head" }, { text: "  newest first   b hides   ⏎ opens", role: "faint" }] }];
-    for (const g of t.groups) {
+    const mark = t.mark;
+    t.groups.forEach((g, i) => {
+      if ((mark == null ? void 0 : mark.between) && mark.group === i) rows.push(markRow(mark));
       rows.push(foldRow(t, g));
-      if (!isOpen(t, g)) continue;
+      if (!isOpen(t, g)) return;
       const f = t.rows.get(key(g));
-      if (!f) continue;
-      for (const task of f.tasks) rows.push(row(project, task, prio, g.kind === "day"));
+      if (!f) return;
+      const at = mark && !mark.between && mark.group === i ? Math.min(mark.rows, f.tasks.length) : -1;
+      f.tasks.forEach((task, n) => {
+        if (n === at) rows.push(markRow(mark));
+        rows.push(row(project, task, prio, g.kind === "day"));
+      });
+      if (at === f.tasks.length) rows.push(markRow(mark));
       if (f.next > 0) rows.push({ id: "m:" + key(g), spans: [{ text: `  … ${g.count - f.tasks.length} more`, role: "faint" }] });
-    }
+    });
+    if ((mark == null ? void 0 : mark.between) && mark.group >= t.groups.length) rows.push(markRow(mark));
     return rows;
   }
   function foundRows(project, t, prio) {
@@ -333,6 +344,7 @@
     const res = await $.tasks.done(project, { groups: true, reveal: t.reveal });
     t.groups = res.groups;
     t.total = res.total;
+    t.mark = res.mark;
     const was = t.rows;
     t.rows = /* @__PURE__ */ new Map();
     for (const g of t.groups) {

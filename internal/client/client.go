@@ -161,6 +161,16 @@ func Connect(p Paths, autostart bool) (*Client, error) { return ConnectAs(p, aut
 // ConnectAs is Connect whose connection names its console name in its
 // hello (DialAs).
 func ConnectAs(p Paths, autostart bool, name string) (*Client, error) {
+	return connect(p, autostart, true, name)
+}
+
+// ConnectRunning is Connect without autostart for a caller that is only
+// asking something: it waits for a server that is starting as Connect does,
+// and leaves what a crashed server left behind for tm doctor to report and
+// its --fix to remove after confirmation.
+func ConnectRunning(p Paths) (*Client, error) { return connect(p, false, false, "") }
+
+func connect(p Paths, autostart, clean bool, name string) (*Client, error) {
 	c, err := DialAs(p, name)
 	if err == nil {
 		return c, nil
@@ -184,7 +194,9 @@ func ConnectAs(p Paths, autostart bool, name string) (*Client, error) {
 	lk, lerr := flock.TryLock(p.Lock)
 	switch {
 	case lerr == nil:
-		removeStale(p)
+		if clean {
+			removeStale(p)
+		}
 		lk.Unlock()
 		if !autostart {
 			return nil, ErrNotRunning

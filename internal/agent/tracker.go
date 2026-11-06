@@ -34,6 +34,8 @@ type Tracker struct {
 	screen   screenObs
 	seq      map[string]uint64
 	counters map[string]map[string]bool // name -> keys running
+	runs     map[string]time.Time       // background commands running, by key, since when
+	useRuns  bool                       // CountRuns
 	agentSID string
 	sidAt    time.Time
 	todos    []Todo
@@ -50,6 +52,20 @@ type kickoffWait struct {
 	on        bool
 	idleSince time.Time // when the agent first looked idle while waiting
 }
+
+// ReasonBackgroundRun is the reason of the working state an idle agent
+// shows while a command it started in the background runs (CountRuns). It
+// waits at its prompt all the same, so a prompt is delivered (AtPrompt).
+const ReasonBackgroundRun = "background run"
+
+// runCounter is the counter of background commands: a manifest's "+run"
+// and "-run".
+const runCounter = "run"
+
+// backgroundRunMax is how long a background command reads as work: an
+// agent can leave a server running, or its end can go unseen, and that
+// must not look busy forever.
+const backgroundRunMax = time.Hour
 
 // ReasonKickoff is the reason of the working state an idle agent shows
 // while its kickoff prompt is pending (Tracker.AwaitKickoff).
@@ -127,6 +143,16 @@ func (t *Tracker) AwaitKickoff() {
 	t.kickoff = kickoffWait{on: true}
 }
 
+// CountRuns says a background command the agent started (the run counter)
+// turns idle into working. Off, it counts for nothing: a coordinator's
+// nudges wait for idle, and it may watch something in the background for
+// long.
+func (t *Tracker) CountRuns() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.useRuns = true
+}
+
 // sawState ends the kickoff wait once a source sees the agent at work.
 // The screen's blocked state doesn't count: a trust dialog comes before
 // the kickoff.
@@ -165,6 +191,7 @@ func (t *Tracker) Hook(ev HookEvent, sigs []Signal) (sidChanged bool) {
 		case s.AgentSID != "":
 			if s.AgentSID != t.agentSID {
 				t.agentSID, sidChanged = s.AgentSID, true
+				t.runs = nil // a new conversation: their ends are told in the old one
 				rec.Signals = append(rec.Signals, "session "+s.AgentSID)
 			}
 			t.sidAt = at
@@ -235,6 +262,18 @@ func eventDetail(p map[string]any) string {
 
 func (t *Tracker) count(c, key string) {
 	name := c[1:]
+	if name == runCounter {
+		switch {
+		case c[0] == '-':
+			delete(t.runs, key)
+		case t.useRuns:
+			if t.runs == nil {
+				t.runs = map[string]time.Time{}
+			}
+			t.runs[key] = t.now()
+		}
+		return
+	}
 	m := t.counters[name]
 	if m == nil {
 		m = map[string]bool{}
@@ -283,6 +322,10 @@ func (t *Tracker) Status(r *StatusReading, written time.Time, err error) (sidCha
 func (t *Tracker) Tail(s Signal) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if s.Counter != "" {
+		t.count(s.Counter, s.CounterKey)
+		return
+	}
 	s.At = t.now()
 	t.tail = &s
 	t.sawState(s.State, false)
@@ -357,6 +400,12 @@ type Merged struct {
 	// Sources names the sources the state was derived from, e.g.
 	// "status_file+screen" or "hooks+screen".
 	Sources string `json:"sources,omitempty"`
+}
+
+// AtPrompt reports whether the agent waits at its prompt, so a prompt can
+// be delivered: it's idle, or only its background commands are at work.
+func (m Merged) AtPrompt() bool {
+	return m.State == StateIdle || m.Reason == ReasonBackgroundRun
 }
 
 // State arbitrates the current state.
@@ -450,6 +499,10 @@ func (t *Tracker) settle(m Merged, used []string) Merged {
 		m.State, m.Reason = StateWorking, "background"
 		used = append(used, "counters")
 	}
+	if m.State == StateIdle && t.runsGoing() {
+		m.State, m.Reason = StateWorking, ReasonBackgroundRun
+		used = append(used, "counters")
+	}
 	// Rule 4b: a kickoff prompt not started on yet.
 	if m.State == StateIdle && t.kickoff.on {
 		now := t.now()
@@ -497,6 +550,17 @@ func (t *Tracker) running() int {
 		n += len(m)
 	}
 	return n
+}
+
+// runsGoing reports a background command younger than backgroundRunMax.
+func (t *Tracker) runsGoing() bool {
+	now := t.now()
+	for _, since := range t.runs {
+		if now.Sub(since) < backgroundRunMax {
+			return true
+		}
+	}
+	return false
 }
 
 func dedupe(s []string) []string {

@@ -623,7 +623,11 @@ func modDone(p *project.Project, o modapi.DoneOptions, now time.Time) (modapi.Do
 	}
 	out.Total = len(done)
 	reveal, _ := tasks.ParseRef(o.Reveal)
-	for _, g := range tasks.GroupDone(done, now, reveal) {
+	groups := tasks.GroupDone(done, now, reveal)
+	if m := markDone(p, groups, done, now); m != nil {
+		out.Mark = &modapi.DoneMark{At: m.At.UTC().Format(time.RFC3339), Title: m.Title, Group: m.Group, Rows: m.Rows, Between: m.Between}
+	}
+	for _, g := range groups {
 		out.Groups = append(out.Groups, modapi.DoneGroup{Kind: g.Kind, Title: g.Title, From: g.From, To: g.To,
 			Count: g.Count, Archived: g.Archived, Open: g.Open, Tasks: rows(g.Tasks), Next: g.Next})
 	}

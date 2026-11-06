@@ -50,6 +50,7 @@ const (
 	KindBlocked       = "blocked"
 	KindIdle          = "idle"
 	KindExited        = "exited"
+	KindIdleNoReport  = "idle-no-report"
 	KindServerRestart = "server-restart"
 	KindPROpened      = "pr-opened"
 	KindPRChecks      = "pr-checks-failed"
@@ -235,6 +236,10 @@ type threadMemo struct {
 	NoPR      string `json:"no_pr,omitempty"`
 	Resolving bool   `json:"resolving,omitempty"` // auto-close tried once
 	Held      string `json:"held,omitempty"`      // unsaved work an item was raised for
+	// IdleSince is when the thread went idle with no report since its
+	// last prompt; IdleTold says an item said so (idleNoReport).
+	IdleSince time.Time `json:"idle_since,omitzero"`
+	IdleTold  bool      `json:"idle_told,omitempty"`
 	// IgnoredPR is a report's PR line found to name a PR of another
 	// branch (T728): the PR is looked up by the branch alone after.
 	IgnoredPR string `json:"ignored_pr,omitempty"`
@@ -823,6 +828,7 @@ func (t *Ticker) sweepThreads(p *project.Project, sessions []proto.SessionInfo, 
 			t.item(p, KindExited, r.ID, fmt.Sprintf("%s's session exited (tm thread restart %s, or resolve it)", r.ID, r.ID), false)
 		}
 		m.Agent, m.Reason = cur, reason
+		t.idleNoReport(p, r, m, cur, now)
 
 		// A prompt stuck in the queue (§7.5): a thread that never goes idle.
 		if live && info.Queued > 0 && !info.QueuedSince.IsZero() && now.Sub(info.QueuedSince) >= PromptWait && !m.PromptWarned.Equal(info.QueuedSince) {
@@ -849,6 +855,43 @@ func (t *Ticker) sweepThreads(p *project.Project, sessions []proto.SessionInfo, 
 		t.autoClose(p, r, m, cur, safety, now)
 	}
 	return merged
+}
+
+// idleNoReportAfter is how long a thread may rest with no report before
+// the coordinator hears: its turn ended without it finishing (an API error
+// ends one so), and nothing else says so.
+const idleNoReportAfter = 10 * time.Minute
+
+// idleNoReport raises an item, once per rest, for a thread idle that long
+// with no report or tm done since its last prompt, and no question for the
+// user; the item goes once the thread moves on or reports.
+func (t *Ticker) idleNoReport(p *project.Project, r *thread.Record, m *threadMemo, cur string, now time.Time) {
+	reported := r.Reports > 0 && !r.ReportAt.Before(r.LastPrompt)
+	if cur != "idle" || reported || !r.DoneSince().IsZero() {
+		if m.IdleTold {
+			if err := p.DoneItems(KindIdleNoReport, r.ID); err != nil {
+				t.o.Log.Printf("ticker: %s: inbox: %v", p.Slug, err)
+			}
+		}
+		m.IdleSince, m.IdleTold = time.Time{}, false
+		return
+	}
+	if m.IdleSince.IsZero() {
+		m.IdleSince = now
+	}
+	if m.IdleTold || now.Sub(m.IdleSince) < idleNoReportAfter {
+		return
+	}
+	st, err := thread.ReadStatus(p, r.ID)
+	if err != nil || st.NeedsYou != "" {
+		return
+	}
+	at := ""
+	if st.StepsTotal > 0 {
+		at = fmt.Sprintf(" at step %d of %d", min(st.StepsDone+1, st.StepsTotal), st.StepsTotal)
+	}
+	t.item(p, KindIdleNoReport, r.ID, fmt.Sprintf("%s is idle%s with no report since its last prompt: it may have stopped short (tm thread read %s; tm thread prompt %s to carry on)", r.ID, at, r.ID, r.ID), false)
+	m.IdleTold = true
 }
 
 // remember raises a remember item for the thread's latest report when it
@@ -1131,7 +1174,7 @@ var subjectRE = regexp.MustCompile(`^(` + tasks.ThreadIDPattern + `|` + tasks.Re
 // verbs are the nudge's words per item kind: fixed text.
 var verbs = map[string]string{
 	"report": "reported", "thread-resolved": "resolved", "needs-you": "waiting for the user",
-	KindBlocked: "blocked", KindIdle: "idle with a report", KindExited: "exited", KindServerRestart: "server restarted",
+	KindBlocked: "blocked", KindIdle: "idle with a report", KindIdleNoReport: "idle with no report", KindExited: "exited", KindServerRestart: "server restarted",
 	KindPROpened: "opened a PR", KindPRChecks: "PR checks failed", KindPRReview: "PR reviewed",
 	KindPRMerged: "PR merged", KindPRClosed: "PR closed", KindTaskDone: "done by the user's setting", KindPRConflict: "PR conflicts with main", KindCloseHeld: "not auto-closed", KindGHFailing: "PR host CLI failing", project.KindTakeover: "taken over by the user",
 	project.KindDelegate: "to delegate (the user's go-ahead)", project.KindAccept: "accepted by the user",

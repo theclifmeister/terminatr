@@ -145,11 +145,18 @@ func sideRows(rows []treeRow, needsFirst bool) []treeRow {
 	if needsFirst {
 		rows = needsFirstOrder(rows)
 	}
-	return filterTree(rows, sideFilterNow().text)
+	q := sideFilterNow().text
+	return filterTree(withBoardTasks(rows, filterWords(q)), q)
 }
 
+// filterWords is the filter's text as filterHit takes it.
+func filterWords(q string) string { return strings.ToLower(strings.TrimSpace(q)) }
+
 // filterHit says r matches q (lower case): a project by its name, a
-// thread by its name, title or id, the coordinator by its word.
+// thread by its name, title or id, the coordinator by its word. A paired
+// server's rows match by the server's name or alias too, and its header
+// by those; a paired task (sideboards.go) only by its id and title, or
+// the server's name would list its whole board.
 func filterHit(r treeRow, q string) bool {
 	switch r.kind {
 	case treeProject, treeProgram:
@@ -160,42 +167,98 @@ func filterHit(r treeRow, q string) bool {
 		return strings.Contains("director", q)
 	case treeThread:
 		return strings.Contains(strings.ToLower(r.name+" "+r.title+" "+r.thread), q)
+	case treeServer:
+		return !r.link.local && peerMatch(r, "", q)
+	case treePeerProject:
+		return peerMatch(r, r.slug, q)
+	case treePeerCoord:
+		return peerMatch(r, "coordinator", q)
+	case treePeerThread:
+		return peerMatch(r, r.name+" "+r.title+" "+r.thread, q)
+	case treePeerTask:
+		return strings.Contains(strings.ToLower(r.name+" "+r.title), q)
 	}
 	return false
 }
 
-// filterTree narrows rows to those matching q, and the project rows over
-// them: the project of a match stays, though it doesn't match itself.
-// Any other row (a divider) goes while filtering.
+// peerMatch says q is in text or in paired row r's server's names.
+func peerMatch(r treeRow, text, q string) bool {
+	return strings.Contains(strings.ToLower(text), q) || strings.Contains(strings.ToLower(r.peer+" "+r.server()), q)
+}
+
+// filterProject is what the filter keeps project rows by: a paired
+// server's project and a same-named one here are two.
+func filterProject(r treeRow) string {
+	if r.peer != "" {
+		return r.peer + "/" + r.slug
+	}
+	return r.slug
+}
+
+// filterTree narrows rows to those matching q, and the rows over them:
+// the project, the program and the server header of a match stay, though
+// they don't match themselves, so a paired match shows under its server's
+// name. The divider stays only where it parts this server's inactive
+// matches from a paired server's; any other row goes while filtering.
 func filterTree(rows []treeRow, q string) []treeRow {
-	q = strings.ToLower(strings.TrimSpace(q))
+	q = filterWords(q)
 	if q == "" {
 		return rows
 	}
-	keep, progs := map[string]bool{}, map[string]bool{}
+	keep, progs, servers := map[string]bool{}, map[string]bool{}, map[string]bool{}
+	inactive, paired := false, false
 	for _, r := range rows {
 		if filterHit(r, q) {
-			keep[r.slug] = true
+			keep[filterProject(r)] = true
 			progs[r.prog] = true
+			// A paired member under its program is in this server's tree.
+			if r.prog != "" {
+				servers[""] = true
+			} else {
+				servers[r.peer] = true
+			}
+			inactive = inactive || r.inactive || r.dormant
+			paired = paired || r.isPeer()
 		}
 	}
 	var out []treeRow
 	for _, r := range rows {
-		switch {
-		case r.kind == treeProgram:
+		switch r.kind {
+		case treeProgram:
 			// The program of a match stays, as a project does.
 			if progs[r.slug] {
 				out = append(out, r)
 			}
-		case r.kind == treeProject && keep[r.slug] || r.kind != treeProject && filterHit(r, q):
-			out = append(out, r)
+		case treeServer:
+			if servers[r.peer] {
+				out = append(out, r)
+			}
+		case treeDivider:
+			if inactive && paired {
+				out = append(out, r)
+			}
+		case treeProject, treePeerProject:
+			if keep[filterProject(r)] {
+				out = append(out, r)
+			}
+		default:
+			if filterHit(r, q) {
+				out = append(out, r)
+			}
 		}
 	}
 	// The last thread kept under its coordinator ends the branch.
+	branch := func(r treeRow) bool {
+		return r.kind == treeThread || r.kind == treePeerThread || r.kind == treePeerTask
+	}
 	for i := range out {
-		if out[i].kind == treeThread {
-			out[i].last = i+1 == len(out) || out[i+1].kind != treeThread
+		if branch(out[i]) {
+			out[i].last = i+1 == len(out) || !branch(out[i+1])
 		}
+	}
+	// A server's header has a blank line above it only below another group.
+	if len(out) > 0 {
+		out[0].gap = false
 	}
 	return out
 }

@@ -22,6 +22,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"github.com/theclifmeister/terminatr/internal/thread"
@@ -43,6 +44,9 @@ const threadUsage = `usage: tm thread <command> [--project <slug>] [--json]
          [--now | --interrupt]   --now steers it into the running turn (read at the
                                  agent's next tool call); --interrupt stops the turn
                                  for it (only on the user's word)
+         [--file F]...           hand it a file: an image, PDF or text file of up to
+                                 25 MB, copied into uploads/, its path on an
+                                 "Attached:" line; the text may then be left out
   approve <id> [--choice N]      answer a permission prompt with "allow once"
   answer <id> [--choice N[,N…]] [--text T] [--question K]
                                  relay the user's answer to a question menu
@@ -266,16 +270,24 @@ func readFlags(f *flagSet) func(pos []string) (readOpts, error) {
 	}
 }
 
-type promptOpts struct{ id, text, next, mode string }
+type promptOpts struct {
+	id, text, next, mode string
+	files                []string
+}
 
 func promptFlags(f *flagSet) func(pos []string) (promptOpts, error) {
 	next := f.String("next")
 	now, interrupt := f.Bool("now"), f.Bool("interrupt")
+	files := f.List("file")
 	return func(pos []string) (promptOpts, error) {
-		if len(pos) < 1 || (len(pos) == 1) == !f.IsSet("next") || len(pos) > 2 || *now && *interrupt {
-			return promptOpts{}, usagef("usage: tm thread prompt <id> \"text\" | tm thread prompt <id> --next N, with --now or --interrupt")
+		if len(pos) < 1 || len(pos) > 2 || *now && *interrupt ||
+			len(pos) == 1 && !f.IsSet("next") && len(*files) == 0 || len(pos) == 2 && f.IsSet("next") {
+			return promptOpts{}, usagef("usage: tm thread prompt <id> \"text\" | tm thread prompt <id> --next N, with --now or --interrupt, and --file F for each file it takes")
 		}
-		o := promptOpts{id: pos[0], next: *next}
+		if len(*files) > proto.MaxPromptFiles {
+			return promptOpts{}, usagef("a prompt takes at most %d files", proto.MaxPromptFiles)
+		}
+		o := promptOpts{id: pos[0], next: *next, files: *files}
 		switch {
 		case *now:
 			o.mode = proto.PromptNow
@@ -724,33 +736,130 @@ func (e *Env) threadPrompt(p *project.Project, o promptOpts) error {
 		}
 		text = rep.Next[n-1]
 	}
-	if strings.TrimSpace(text) == "" {
+	if strings.TrimSpace(text) == "" && len(o.files) == 0 {
 		return usagef("empty prompt")
 	}
 	if info.State == "blocked" {
 		return &tasks.Error{Code: "blocked", Msg: fmt.Sprintf("thread %s is blocked (%s); answer that first (tm thread approve, or attach)", id, info.Reason)}
 	}
+	now := time.Now().UTC()
+	handed, err := e.handFiles(p, o.files, now)
+	if err != nil {
+		return err
+	}
+	sent := text
+	if len(handed) > 0 {
+		sent = server.AttachedText(text, handed.paths())
+	}
 	// Sent first: a refused --interrupt sends nothing, so records nothing.
 	var res proto.SessionPromptResult
-	if err := e.call(proto.MethodSessionPrompt, proto.SessionPromptParams{ID: r.Session, Text: text, Mode: o.mode}, &res); err != nil {
+	if err := e.call(proto.MethodSessionPrompt, proto.SessionPromptParams{ID: r.Session, Text: sent, Mode: o.mode}, &res); err != nil {
+		handed.remove()
 		return err
 	}
-	now := time.Now().UTC()
-	if err := thread.AppendFollowUp(p, id, text, now); err != nil {
+	if err := thread.AppendFollowUp(p, id, sent, now); err != nil {
 		return err
 	}
-	if _, err := thread.Update(p, id, func(x *thread.Record) error { x.LastPrompt = now; return nil }); err != nil {
+	if _, err := thread.Update(p, id, func(x *thread.Record) error { x.LastPrompt, x.Done = now, false; return nil }); err != nil {
+		return err
+	}
+	if _, err := thread.UpdateStatus(p, id, nil); err != nil {
 		return err
 	}
 	action := "thread.prompt"
 	if o.mode != "" {
 		action += "." + o.mode
 	}
-	if err := p.Journal(e.Caller, action, id, textsafe.Line(text, 80)); err != nil {
+	detail := text
+	if strings.TrimSpace(detail) == "" {
+		detail = strings.Join(handed.names(), ", ")
+	}
+	if err := p.Journal(e.Caller, action, id, textsafe.Line(detail, 80)); err != nil {
 		return err
 	}
+	for _, h := range handed {
+		if err := p.Journal(e.Caller, "thread.file", id, fmt.Sprintf("%s (%d bytes)", h.ref, h.size)); err != nil {
+			return err
+		}
+	}
 	fmt.Fprintf(e.Stdout, "prompt for %s %s\n", id, promptOutcome(res))
+	for _, h := range handed {
+		fmt.Fprintf(e.Stdout, "attached %s\n", h.path)
+	}
 	return nil
+}
+
+// handedFile is a file tm thread prompt --file stored in uploads/.
+type handedFile struct {
+	ref, path string
+	size      int
+}
+
+type handedFiles []handedFile
+
+func (hs handedFiles) paths() []string {
+	out := make([]string, len(hs))
+	for i, h := range hs {
+		out[i] = h.path
+	}
+	return out
+}
+
+func (hs handedFiles) names() []string {
+	out := make([]string, len(hs))
+	for i, h := range hs {
+		out[i] = h.ref
+	}
+	return out
+}
+
+// remove takes the stored files back out: their prompt wasn't sent.
+func (hs handedFiles) remove() {
+	for _, h := range hs {
+		os.Remove(h.path)
+	}
+}
+
+// handFiles copies the files specs name into p's uploads/, by session.upload's
+// rules, where its threads read them. An agent's are opened as any file it
+// names (openArg). All or none: a refused file takes the others back out. Each
+// is read and stored before the next, so one file at most is in memory.
+func (e *Env) handFiles(p *project.Project, specs []string, now time.Time) (handedFiles, error) {
+	var out handedFiles
+	for _, spec := range specs {
+		h, err := e.handFile(p, spec, now)
+		if err != nil {
+			out.remove()
+			return nil, err
+		}
+		out = append(out, h)
+	}
+	return out, nil
+}
+
+func (e *Env) handFile(p *project.Project, spec string, now time.Time) (handedFile, error) {
+	f, err := e.openArg(spec)
+	if err != nil {
+		return handedFile{}, err
+	}
+	defer f.Close()
+	fi, err := f.Stat()
+	if err != nil {
+		return handedFile{}, usagef("%v", err)
+	}
+	if !fi.Mode().IsRegular() {
+		return handedFile{}, &tasks.Error{Code: "invalid-file", Msg: fmt.Sprintf("%s is not a regular file", spec)}
+	}
+	// One byte over is enough for the size rule to refuse it.
+	data, err := io.ReadAll(io.LimitReader(f, proto.MaxUpload+1))
+	if err != nil {
+		return handedFile{}, usagef("%v", err)
+	}
+	ref, perr := server.StoreFile(p.Dir, filepath.Base(spec), data, now)
+	if perr != nil {
+		return handedFile{}, &tasks.Error{Code: "invalid-file", Msg: perr.Message}
+	}
+	return handedFile{ref: ref, path: filepath.Join(p.Dir, "uploads", ref), size: len(data)}, nil
 }
 
 // promptOutcome says how a prompt went in, and why a --now or
@@ -887,7 +996,10 @@ func (e *Env) threadRestart(p *project.Project, id string) error {
 	if r.Prompted && r.AgentSID != "" {
 		resume = r.AgentSID
 	}
-	if _, err := thread.Update(p, id, func(x *thread.Record) error { x.LastPrompt = time.Now().UTC(); return nil }); err != nil {
+	if _, err := thread.Update(p, id, func(x *thread.Record) error { x.LastPrompt, x.Done = time.Now().UTC(), false; return nil }); err != nil {
+		return err
+	}
+	if _, err := thread.UpdateStatus(p, id, nil); err != nil {
 		return err
 	}
 	info, err := e.launchThread(p, r, brief, resume)

@@ -112,6 +112,21 @@ func (s *ServerSource) PeerPopup(alias, slug string) (proto.PeerPopup, error) {
 	return pp, err
 }
 
+func (s *ServerSource) PeerBoard(alias, slug string) (proto.PeerPages, error) {
+	var pp proto.PeerPages
+	if s.Caller.IsAgent() {
+		return pp, errHumanOnly
+	}
+	// A connection of its own, as PeerPopup's.
+	c, err := tmclient.Connect(s.Paths, false)
+	if err != nil {
+		return pp, err
+	}
+	defer c.Close()
+	err = c.Call(proto.MethodPeerPagesRead, proto.PeerPagesReadParams{Alias: alias, Project: slug}, &pp)
+	return pp, err
+}
+
 func (s *ServerSource) RemovePeer(alias string) error {
 	if s.Caller.IsAgent() {
 		return errHumanOnly

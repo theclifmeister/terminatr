@@ -2598,6 +2598,9 @@ func (c *client) pollState(ctx context.Context) {
 			pl.cmds = commandsWith(ctl, cfg)
 		}
 		c.applyPoll(&pl, time.Now())
+		if c.side != nil && ctl != nil {
+			c.readSideBoards(pl.peers)
+		}
 		if w != nil {
 			c.takeOpen(w, pl.views)
 		}
