@@ -465,7 +465,7 @@ private func diff(_ status: String, hunks: [AppAPI.FilesHunk] = []) -> AppAPI.Fi
 }
 
 @Test func aProgramsFilesAreItsLibraryOnly() throws {
-    for selection in [Selection.program("acme"), .session(SessionRef(project: "acme", director: true))] {
+    for selection in [Selection.program("acme"), .session(SessionRef.director("acme"))] {
         #expect(FilesPlace.of(selection, sessionID: "s-1", threadDone: false, readsWorktree: true, hasLibrary: true) == nil)
         let p = try #require(FilesPlace.of(selection, sessionID: "s-1", threadDone: false, readsWorktree: true, hasLibrary: true, readsProgramLibrary: true))
         #expect(p.isProgram && p.project == "acme" && p.session == nil && p.mentions == nil && p.why == nil)
