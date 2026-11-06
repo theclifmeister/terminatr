@@ -2777,7 +2777,7 @@
   }
  },
  "hello": {
-  "app_api": 51,
+  "app_api": 52,
   "build": "demo",
   "capabilities": [
    "read",

@@ -640,7 +640,7 @@ func programShowParams(p ProgramShowParams) proto.ProgramShowParams {
 // ordinary write. A session's folder (app API 49) is read at this computer
 // too, until the iPhone's follow-up looks at what a device may read of it.
 var macOnly = []string{proto.MethodProgramRename, proto.MethodProgramDelete, proto.MethodProgramOpen,
-	proto.MethodFilesList, proto.MethodFilesRead, proto.MethodFilesStamp, proto.MethodFilesDiff}
+	proto.MethodFilesList, proto.MethodFilesRead, proto.MethodFilesStamp, proto.MethodFilesDiff, proto.MethodFilesRepos}
 
 // MacOnly says m is the Mac app's alone, at no device level (macOnly).
 func (m Method) MacOnly() bool { return slices.Contains(macOnly, m.Name) }

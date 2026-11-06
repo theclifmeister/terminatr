@@ -21,6 +21,9 @@ import (
 // "gap:" marks what reads as a bug or an oversight rather than a choice:
 // see the T990 report. Fix one and it drops out of this list.
 var coordinatorOnly = map[string]string{
+	// Scope: a director has no repo, so no folder and no repo to choose.
+	"server/worktreefiles.go filesRepos": "scope: a director has no repo to choose from (filesScope refuses it no-files)",
+
 	// Safety: rights the director was refused on purpose.
 	"cli/accessedit.go accessFor":         "safety: coordinator_access is a project's switch; a director's access is the human's",
 	"cli/accessedit.go accessHuman":       "safety: same",

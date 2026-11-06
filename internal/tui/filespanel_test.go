@@ -28,6 +28,11 @@ type fakeFiles struct {
 	lists   atomic.Int32
 	refusal error
 	seen    []proto.FilesListParams
+	repos   []proto.FileRepo
+	noRepos bool // a server without files.repos
+	stamped []proto.FilesStampParams
+	read    []proto.FilesReadParams
+	diffed  []proto.FilesDiffParams
 	diffs   map[string]proto.FilesDiffResult
 }
 
@@ -38,7 +43,13 @@ func (f *fakeFiles) install(t *testing.T) {
 	filesGo = func(g func()) { g() }
 	filesCall = func(_ tmclient.Paths, method string, params, res any) error {
 		switch p := params.(type) {
+		case proto.FilesReposParams:
+			if f.noRepos {
+				return proto.Errorf(proto.ErrBadParams, "unknown method")
+			}
+			res.(*proto.FilesReposResult).Repos = f.repos
 		case proto.FilesStampParams:
+			f.stamped = append(f.stamped, p)
 			res.(*proto.FilesStampResult).Stamp = f.stamp.Load().(string)
 		case proto.FilesListParams:
 			f.lists.Add(1)
@@ -54,12 +65,14 @@ func (f *fakeFiles) install(t *testing.T) {
 				out.Entries = f.dirs[p.Path]
 			}
 		case proto.FilesReadParams:
+			f.read = append(f.read, p)
 			r, ok := f.texts[p.Path]
 			if !ok {
 				return proto.Errorf(proto.ErrFileGone, "no longer there: %s", p.Path)
 			}
 			*res.(*proto.FilesReadResult) = r
 		case proto.FilesDiffParams:
+			f.diffed = append(f.diffed, p)
 			*res.(*proto.FilesDiffResult) = f.diffs[p.Path]
 		default:
 			t.Fatalf("method %s", method)
@@ -218,7 +231,7 @@ func TestFilesNoControlChars(t *testing.T) {
 	}
 	f.texts = map[string]proto.FilesReadResult{"evil": {Name: "evil", Path: "evil", Size: 40,
 		Data: []byte("one\x1b[2J\x1b]52;c;eA==\x07 \u009b31m two\u202e three\tfour\n")}}
-	tv := worktreeViewer(tmclient.Paths{}, "s-4", proto.FileEntry{Name: "evil\x1b[2J", Path: "evil"}, false)
+	tv := worktreeViewer(tmclient.Paths{}, "s-4", "", proto.FileEntry{Name: "evil\x1b[2J", Path: "evil"}, false)
 	for _, s := range []string{tv.body, tv.title, tv.note} {
 		if strings.ContainsFunc(s, func(r rune) bool { return r < 0x20 && r != '\n' || r == 0x7f || r >= 0x80 && r < 0xa0 || r == '\u202e' }) {
 			t.Errorf("control characters in %q", s)
@@ -404,27 +417,27 @@ func TestFilesViewerOver(t *testing.T) {
 			t.Errorf("%s: flash %q, over %+v", id, c.flash, c.over)
 		}
 	}
-	tv := worktreeViewer(tmclient.Paths{}, "s-4", proto.FileEntry{Name: "Makefile", Path: "Makefile"}, false)
+	tv := worktreeViewer(tmclient.Paths{}, "s-4", "", proto.FileEntry{Name: "Makefile", Path: "Makefile"}, false)
 	if tv.body != "all:" || !strings.Contains(tv.title, "Makefile") {
 		t.Errorf("viewer %+v", tv)
 	}
 	if strings.Contains(tv.title, "secrets") {
 		t.Errorf("a plain file's title: %q", tv.title)
 	}
-	tv = worktreeViewer(tmclient.Paths{}, "s-4", proto.FileEntry{Name: "Makefile", Path: "Makefile", Ignored: true}, true)
+	tv = worktreeViewer(tmclient.Paths{}, "s-4", "", proto.FileEntry{Name: "Makefile", Path: "Makefile", Ignored: true}, true)
 	if tv.body != "all:" || !strings.Contains(tv.title, "git-ignored: may hold secrets") {
 		t.Errorf("an ignored file's viewer %+v", tv)
 	}
 	f.texts["pic.png"] = proto.FilesReadResult{Name: "pic.png", Path: "pic.png", Size: 9, Binary: true}
-	tv = worktreeViewer(tmclient.Paths{}, "s-4", proto.FileEntry{Name: "pic.png", Path: "pic.png"}, false)
+	tv = worktreeViewer(tmclient.Paths{}, "s-4", "", proto.FileEntry{Name: "pic.png", Path: "pic.png"}, false)
 	if tv.body != "" || !strings.Contains(tv.note, "not text") {
 		t.Errorf("binary viewer %+v", tv)
 	}
-	tv = worktreeViewer(tmclient.Paths{}, "s-4", proto.FileEntry{Name: "pic.png", Path: "pic.png", Ignored: true}, true)
+	tv = worktreeViewer(tmclient.Paths{}, "s-4", "", proto.FileEntry{Name: "pic.png", Path: "pic.png", Ignored: true}, true)
 	if strings.Contains(tv.title, "secrets") {
 		t.Errorf("no text shows, nothing to warn of: %q", tv.title)
 	}
-	tv = worktreeViewer(tmclient.Paths{}, "s-4", proto.FileEntry{Name: "nope", Path: "nope"}, false)
+	tv = worktreeViewer(tmclient.Paths{}, "s-4", "", proto.FileEntry{Name: "nope", Path: "nope"}, false)
 	if !strings.Contains(tv.note, "can't read it") {
 		t.Errorf("gone viewer %+v", tv)
 	}
@@ -460,7 +473,7 @@ func TestFilesViewerLong(t *testing.T) {
 	f.install(t)
 	chunk := []byte(strings.Repeat("x", proto.LibraryChunk))
 	f.texts = map[string]proto.FilesReadResult{"big": {Size: 3 << 20, Data: chunk}}
-	tv := worktreeViewer(tmclient.Paths{}, "s-4", proto.FileEntry{Name: "big", Path: "big"}, false)
+	tv := worktreeViewer(tmclient.Paths{}, "s-4", "", proto.FileEntry{Name: "big", Path: "big"}, false)
 	if len(tv.body) != libMax || !strings.Contains(tv.note, "shows the first") {
 		t.Errorf("len %d, note %q", len(tv.body), tv.note)
 	}
@@ -512,6 +525,150 @@ func TestFileCaution(t *testing.T) {
 	}
 }
 
+// repoView is the Files view of a coordinator's project with repos.
+func repoView(t *testing.T, f *fakeFiles) (*filesView, func() string) {
+	t.Helper()
+	f.install(t)
+	fv := &filesView{session: "s-1", slug: "demo", open: map[string]bool{}, dirs: map[string][]proto.FileEntry{}}
+	fv.take(fetchFiles(tmclient.Paths{}, *fv, fv.filesFolders()))
+	return fv, func() string {
+		lines, _ := filesLay(fv, 48, true)
+		return ansi.Strip(strings.Join(lines, "\n"))
+	}
+}
+
+// TestFilesRepoLabel: a coordinator's view names the repo and says it's the
+// main checkout; the picker's mark comes only with a choice to make; a
+// thread's view and a server without the list stay as they were.
+func TestFilesRepoLabel(t *testing.T) {
+	_, one := repoView(t, &fakeFiles{dirs: sampleTree(), repos: []proto.FileRepo{{Name: "app", Path: "/r/app"}}})
+	if s := one(); !strings.Contains(s, "app · main checkout") || strings.Contains(s, "▾") {
+		t.Errorf("one repo:\n%s", s)
+	}
+	_, two := repoView(t, &fakeFiles{dirs: sampleTree(), repos: []proto.FileRepo{{Name: "app", Path: "/r/app"}, {Name: "site", Path: "/r/site"}}})
+	if s := two(); !strings.Contains(s, "app · main checkout ▾") {
+		t.Errorf("two repos:\n%s", s)
+	}
+	old := &fakeFiles{dirs: sampleTree(), noRepos: true}
+	fv, older := repoView(t, old)
+	if s := older(); strings.Contains(s, "main checkout") {
+		t.Errorf("an older server:\n%s", s)
+	}
+	if fv.loaded != true || old.seen[0].Repo != "" {
+		t.Errorf("an older server is asked for no repo: %+v", old.seen)
+	}
+	own := &fakeFiles{dirs: sampleTree(), repos: []proto.FileRepo{{Name: "app", Path: "/r/app"}, {Name: "site", Path: "/r/site"}}}
+	own.install(t)
+	tv := &filesView{session: "s-4", slug: "demo", thread: "t-0005", open: map[string]bool{}, dirs: map[string][]proto.FileEntry{}}
+	tv.take(fetchFiles(tmclient.Paths{}, *tv, tv.filesFolders()))
+	lines, _ := filesLay(tv, 48, true)
+	if s := ansi.Strip(strings.Join(lines, "\n")); strings.Contains(s, "main checkout") || len(tv.repos) != 0 {
+		t.Errorf("a thread:\n%s", s)
+	}
+}
+
+// TestFilesRepoPicker: r lists the repos, enter shows one: every later call
+// names it, nothing of the last tree stays; esc changes nothing; a repo off
+// the list falls back to the first; one that can't open says why and stays.
+func TestFilesRepoPicker(t *testing.T) {
+	f := &fakeFiles{dirs: sampleTree(), repos: []proto.FileRepo{{Name: "app", Path: "/r/app"}, {Name: "site", Path: "/r/site"}},
+		texts: map[string]proto.FilesReadResult{"a": {Name: "a", Path: "a", Size: 2, Data: []byte("x\n")}}}
+	fv, show := repoView(t, f)
+	fv.open["internal"], fv.sel = true, 3
+	if f.seen[0].Repo != "" || f.stamped[0].Repo != "" {
+		t.Errorf("the default names no repo: %+v %+v", f.seen[0], f.stamped[0])
+	}
+
+	fv.picking, fv.pickSel = true, fv.repoShown()
+	s := show()
+	if !strings.Contains(s, "✓ app") || !strings.Contains(s, "  site") || strings.Contains(s, "Makefile") {
+		t.Errorf("the picker:\n%s", s)
+	}
+	if lines, hits := filesLay(fv, 48, true); len(lines) != len(hits) || hits[3].kind != hitFilesRepoRow || hits[3].task != 1 || hits[1].kind != hitFilesRepo {
+		t.Errorf("the picker's hits: %+v", hits)
+	}
+	if fv.pickRepo(0) || fv.repo != "" || fv.picking || !fv.open["internal"] {
+		t.Errorf("the repo shown again changed the view: %+v", fv)
+	}
+
+	if !fv.pickRepo(1) || fv.repo != "/r/site" || fv.loaded || fv.sel != 0 || len(fv.open) != 0 || len(fv.dirs) != 0 {
+		t.Errorf("chose the second: %+v", fv)
+	}
+	if s := show(); !strings.Contains(s, "site · main checkout") || !strings.Contains(s, "loading") {
+		t.Errorf("while it loads:\n%s", s)
+	}
+	f.seen, f.stamped = nil, nil
+	fv.take(fetchFiles(tmclient.Paths{}, *fv, fv.filesFolders()))
+	if f.seen[0].Repo != "/r/site" || f.stamped[0].Repo != "/r/site" {
+		t.Errorf("the calls name it: %+v %+v", f.seen, f.stamped)
+	}
+	if tv := worktreeViewer(tmclient.Paths{}, fv.session, fv.repo, proto.FileEntry{Name: "a", Path: "a"}, false); tv == nil || f.read[0].Repo != "/r/site" {
+		t.Errorf("a read names it: %+v", f.read)
+	}
+	if len(f.diffed) == 0 || f.diffed[0].Repo != "/r/site" {
+		t.Errorf("a diff names it: %+v", f.diffed)
+	}
+	f.diffed = nil
+	worktreeViewer(tmclient.Paths{}, fv.session, fv.repo, proto.FileEntry{Name: "a", Path: "a", Status: proto.FileDeleted}, false)
+	if len(f.diffed) == 0 || f.diffed[0].Repo != "/r/site" {
+		t.Errorf("a deleted file's diff names it: %+v", f.diffed)
+	}
+
+	// A repo that can't open: it says why, stays chosen, and the choice
+	// stays open, rather than falling to Attached.
+	f.refusal = proto.Errorf(proto.ErrNoFiles, "gone")
+	fv.choose("/r/site")
+	fv.take(fetchFiles(tmclient.Paths{}, *fv, fv.filesFolders()))
+	if fv.attached || fv.err != "gone" || fv.repo != "/r/site" {
+		t.Errorf("a chosen repo refused: %+v", fv)
+	}
+	if s := show(); !strings.Contains(s, "site · main checkout ▾") || !strings.Contains(s, "gone") {
+		t.Errorf("a chosen repo refused:\n%s", s)
+	}
+	f.refusal = nil
+
+	// Taken off the project's list since: back to the first.
+	f.repos = f.repos[:1]
+	f.seen = nil
+	fv.take(fetchFiles(tmclient.Paths{}, *fv, fv.filesFolders()))
+	if fv.repo != "" || f.seen[0].Repo != "" {
+		t.Errorf("off the list: %q %+v", fv.repo, f.seen)
+	}
+	if s := show(); !strings.Contains(s, "app · main checkout") || strings.Contains(s, "▾") {
+		t.Errorf("off the list:\n%s", s)
+	}
+}
+
+// TestFilesRepoKeys: the picker through the keyboard.
+func TestFilesRepoKeys(t *testing.T) {
+	c, f := filesClient(t)
+	fv := c.info.files
+	press := func(name string) {
+		t.Helper()
+		filesPress(c, name)
+	}
+	press("r")
+	if fv.picking {
+		t.Error("r on a thread opened a picker")
+	}
+	f.repos = []proto.FileRepo{{Name: "app", Path: "/r/app"}, {Name: "site", Path: "/r/site"}}
+	fv.repos = f.repos
+	press("r")
+	if !fv.picking || fv.pickSel != 0 || !strings.Contains(filesHint(fv), "repo ▸") {
+		t.Fatalf("r: %+v", fv)
+	}
+	press("esc")
+	if fv.picking || c.kb != areaInfo {
+		t.Errorf("esc closes the picker alone: %+v", fv)
+	}
+	press("r")
+	press("down")
+	press("enter")
+	if fv.picking || fv.repo != "/r/site" {
+		t.Errorf("down, enter: %+v", fv)
+	}
+}
+
 // TestFilesDiffGolden: how the viewer shows each kind of file's changes, as
 // testdata/files-diff.golden has them (-update rewrites it): no changes, a
 // change and a rename, a new file, a deleted one, binary, over-size, and a
@@ -550,7 +707,7 @@ func TestFilesDiffGolden(t *testing.T) {
 	}
 	var b strings.Builder
 	show := func(what, path, status string) {
-		tv := worktreeViewer(tmclient.Paths{}, "s-4", proto.FileEntry{Name: path, Path: path, Status: status}, false)
+		tv := worktreeViewer(tmclient.Paths{}, "s-4", "", proto.FileEntry{Name: path, Path: path, Status: status}, false)
 		fmt.Fprintf(&b, "%s: %s\n", what, tv.title)
 		lines := tv.lines(40)
 		for _, l := range lines[:min(len(lines), 12)] {
@@ -613,12 +770,12 @@ func TestFilesDiffOpensAtChange(t *testing.T) {
 	f.install(t)
 	f.texts = map[string]proto.FilesReadResult{"a.json": {Name: "a.json", Path: "a.json", Size: 7, Data: []byte(`{"a":1}`)}}
 	f.diffs = map[string]proto.FilesDiffResult{"a.json": {Status: "M", Hunks: []proto.FilesHunk{{Old: 1, New: 1, Added: 1}}}}
-	got := worktreeViewer(tmclient.Paths{}, "s", proto.FileEntry{Name: "a.json", Path: "a.json"}, false)
+	got := worktreeViewer(tmclient.Paths{}, "s", "", proto.FileEntry{Name: "a.json", Path: "a.json"}, false)
 	if len(got.diff) != 1 || got.diff[0] != (diffLine{lineAdded, `{"a":1}`}) {
 		t.Errorf("%+v", got.diff)
 	}
 	f.diffs = nil
-	if got = worktreeViewer(tmclient.Paths{}, "s", proto.FileEntry{Name: "a.json", Path: "a.json"}, false); got.diff != nil || !strings.Contains(got.body, "  \"a\"") {
+	if got = worktreeViewer(tmclient.Paths{}, "s", "", proto.FileEntry{Name: "a.json", Path: "a.json"}, false); got.diff != nil || !strings.Contains(got.body, "  \"a\"") {
 		t.Errorf("no changes, indented as before: %q %+v", got.body, got.diff)
 	}
 }
@@ -637,5 +794,25 @@ func TestMergeDiff(t *testing.T) {
 	}
 	if got := mergeDiff("", proto.FilesDiffResult{Status: "A"}); len(got) != 0 {
 		t.Errorf("an empty new file: %v", got)
+	}
+}
+
+// TestFilesRepoListMoves: a repo added while the view shows comes in on the
+// poll, though nothing in the folder changed.
+func TestFilesRepoListMoves(t *testing.T) {
+	c, f := filesClient(t)
+	fv := c.info.files
+	fv.thread = ""
+	f.repos = []proto.FileRepo{{Name: "app", Path: "/r/app"}, {Name: "site", Path: "/r/site"}}
+	fv.polled = time.Time{}
+	c.filesPoll()
+	if len(fv.repos) != 2 {
+		t.Errorf("the list after a poll: %+v", fv.repos)
+	}
+	lists := f.lists.Load()
+	fv.polled = time.Time{}
+	c.filesPoll()
+	if f.lists.Load() != lists {
+		t.Error("a poll with nothing changed listed the folder again")
 	}
 }
