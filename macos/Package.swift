@@ -30,7 +30,8 @@ let package = Package(
     ],
     targets: [
         .target(name: "TerminatrKit", swiftSettings: werror),
-        .target(name: "TerminatrUI", dependencies: ["TerminatrKit"], swiftSettings: werror),
+        // Fonts/: JetBrains Mono NL's faces in use and its OFL licence (T1029).
+        .target(name: "TerminatrUI", dependencies: ["TerminatrKit"], resources: [.copy("Fonts")], swiftSettings: werror),
         .target(
             name: "TerminatrPane",
             dependencies: ["TerminatrKit", "TerminatrUI", .product(name: "SwiftTerm", package: "SwiftTerm")],
@@ -46,5 +47,6 @@ let package = Package(
         // window with ConversationScroll over exact rows, its geometry
         // read back after each change.
         .testTarget(name: "ConversationScrollTests", dependencies: ["TerminatrKit", "TerminatrUI"], swiftSettings: werror),
+        .testTarget(name: "TerminatrUITests", dependencies: ["TerminatrUI"], swiftSettings: werror),
     ]
 )

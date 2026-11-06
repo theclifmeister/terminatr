@@ -44,7 +44,7 @@ struct Composer: View {
                 }
             }
             notes
-            HStack(alignment: .top, spacing: 8) {
+            ComposerRow(leastField: ComposerFit.leastField * theme.scale) {
                 field
                 if running && !model.ref.isRemote {
                     ComposerButton(title: "Interrupt", help: "Stops the agent's turn for this prompt") { interrupting = true }
@@ -56,7 +56,8 @@ struct Composer: View {
                     .disabled(empty || busy)
             }
         }
-        // 58 with its line at rest, as the inspector's footer (13 + 34 + 11).
+        // 58 with its line at rest and the buttons beside the field, as
+        // the inspector's footer (13 + 34 + 11).
         .padding(.horizontal, 12)
         .padding(.top, 13)
         .padding(.bottom, 11)
@@ -89,8 +90,8 @@ struct Composer: View {
     }
 
     /// The field: 34 high and 6 round at one line, growing as a prompt
-    /// does; attach at its start and the keys' hint, quiet, at its end
-    /// while it is empty.
+    /// does; attach at its start and, while it is empty, what prompting
+    /// says.
     private var field: some View {
         let shape = RoundedRectangle(cornerRadius: 6)
         return HStack(alignment: .top, spacing: 8) {
@@ -109,17 +110,14 @@ struct Composer: View {
             }
             ZStack(alignment: .topLeading) {
                 if text.isEmpty {
-                    Text(placeholder)
-                        .font(theme.sized(13))
-                        .foregroundStyle(theme.faint)
-                        .lineLimit(1)
+                    prompting
                         .frame(height: 18)
                         .padding(.leading, 5)
                         .allowsHitTesting(false)
                 }
                 TextEditor(text: $text)
                     .scrollContentBackground(.hidden)
-                    .font(theme.sized(13))
+                    .font(theme.conversation)
                     .frame(minHeight: 18, maxHeight: 120)
                     .fixedSize(horizontal: false, vertical: true)
                     .focused($focused)
@@ -133,16 +131,6 @@ struct Composer: View {
                     .accessibilityHint(keys)
                     .modifier(NoWritingTools())
             }
-            if text.isEmpty {
-                Text(keys)
-                    .font(theme.sized(13))
-                    .foregroundStyle(theme.faint)
-                    .lineLimit(1)
-                    .fixedSize()
-                    .frame(height: 18)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
-            }
         }
         .padding(.leading, attaches ? 11 : 6)
         .padding(.trailing, 11)
@@ -154,6 +142,30 @@ struct Composer: View {
             guard attaches else { return false }
             drop(providers)
             return true
+        }
+    }
+
+    /// What an empty field says: the placeholder and, at the field's end,
+    /// the keys; where both don't fit the keys go first (the buttons' help
+    /// and VoiceOver's hint still say them), so the placeholder keeps its
+    /// words.
+    private var prompting: some View {
+        let words = Text(placeholder)
+            .font(theme.sized(13))
+            .foregroundStyle(theme.faint)
+            .lineLimit(1)
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                words.fixedSize()
+                Spacer(minLength: 0)
+                Text(keys)
+                    .font(theme.sized(13))
+                    .foregroundStyle(theme.faint)
+                    .lineLimit(1)
+                    .fixedSize()
+                    .accessibilityHidden(true)
+            }
+            words
         }
     }
 

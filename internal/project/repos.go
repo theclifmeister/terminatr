@@ -152,6 +152,13 @@ func moveRepos(slug string) (bool, error) {
 // ListsRepo says repo is on the project's list, by its real path: a
 // thread's record names a repo, and only the list says it's the project's.
 func (p *Project) ListsRepo(repo string) bool {
+	_, ok := p.ListedRepo(repo)
+	return ok
+}
+
+// ListedRepo is the list's own entry for repo, by its real path, and
+// whether it has one.
+func (p *Project) ListedRepo(repo string) (string, bool) {
 	real := func(s string) string {
 		if r, err := filepath.EvalSymlinks(s); err == nil {
 			return r
@@ -159,5 +166,9 @@ func (p *Project) ListsRepo(repo string) bool {
 		return filepath.Clean(s)
 	}
 	want := real(repo)
-	return slices.ContainsFunc(p.Repos, func(r string) bool { return real(r) == want })
+	i := slices.IndexFunc(p.Repos, func(r string) bool { return real(r) == want })
+	if i < 0 {
+		return "", false
+	}
+	return p.Repos[i], true
 }

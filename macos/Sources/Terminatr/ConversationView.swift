@@ -480,6 +480,7 @@ struct EntryView: View {
                 VStack(alignment: .trailing, spacing: 4) {
                     if !entry.text.isEmpty || entry.files.isEmpty {
                         Text(preview ?? entry.text)
+                            .font(theme.conversation)
                             .lineSpacing(3)
                             .textSelection(.enabled)
                             .foregroundStyle(theme.ink)
@@ -510,7 +511,8 @@ struct EntryView: View {
         case .text:
             VStack(alignment: .leading, spacing: 2) {
                 turn
-                MarkdownView(text: entry.text)
+                MarkdownView(text: entry.text, conversation: true)
+                    .font(theme.conversation)
                 if entry.truncated { cut }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

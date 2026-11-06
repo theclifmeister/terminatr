@@ -49,7 +49,7 @@ public struct HeroCard<Answers: View>: View {
             }
             if !command.isEmpty {
                 Text(command)
-                    .font(.system(size: 12 * theme.scale, design: .monospaced))
+                    .font(theme.monoSized(12))
                     .foregroundStyle(theme.muted)
                     .lines(6)
                     .frame(maxWidth: .infinity, alignment: .leading)

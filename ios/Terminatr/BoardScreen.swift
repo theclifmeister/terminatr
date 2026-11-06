@@ -118,7 +118,7 @@ struct BoardScreen: View {
                 line {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(t.ref)
-                            .font(.system(size: 12.5 * theme.scale, design: .monospaced))
+                            .font(theme.monoSized(12.5))
                             .foregroundStyle(theme.muted)
                             .frame(minWidth: 34 * theme.scale, alignment: .leading)
                         PriorityTag(t.priority)
