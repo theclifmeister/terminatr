@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
@@ -50,7 +51,8 @@ const historyJournal = `# Journal
 // TestHistorySetups: a plain folder, a repo with no tags, several repos
 // with tags and a repo on another host with no pull requests answer the
 // same numbers, byte for byte, with git absent from PATH and with a git
-// there that says when it is called.
+// there that fails: no git, no releases and no error. Only the plain
+// folder never calls git.
 func TestHistorySetups(t *testing.T) {
 	h := newHarness(t)
 	human := caller.Caller{Kind: caller.Human}
@@ -123,8 +125,46 @@ func TestHistorySetups(t *testing.T) {
 			}
 		}
 	}
+	if err := os.Remove(called); err != nil && runtime.GOOS != "windows" {
+		t.Errorf("the repos asked no git: %v", err)
+	}
+	run("--project", "plain-folder")
 	if data, err := os.ReadFile(called); err == nil {
-		t.Errorf("tm history ran git: %s", data)
+		t.Errorf("a plain folder ran git: %s", data)
+	}
+}
+
+// TestHistoryReleases: tm history lists each repo's releases and no
+// total, the JSON and the text.
+func TestHistoryReleases(t *testing.T) {
+	h := newHarness(t)
+	human := caller.Caller{Kind: caller.Human}
+	web, inWeb := gittest.Repo(t)
+	inWeb("commit", "--allow-empty", "-m", "one")
+	inWeb("tag", "v1.0.0")
+	site, inSite := gittest.Repo(t)
+	inSite("commit", "--allow-empty", "-m", "one")
+	inSite("tag", "v1.0.0")
+	inSite("commit", "--allow-empty", "-m", "two")
+	inSite("tag", "v1.1.0")
+	if _, err := project.New(project.Options{Slug: "both", Repos: []string{web, site}}); err != nil {
+		t.Fatal(err)
+	}
+	code, stdout, stderr := h.run(human, "", "history", "--project", "both", "--json")
+	if code != 0 {
+		t.Fatalf("%d %s", code, stderr)
+	}
+	var got proto.History
+	if err := json.Unmarshal([]byte(stdout), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Releases) != 2 || got.Releases[0].Count != 1 || got.Releases[1].Count != 2 {
+		t.Fatalf("releases: %s", stdout)
+	}
+	_, text, _ := h.run(human, "", "history", "--project", "both")
+	want := "releases      " + filepath.Base(web) + " 1 · " + filepath.Base(site) + " 2\n"
+	if !strings.Contains(text, want) {
+		t.Errorf("text %q, want %q", text, want)
 	}
 }
 
