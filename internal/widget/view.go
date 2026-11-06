@@ -4,6 +4,9 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
+
+	"golang.org/x/text/unicode/norm"
 
 	"github.com/theclifmeister/terminatr/internal/modaction"
 )
@@ -13,7 +16,8 @@ import (
 // clicks and the wheel move it here, so moving the cursor never needs a
 // round trip to the mod host; only a key the mod declared, and a click on
 // a row or a key hint, come back as an Event for it (ui.key, ui.click).
-// Where the cursor is the mod hears after the fact (Moved, ui.cursor).
+// Where the cursor is the mod hears after the fact (Moved, ui.cursor), and
+// what the filter says too (Filtered, ui.filter).
 //
 // A View is for one goroutine, the console's.
 type View struct {
@@ -55,6 +59,8 @@ type View struct {
 	// told is the focused list and its cursor's row as Moved last
 	// reported them.
 	told rowKey
+	// toldFilter is the list and the filter Filtered last reported.
+	toldFilter rowKey
 }
 
 // rowKey is a row of a list; the zero rowKey stands for the actions
@@ -84,10 +90,12 @@ type list struct {
 // binds, pressed, for the console to re-check against live state, ask
 // and run (the mods design §11). The mod hears of it only as action.done.
 type Event struct {
-	Kind   string `json:"kind"` // EventKey, EventClick or EventCursor
+	Kind   string `json:"kind"` // EventKey, EventClick, EventCursor or EventFilter
 	Widget string `json:"widget,omitempty"`
 	Row    string `json:"row,omitempty"`
 	Key    string `json:"key,omitempty"`
+	// Filter is what the widget's filter now says (EventFilter).
+	Filter string `json:"filter,omitempty"`
 	// Action is the bound action pressed (EventAction), and Stable
 	// whether the row's bindings and the cursor's place had been
 	// unchanged for modaction.Stable: a press that isn't counts for
@@ -101,6 +109,7 @@ const (
 	EventKey    = "key"
 	EventClick  = "click"
 	EventCursor = "cursor"
+	EventFilter = "filter"
 	EventAction = "action"
 )
 
@@ -265,10 +274,11 @@ func (l *list) refilter() {
 	l.shown = l.shown[:0]
 	q := strings.ToLower(l.filter)
 	for i := range l.w.Rows {
-		if l.w.Rows[i].Head {
+		r := &l.w.Rows[i]
+		if r.Head {
 			continue // never under the cursor
 		}
-		if q == "" || strings.Contains(strings.ToLower(rowText(l.w, &l.w.Rows[i])), q) {
+		if r.Find != "" && Matches(r.Find, l.filter) || r.Find == "" && (q == "" || strings.Contains(strings.ToLower(rowText(l.w, r)), q)) {
 			l.shown = append(l.shown, i)
 		}
 	}
@@ -276,6 +286,30 @@ func (l *list) refilter() {
 		l.idx = i
 	}
 	l.move(0)
+}
+
+// Matches says whether each of filter's words is in text, whatever their
+// case and accents: what a row's Find passes, and what the Mac's board
+// filter finds in a task's id and title.
+func Matches(text, filter string) bool {
+	text = fold(text)
+	for _, w := range strings.Fields(fold(filter)) {
+		if !strings.Contains(text, w) {
+			return false
+		}
+	}
+	return true
+}
+
+// fold is s in lower case with its accents off.
+func fold(s string) string {
+	var b strings.Builder
+	for _, r := range norm.NFD.String(s) {
+		if !unicode.Is(unicode.Mn, r) {
+			b.WriteRune(unicode.ToLower(r))
+		}
+	}
+	return b.String()
 }
 
 // drawn are the rows a list draws: every row, heads included, or with a
@@ -628,9 +662,21 @@ func (v *View) Moved() *Event {
 	return &Event{Kind: EventCursor, Widget: now.list, Row: now.row}
 }
 
-// Forget forgets what Moved reported, so it reports again: the view
-// was hidden, and its mod told it closed.
-func (v *View) Forget() { v.told = rowKey{} }
+// Filtered is an EventFilter when the focused list's filter is not what
+// it last reported, nil when nothing changed. A list with no filter that
+// was never told needs no telling.
+func (v *View) Filtered() *Event {
+	f := v.Filter(v.focus)
+	if f == v.toldFilter.row && (f == "" || v.focus == v.toldFilter.list) {
+		return nil
+	}
+	v.toldFilter = rowKey{v.focus, f}
+	return &Event{Kind: EventFilter, Widget: v.focus, Filter: f}
+}
+
+// Forget forgets what Moved and Filtered reported, so they report again:
+// the view was hidden, and its mod told it closed.
+func (v *View) Forget() { v.told, v.toldFilter = rowKey{}, rowKey{} }
 
 // Wheel scrolls by n lines (up when negative) without moving the cursor.
 func (v *View) Wheel(n int) {

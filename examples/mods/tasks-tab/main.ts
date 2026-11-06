@@ -16,9 +16,14 @@
 // its row is listed. Shown with b, Done is by day: the newest 7 days with
 // work open (at most 30 rows), older work folded by week, then by month
 // (tasks.done), and enter on a heading opens or folds it, on "… more" reads
-// on. The mod draws what tm groups, so an empty week has no heading. The
-// Pulse (history.get) tops the list once tm says it appears, and [ and ]
-// filter it to one of its bars: the tasks that finished then, nothing else.
+// on. The mod draws what tm groups, so an empty week has no heading. While
+// the core's filter has words (ui.filter), Done is every task they find,
+// the archive's too, with or without b, read a page at a time: the board's
+// filter on the Mac finds the same by id and title. A row's find adds its
+// status, which the Mac's doesn't look in: /review lists the tasks in review.
+// The Pulse (history.get) tops the list once tm says it appears, and [ and ]
+// filter it to one of its bars: the tasks that finished then, nothing else,
+// which the filter's words then narrow.
 import type { TM } from "./types/tm";
 declare const $: TM;
 
@@ -62,6 +67,10 @@ interface Tab {
   rows: Map<string, Fold>;
   toggled: Set<string>;
   reveal: string;
+  // query is the filter's words, found the done tasks they find as far as
+  // they were read.
+  query: string;
+  found: Found | null;
   // The project's numbers and what they were read at; the bar [ and ]
   // picked, by its first day ("" for none), and its rows as far as read.
   history: TM.History | null;
@@ -74,6 +83,12 @@ interface Tab {
 interface Fold {
   tasks: TM.Task[];
   next: number;
+}
+
+// Found is what a query found of Done, as far as it was read.
+interface Found extends Fold {
+  query: string;
+  total: number;
 }
 
 const key = (g: TM.DoneGroup) => `${g.from}:${g.to}`;
@@ -169,6 +184,7 @@ function row(project: string, t: TM.Task, prio: boolean, timeOnly = false): TM.V
   if (more) rest.push({ text: (rest.length > 0 ? "  " : "") + more, role: "faint" });
   const r: Record<string, TM.Value> = {
     id: t.id,
+    find: `${t.id} ${t.title} ${t.status}`,
     cells: [[{ text: t.id }], ...(prio ? [t.status === "done" ? [] : priority(t.priority)] : []), [{ text: t.title }], status(t.status, timeOnly ? timeOf(t.done_label) : t.done_label), rest] as TM.Value,
     actions: actions(project, t) as TM.Value,
   };
@@ -191,7 +207,7 @@ function shown(t: Tab): TM.Task[] {
   const out: TM.Task[] = [];
   for (const g of GROUPS) {
     if (closed(g.id) && !t.doneAll) continue;
-    if (g.id === "done" && byDay(t)) continue;
+    if (g.id === "done" && (byDay(t) || t.query)) continue;
     const in_ = t.tasks.filter((x) => groupOf(x.status) === g.id && wanted(t, x));
     if (!closed(g.id)) {
       in_.sort((a, b) => rank(a.priority) - rank(b.priority) || num(a.id) - num(b.id));
@@ -235,6 +251,18 @@ function doneRows(project: string, t: Tab, prio: boolean): TM.Value[] {
     for (const task of f.tasks) rows.push(row(project, task, prio, g.kind === "day"));
     if (f.next > 0) rows.push({ id: "m:" + key(g), spans: [{ text: `  … ${g.count - f.tasks.length} more`, role: "faint" }] });
   }
+  return rows;
+}
+
+// foundRows are the done tasks the filter finds, newest first, and while
+// there are more to read a row that reads them, which the filter's words
+// always find.
+function foundRows(project: string, t: Tab, prio: boolean): TM.Value[] {
+  const f = t.found;
+  const rows: TM.Value[] = [{ id: "g:done", head: true, spans: [{ text: "DONE", role: "head" }] }];
+  if (!f) return rows;
+  for (const task of f.tasks) if (wanted(t, task)) rows.push(row(project, task, prio));
+  if (f.next > 0) rows.push({ id: "m:found", find: t.query, spans: [{ text: `  … ${f.total - f.tasks.length} more`, role: "faint" }] });
   return rows;
 }
 
@@ -285,7 +313,7 @@ function pickedRows(project: string, t: Tab, bar: TM.PulseBar): TM.Value[] {
   const list = t.picked.tasks.filter((x) => wanted(t, x));
   const rows: TM.Value[] = [{ id: "g:done", head: true, spans: [{ text: `DONE · ${bar.done}`, role: "head" }, { text: `  ${bar.tip.split(":")[0]}`, role: "faint" }] }];
   for (const task of list) rows.push(row(project, task, false, t.history?.pulse?.unit === "day"));
-  if (t.picked.next > 0) rows.push({ id: "m:pick", spans: [{ text: `  … ${bar.done - t.picked.tasks.length} more`, role: "faint" }] });
+  if (t.picked.next > 0) rows.push({ id: "m:pick", find: t.query, spans: [{ text: `  … ${bar.done - t.picked.tasks.length} more`, role: "faint" }] });
   return rows;
 }
 
@@ -300,24 +328,27 @@ function tree(project: string, t: Tab): TM.Widget {
   const list = bar ? [] : shown(t);
   // The priority column, only while a listed task shows one.
   const prio = list.some((x) => !!x.priority && x.status !== "done");
-  const days = !bar && byDay(t) && t.groups.length > 0;
+  const days = !bar && !t.query && byDay(t) && t.groups.length > 0;
+  const lists = days || (!bar && !!t.query);
+  const closedRows = () => (t.query ? foundRows(project, t, prio) : doneRows(project, t, prio));
   for (const task of list) {
     const g = groupOf(task.status);
     if (g !== group) {
       // Done by day goes where its section would, before the dropped.
-      if (g === "dropped" && days) rows.push(...doneRows(project, t, prio));
+      if (g === "dropped" && lists) rows.push(...closedRows());
       group = g;
       const title = GROUPS.find((x) => x.id === g)!.title;
       rows.push({ id: "g:" + g, head: true, spans: [{ text: title, role: g === "needs-you" ? "warn" : "head" }] });
     }
     rows.push(row(project, task, prio));
   }
-  if (days && group !== "dropped") rows.push(...doneRows(project, t, prio));
+  if (lists && group !== "dropped") rows.push(...closedRows());
   // The board's, or with no filter and none left there, the archive's.
   const onBoard = t.tasks.filter((x) => x.status === "done" && wanted(t, x)).length;
-  // Under the band, all of them, as it says.
+  // While the filter looks, Done is listed, whatever b says. Under the band,
+  // all of them, as it says.
   const all = t.history?.pulse ? t.history.done : onBoard === 0 ? t.total : onBoard;
-  const done = t.prio === "" ? all : onBoard;
+  const done = t.query ? 0 : t.prio === "" ? all : onBoard;
   const dropped = t.tasks.filter((x) => x.status === "dropped" && wanted(t, x)).length;
   const folded = !bar && !t.doneAll && done + dropped > 0;
   if (folded && done > 0) rows.push({ id: "g:done", head: true, spans: [{ text: "DONE", role: "head" }] });
@@ -366,6 +397,7 @@ async function load(project: string, t: Tab): Promise<void> {
     t.tasks = await $.tasks.list(project);
     await loadHistory(project, t);
     await loadDone(project, t);
+    await loadFound(project, t);
     await loadPicked(project, t);
     // No done task left on the board: is there one in the archive?
     if (!t.doneAll && !t.tasks.some((x) => x.status === "done")) {
@@ -441,6 +473,20 @@ async function loadDone(project: string, t: Tab): Promise<void> {
   }
 }
 
+// loadFound reads the done tasks the filter finds, as far as they were
+// read for these words; none without words. An answer to words the filter
+// has since left goes unused.
+async function loadFound(project: string, t: Tab): Promise<void> {
+  const query = t.query;
+  if (!query) {
+    t.found = null;
+    return;
+  }
+  const read = t.found?.query === query ? t.found.tasks.length : 0;
+  const res = await $.tasks.done(project, { query, archived: true, limit: Math.max(read, PAGE) });
+  if (t.query === query) t.found = { query, tasks: res.tasks, next: res.next, total: res.total };
+}
+
 // readFold reads limit of g's rows from offset.
 async function readFold(project: string, g: TM.DoneGroup, offset: number, limit: number): Promise<Fold> {
   const res = await $.tasks.done(project, { from: g.from, to: g.to, archived: g.archived > 0, offset, limit });
@@ -450,6 +496,18 @@ async function readFold(project: string, g: TM.DoneGroup, offset: number, limit:
 // press handles enter or a click on a row of Done: a heading opens or
 // folds, "… more" reads on. It says whether row was one of those.
 async function press(project: string, t: Tab, row: string): Promise<boolean> {
+  if (row === "m:found") {
+    const f = t.found;
+    if (!f) return true;
+    try {
+      t.error = "";
+      const more = await $.tasks.done(project, { query: f.query, archived: true, offset: f.next, limit: PAGE });
+      if (t.found === f) t.found = { ...f, tasks: [...f.tasks, ...more.tasks], next: more.next, total: more.total };
+    } catch (e: any) {
+      t.error = String(e?.message ?? e);
+    }
+    return true;
+  }
   if (row === "m:pick") {
     const bar = pickedBar(t);
     try {
@@ -511,7 +569,7 @@ async function refresh(project: string | undefined): Promise<void> {
 // done or dropped, those are listed, so its row is there for the cursor.
 $.on("view.opened", async (e) => {
   if (e.view !== VIEW || !e.project) return;
-  const t: Tab = tabs.get(e.project) ?? { tasks: [], doneAll: false, prio: "", error: "", groups: [], total: 0, rows: new Map(), toggled: new Set(), reveal: "", history: null, historyAt: "", pick: "", picked: { tasks: [], next: 0 } };
+  const t: Tab = tabs.get(e.project) ?? { tasks: [], doneAll: false, prio: "", error: "", groups: [], total: 0, rows: new Map(), toggled: new Set(), reveal: "", query: "", found: null, history: null, historyAt: "", pick: "", picked: { tasks: [], next: 0 } };
   tabs.set(e.project, t);
   // A task shown from elsewhere needs its row, whatever day is picked.
   if (e.task) t.pick = "";
@@ -557,6 +615,20 @@ $.on("ui.key", async (e) => {
   else t.prio = PRIOS[(PRIOS.indexOf(t.prio) + 1) % PRIOS.length];
   await load(project, t);
   await publish(project, t);
+});
+
+// The filter's words changed: the core filters what is drawn, and Done's
+// tasks in a closed fold or the archive are for the mod to find.
+$.on("ui.filter", async (e) => {
+  const project = e.target?.project;
+  if (e.view !== VIEW || !project) return;
+  const t = tabs.get(project);
+  if (!t) return;
+  const query = (e.filter ?? "").trim();
+  if (query === t.query) return;
+  t.query = query;
+  await load(project, t);
+  if (t.query === query) await publish(project, t);
 });
 
 $.on("ui.click", async (e) => {

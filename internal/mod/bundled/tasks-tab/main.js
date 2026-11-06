@@ -111,6 +111,7 @@
     if (more) rest.push({ text: (rest.length > 0 ? "  " : "") + more, role: "faint" });
     const r = {
       id: t.id,
+      find: `${t.id} ${t.title} ${t.status}`,
       cells: [[{ text: t.id }], ...prio ? [t.status === "done" ? [] : priority(t.priority)] : [], [{ text: t.title }], status(t.status, timeOnly ? timeOf(t.done_label) : t.done_label), rest],
       actions: actions(project, t)
     };
@@ -127,7 +128,7 @@
     const out = [];
     for (const g of GROUPS) {
       if (closed(g.id) && !t.doneAll) continue;
-      if (g.id === "done" && byDay(t)) continue;
+      if (g.id === "done" && (byDay(t) || t.query)) continue;
       const in_ = t.tasks.filter((x) => groupOf(x.status) === g.id && wanted(t, x));
       if (!closed(g.id)) {
         in_.sort((a, b) => rank(a.priority) - rank(b.priority) || num(a.id) - num(b.id));
@@ -163,6 +164,14 @@
       for (const task of f.tasks) rows.push(row(project, task, prio, g.kind === "day"));
       if (f.next > 0) rows.push({ id: "m:" + key(g), spans: [{ text: `  … ${g.count - f.tasks.length} more`, role: "faint" }] });
     }
+    return rows;
+  }
+  function foundRows(project, t, prio) {
+    const f = t.found;
+    const rows = [{ id: "g:done", head: true, spans: [{ text: "DONE", role: "head" }] }];
+    if (!f) return rows;
+    for (const task of f.tasks) if (wanted(t, task)) rows.push(row(project, task, prio));
+    if (f.next > 0) rows.push({ id: "m:found", find: t.query, spans: [{ text: `  … ${f.total - f.tasks.length} more`, role: "faint" }] });
     return rows;
   }
   function wanted(t, x) {
@@ -202,7 +211,7 @@
     const list = t.picked.tasks.filter((x) => wanted(t, x));
     const rows = [{ id: "g:done", head: true, spans: [{ text: `DONE · ${bar.done}`, role: "head" }, { text: `  ${bar.tip.split(":")[0]}`, role: "faint" }] }];
     for (const task of list) rows.push(row(project, task, false, ((_b = (_a = t.history) == null ? void 0 : _a.pulse) == null ? void 0 : _b.unit) === "day"));
-    if (t.picked.next > 0) rows.push({ id: "m:pick", spans: [{ text: `  … ${bar.done - t.picked.tasks.length} more`, role: "faint" }] });
+    if (t.picked.next > 0) rows.push({ id: "m:pick", find: t.query, spans: [{ text: `  … ${bar.done - t.picked.tasks.length} more`, role: "faint" }] });
     return rows;
   }
   function tree(project, t) {
@@ -216,21 +225,23 @@
     let group = "";
     const list = bar ? [] : shown(t);
     const prio = list.some((x) => !!x.priority && x.status !== "done");
-    const days = !bar && byDay(t) && t.groups.length > 0;
+    const days = !bar && !t.query && byDay(t) && t.groups.length > 0;
+    const lists = days || !bar && !!t.query;
+    const closedRows = () => t.query ? foundRows(project, t, prio) : doneRows(project, t, prio);
     for (const task of list) {
       const g = groupOf(task.status);
       if (g !== group) {
-        if (g === "dropped" && days) rows.push(...doneRows(project, t, prio));
+        if (g === "dropped" && lists) rows.push(...closedRows());
         group = g;
         const title = GROUPS.find((x) => x.id === g).title;
         rows.push({ id: "g:" + g, head: true, spans: [{ text: title, role: g === "needs-you" ? "warn" : "head" }] });
       }
       rows.push(row(project, task, prio));
     }
-    if (days && group !== "dropped") rows.push(...doneRows(project, t, prio));
+    if (lists && group !== "dropped") rows.push(...closedRows());
     const onBoard = t.tasks.filter((x) => x.status === "done" && wanted(t, x)).length;
     const all = ((_a = t.history) == null ? void 0 : _a.pulse) ? t.history.done : onBoard === 0 ? t.total : onBoard;
-    const done = t.prio === "" ? all : onBoard;
+    const done = t.query ? 0 : t.prio === "" ? all : onBoard;
     const dropped = t.tasks.filter((x) => x.status === "dropped" && wanted(t, x)).length;
     const folded = !bar && !t.doneAll && done + dropped > 0;
     if (folded && done > 0) rows.push({ id: "g:done", head: true, spans: [{ text: "DONE", role: "head" }] });
@@ -275,6 +286,7 @@
       t.tasks = await $.tasks.list(project);
       await loadHistory(project, t);
       await loadDone(project, t);
+      await loadFound(project, t);
       await loadPicked(project, t);
       if (!t.doneAll && !t.tasks.some((x) => x.status === "done")) {
         t.total = (_b = (_a = await $.tasks.done(project, { groups: true })) == null ? void 0 : _a.total) != null ? _b : 0;
@@ -333,12 +345,35 @@
       }
     }
   }
+  async function loadFound(project, t) {
+    var _a;
+    const query = t.query;
+    if (!query) {
+      t.found = null;
+      return;
+    }
+    const read = ((_a = t.found) == null ? void 0 : _a.query) === query ? t.found.tasks.length : 0;
+    const res = await $.tasks.done(project, { query, archived: true, limit: Math.max(read, PAGE) });
+    if (t.query === query) t.found = { query, tasks: res.tasks, next: res.next, total: res.total };
+  }
   async function readFold(project, g, offset, limit) {
     const res = await $.tasks.done(project, { from: g.from, to: g.to, archived: g.archived > 0, offset, limit });
     return { tasks: res.tasks, next: res.next };
   }
   async function press(project, t, row2) {
-    var _a, _b, _c;
+    var _a, _b, _c, _d;
+    if (row2 === "m:found") {
+      const f = t.found;
+      if (!f) return true;
+      try {
+        t.error = "";
+        const more = await $.tasks.done(project, { query: f.query, archived: true, offset: f.next, limit: PAGE });
+        if (t.found === f) t.found = __spreadProps(__spreadValues({}, f), { tasks: [...f.tasks, ...more.tasks], next: more.next, total: more.total });
+      } catch (e) {
+        t.error = String((_a = e == null ? void 0 : e.message) != null ? _a : e);
+      }
+      return true;
+    }
     if (row2 === "m:pick") {
       const bar = pickedBar(t);
       try {
@@ -348,7 +383,7 @@
           t.picked = { tasks: [...t.picked.tasks, ...more.tasks], next: more.next };
         }
       } catch (e) {
-        t.error = String((_a = e == null ? void 0 : e.message) != null ? _a : e);
+        t.error = String((_b = e == null ? void 0 : e.message) != null ? _b : e);
       }
       return true;
     }
@@ -363,7 +398,7 @@
         if (t.toggled.has(k)) t.toggled.delete(k);
         else t.toggled.add(k);
         if (isOpen(t, g) && !t.rows.has(k)) {
-          t.rows.set(k, g.open ? { tasks: (_b = g.tasks) != null ? _b : [], next: g.next } : await readFold(project, g, 0, PAGE));
+          t.rows.set(k, g.open ? { tasks: (_c = g.tasks) != null ? _c : [], next: g.next } : await readFold(project, g, 0, PAGE));
         }
       } else {
         const f = t.rows.get(k);
@@ -373,7 +408,7 @@
         }
       }
     } catch (e) {
-      t.error = String((_c = e == null ? void 0 : e.message) != null ? _c : e);
+      t.error = String((_d = e == null ? void 0 : e.message) != null ? _d : e);
     }
     return true;
   }
@@ -396,7 +431,7 @@
   $.on("view.opened", async (e) => {
     var _a;
     if (e.view !== VIEW || !e.project) return;
-    const t = (_a = tabs.get(e.project)) != null ? _a : { tasks: [], doneAll: false, prio: "", error: "", groups: [], total: 0, rows: /* @__PURE__ */ new Map(), toggled: /* @__PURE__ */ new Set(), reveal: "", history: null, historyAt: "", pick: "", picked: { tasks: [], next: 0 } };
+    const t = (_a = tabs.get(e.project)) != null ? _a : { tasks: [], doneAll: false, prio: "", error: "", groups: [], total: 0, rows: /* @__PURE__ */ new Map(), toggled: /* @__PURE__ */ new Set(), reveal: "", query: "", found: null, history: null, historyAt: "", pick: "", picked: { tasks: [], next: 0 } };
     tabs.set(e.project, t);
     if (e.task) t.pick = "";
     await load(e.project, t);
@@ -435,6 +470,18 @@
     else t.prio = PRIOS[(PRIOS.indexOf(t.prio) + 1) % PRIOS.length];
     await load(project, t);
     await publish(project, t);
+  });
+  $.on("ui.filter", async (e) => {
+    var _a, _b;
+    const project = (_a = e.target) == null ? void 0 : _a.project;
+    if (e.view !== VIEW || !project) return;
+    const t = tabs.get(project);
+    if (!t) return;
+    const query = ((_b = e.filter) != null ? _b : "").trim();
+    if (query === t.query) return;
+    t.query = query;
+    await load(project, t);
+    if (t.query === query) await publish(project, t);
   });
   $.on("ui.click", async (e) => {
     var _a, _b;

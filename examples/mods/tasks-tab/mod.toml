@@ -7,7 +7,7 @@
 # install it by path (tm mod install refuses a built-in mod's id).
 id = "tasks-tab"
 name = "Tasks tab"
-version = "1.5.0"
+version = "1.6.0"
 api = "1.23"
 description = "The project's tasks in its popup, grouped as the board has them, under the Pulse; [ and ] filter by its days; D, A, x, P, c, enter and + are tm's own actions, bound on each row and in the tab."
 authors = ["terminatr"]
