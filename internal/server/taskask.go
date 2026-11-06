@@ -117,12 +117,34 @@ func (s *Server) taskGet(p proto.TaskGetParams) (any, *proto.Error) {
 // (tasks.NewestDoneFirst), without their notes and steps. With a groups
 // call, Groups are Done's headings, and Total how many tasks they hold;
 // otherwise Tasks is the page, Total how many the range holds, and Next
-// the offset to read on from (0 at the end).
+// the offset to read on from (0 at the end). Mark is the line at the
+// human's last action, with groups, when work has finished since.
 type TaskDone struct {
 	Tasks  []SideTask      `json:"tasks"`
 	Groups []SideDoneGroup `json:"groups,omitempty"`
 	Total  int             `json:"total,omitempty"`
 	Next   int             `json:"next,omitempty"`
+	Mark   *SideDoneMark   `json:"mark,omitempty"`
+}
+
+// SideDoneMark is the line in Done on the wire (tasks.DoneMark).
+type SideDoneMark struct {
+	At      string `json:"at"`
+	Title   string `json:"title"`
+	Group   int    `json:"group"`
+	Rows    int    `json:"rows,omitempty"`
+	Between bool   `json:"between,omitempty"`
+}
+
+// markDone places the line at the human's last action in project p's
+// groups, made of done as of now. Like them it reads no git, so a plain
+// folder gets the same line as a repository.
+func markDone(p *project.Project, groups []tasks.DoneGroup, done []*tasks.Task, now time.Time) *tasks.DoneMark {
+	at, where, ok := p.LastHumanAct()
+	if !ok {
+		return nil
+	}
+	return tasks.MarkDone(groups, done, at, where, now)
 }
 
 // SideDoneGroup is a heading of Done on the wire (tasks.DoneGroup).
@@ -182,7 +204,12 @@ func (s *Server) taskDone(p proto.TaskDoneParams) (any, *proto.Error) {
 	out := TaskDone{Tasks: []SideTask{}}
 	if p.Groups {
 		out.Total = len(done)
-		for _, g := range tasks.GroupDone(done, time.Now().In(loc), 0) {
+		now := time.Now().In(loc)
+		groups := tasks.GroupDone(done, now, 0)
+		if m := markDone(pr, groups, done, now); m != nil {
+			out.Mark = &SideDoneMark{At: m.At.UTC().Format(time.RFC3339), Title: m.Title, Group: m.Group, Rows: m.Rows, Between: m.Between}
+		}
+		for _, g := range groups {
 			out.Groups = append(out.Groups, SideDoneGroup{Kind: g.Kind, Title: g.Title, From: g.From, To: g.To,
 				Count: g.Count, Archived: g.Archived, Open: g.Open, Tasks: doneRows(g.Tasks), Next: g.Next})
 		}

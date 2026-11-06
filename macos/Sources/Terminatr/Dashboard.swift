@@ -253,6 +253,7 @@ struct ProjectDashboard: View {
     private func doneByDay(_ groups: [AppAPI.DoneGroup]) -> some View {
         VStack(alignment: .leading, spacing: 9) {
             ForEach(groups, id: \.key) { group in
+                if let mark = ledger.markAbove(group) { DoneMarkLine(mark: mark) }
                 VStack(alignment: .leading, spacing: 5) {
                     Button {
                         if ledger.press(group) { read(group) }
@@ -274,8 +275,16 @@ struct ProjectDashboard: View {
                     .accessibilityValue(ledger.isOpen(group) ? "open" : "folded")
                     if ledger.isOpen(group) {
                         let rows = ledger.tasks(in: group)
-                        if !rows.isEmpty {
-                            HairlineList { ForEach(rows) { BoardRow(project: project.slug, task: $0, timeOnly: group.kind == "day") } }
+                        // The line at the user's last action parts the rows.
+                        let above = ledger.markRows(in: group)
+                        let newer = above.map { Array(rows.prefix($0)) } ?? rows
+                        let older = above.map { Array(rows.dropFirst($0)) } ?? []
+                        if !newer.isEmpty {
+                            HairlineList { ForEach(newer) { BoardRow(project: project.slug, task: $0, timeOnly: group.kind == "day") } }
+                        }
+                        if above != nil, let mark = ledger.mark { DoneMarkLine(mark: mark) }
+                        if !older.isEmpty {
+                            HairlineList { ForEach(older) { BoardRow(project: project.slug, task: $0, timeOnly: group.kind == "day") } }
                         }
                         if reading.contains(group.key) {
                             ProgressView().controlSize(.small)
@@ -288,6 +297,7 @@ struct ProjectDashboard: View {
                     }
                 }
             }
+            if let mark = ledger.markBelow { DoneMarkLine(mark: mark) }
         }
     }
 
@@ -631,6 +641,26 @@ private struct BoardRow: View {
                 }
                 TaskOutcome(project: project, task: task.ref)
             }
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// The line in Done at the user's last action, tm's words between two
+/// rules in the action colour.
+private struct DoneMarkLine: View {
+    @Environment(\.theme) private var theme
+    let mark: AppAPI.DoneMark
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Rectangle().fill(theme.action).frame(width: 12, height: 1)
+            Text(mark.title)
+                .font(theme.sized(Flat.label))
+                .foregroundStyle(theme.action)
+                .lineLimit(1)
+                .layoutPriority(1)
+            Rectangle().fill(theme.action).frame(height: 1)
         }
         .accessibilityElement(children: .combine)
     }

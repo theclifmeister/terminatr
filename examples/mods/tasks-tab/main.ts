@@ -60,6 +60,8 @@ interface Tab {
   rows: Map<string, Fold>;
   toggled: Set<string>;
   reveal: string;
+  // The line at the user's last action, when work has finished since.
+  mark?: TM.DoneMark;
 }
 
 // Fold is the rows read of a group that opened.
@@ -215,18 +217,32 @@ function foldRow(t: Tab, g: TM.DoneGroup): TM.Value {
   return { id: "f:" + key(g), spans: [{ text: g.title, role: isOpen(t, g) ? undefined : "faint" }, { text: ` · ${g.count}${mark}`, role: "faint" }] };
 }
 
+// markRow is the line in Done at the user's last action.
+function markRow(m: TM.DoneMark): TM.Value {
+  return { id: "y:mark", head: true, spans: [{ text: `── ${m.title}`, role: "accent" }] };
+}
+
 // doneRows are Done by day: each group's heading, an open one's rows and,
-// while it has more to read, a row that reads them.
+// while it has more to read, a row that reads them. The line at the user's
+// last action stands among a group's rows, or above a heading.
 function doneRows(project: string, t: Tab, prio: boolean): TM.Value[] {
   const rows: TM.Value[] = [{ id: "g:done", head: true, spans: [{ text: `DONE · ${t.total}`, role: "head" }, { text: "  newest first   b hides   ⏎ opens", role: "faint" }] }];
-  for (const g of t.groups) {
+  const mark = t.mark;
+  t.groups.forEach((g, i) => {
+    if (mark?.between && mark.group === i) rows.push(markRow(mark));
     rows.push(foldRow(t, g));
-    if (!isOpen(t, g)) continue;
+    if (!isOpen(t, g)) return;
     const f = t.rows.get(key(g));
-    if (!f) continue;
-    for (const task of f.tasks) rows.push(row(project, task, prio, g.kind === "day"));
+    if (!f) return;
+    const at = mark && !mark.between && mark.group === i ? Math.min(mark.rows, f.tasks.length) : -1;
+    f.tasks.forEach((task, n) => {
+      if (n === at) rows.push(markRow(mark!));
+      rows.push(row(project, task, prio, g.kind === "day"));
+    });
+    if (at === f.tasks.length) rows.push(markRow(mark!));
     if (f.next > 0) rows.push({ id: "m:" + key(g), spans: [{ text: `  … ${g.count - f.tasks.length} more`, role: "faint" }] });
-  }
+  });
+  if (mark?.between && mark.group >= t.groups.length) rows.push(markRow(mark));
   return rows;
 }
 
@@ -324,6 +340,7 @@ async function loadDone(project: string, t: Tab): Promise<void> {
   const res = await $.tasks.done(project, { groups: true, reveal: t.reveal });
   t.groups = res.groups;
   t.total = res.total;
+  t.mark = res.mark;
   const was = t.rows;
   t.rows = new Map();
   for (const g of t.groups) {

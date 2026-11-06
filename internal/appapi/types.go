@@ -1240,12 +1240,28 @@ type TaskDoneParams struct {
 // DoneTasks is task.done's result: done tasks, newest first since app API
 // 54 (board order before), without their notes and steps. Since app API
 // 57: Groups are Done's headings when asked for, Total how many tasks they
-// or the range hold, Next the offset to read on from (0 at the end).
+// or the range hold, Next the offset to read on from (0 at the end). Since
+// app API 67: Mark, with Groups, the line at the human's last action in the
+// journal, when work has finished since.
 type DoneTasks struct {
 	Tasks  []Task      `json:"tasks"`
 	Groups []DoneGroup `json:"groups,omitempty"`
 	Total  int         `json:"total,omitempty"`
 	Next   int         `json:"next,omitempty"`
+	Mark   *DoneMark   `json:"mark,omitempty"`
+}
+
+// DoneMark is the line in Done at the human's last action (app API 67): At
+// its time, Title its words. It stands in Groups[Group], below Rows of its
+// tasks; or, with Between, above that group's heading (Group is the number
+// of groups when that is below them all). The group holding the line comes
+// open.
+type DoneMark struct {
+	At      string `json:"at"`
+	Title   string `json:"title"`
+	Group   int    `json:"group"`
+	Rows    int    `json:"rows,omitempty"`
+	Between bool   `json:"between,omitempty"`
 }
 
 // DoneGroup is one heading of Done (app API 57): kind day, week, month or
@@ -1275,6 +1291,9 @@ func doneTasksOf(r server.TaskDone) DoneTasks {
 			d.Tasks = append(d.Tasks, taskOf(t))
 		}
 		out.Groups = append(out.Groups, d)
+	}
+	if m := r.Mark; m != nil {
+		out.Mark = &DoneMark{At: m.At, Title: m.Title, Group: m.Group, Rows: m.Rows, Between: m.Between}
 	}
 	return out
 }

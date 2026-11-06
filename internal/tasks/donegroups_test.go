@@ -280,3 +280,128 @@ func TestStoreDone(t *testing.T) {
 		t.Errorf("with the archive: %v %v", all, err)
 	}
 }
+
+// A task finished at a time, and the human's action, on doneNow's days.
+func doneAt(id int, at string) *Task { return &Task{ID: id, Status: Done, DoneAt: at} }
+
+func actedAt(t *testing.T, at string) time.Time {
+	t.Helper()
+	a, err := time.Parse(time.RFC3339, at)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return a
+}
+
+// TestMarkDone: where the line stands, what it says, and which group that
+// opens. All from task records and the journal's time: every setup, git or
+// not, is this same call.
+func TestMarkDone(t *testing.T) {
+	today := []*Task{doneAt(9, "2026-11-06T14:00:00Z"), doneAt(8, "2026-11-06T09:00:00Z")}
+	yesterday := []*Task{doneAt(7, "2026-11-05T23:39:00Z"), doneAt(6, "2026-11-05T22:53:00Z")}
+	// Seven days with work, so that October and September fold.
+	id := 100
+	var days []*Task
+	for d := range 7 {
+		days = append(days, doneOn(&id, dayAdd("2026-11-06", -d), 1)...)
+	}
+	october := []*Task{doneAt(5, "2026-10-21T12:00:00Z"), doneAt(4, "2026-10-19T12:00:00Z")}
+	september := []*Task{doneAt(3, "2026-09-10T12:00:00Z"), doneAt(2, "2026-09-02T12:00:00Z")}
+	quiet := []*Task{doneAt(9, "2026-11-01T10:00:00Z"), doneAt(8, "2026-07-01T10:00:00Z"), doneAt(7, "2026-03-01T10:00:00Z")}
+	undated := &Task{ID: 1, Status: Done}
+	cat := func(ts ...[]*Task) []*Task { return slices.Concat(ts...) }
+	for _, tc := range []struct {
+		name, at, where string
+		done            []*Task
+		title           string // "" for no line
+		group, rows     int
+		between         bool
+		opens           string // the title of the group that must be open
+	}{
+		{name: "between two rows of a day", at: "2026-11-05T23:14:00Z", where: "on the iPhone", done: cat(today, yesterday),
+			title: "you last acted at 23:14 on the iPhone", group: 1, rows: 1, opens: "Yesterday"},
+		{name: "this morning, in the app", at: "2026-11-06T10:00:00Z", where: "in the app", done: today,
+			title: "you last acted at 10:00 in the app", group: 0, rows: 1, opens: "Today"},
+		{name: "nothing finished since", at: "2026-11-06T14:00:00Z", done: today},
+		{name: "a task at the same second is not since", at: "2026-11-06T14:00:01Z", done: today},
+		{name: "no done work", at: "2026-11-06T14:00:00Z"},
+		{name: "below all of a day's rows", at: "2026-11-05T01:00:00Z", done: cat(today, yesterday),
+			title: "you last acted at 01:00", group: 1, rows: 2, opens: "Yesterday"},
+		{name: "a day older than the open days: the fold opens", at: "2026-10-20T08:00:00Z", done: cat(days, october, september),
+			title: "you last acted 20 Oct 08:00", group: 7, rows: 1, opens: "19–25 Oct"},
+		{name: "in a month's fold: the fold opens", at: "2026-09-05T08:00:00Z", done: cat(days, october, september),
+			title: "you last acted 5 Sep 08:00", group: 8, rows: 1, opens: "September"},
+		{name: "months between tasks: between two headings", at: "2026-05-01T08:00:00Z", done: quiet,
+			title: "you last acted 1 May 08:00", group: 2, between: true},
+		{name: "older than all the work: below every heading", at: "2026-01-01T08:00:00Z", done: quiet,
+			title: "you last acted 1 Jan 08:00", group: 3, between: true},
+		{name: "another year's says so", at: "2025-12-31T08:00:00Z", done: quiet,
+			title: "you last acted 31 Dec 2025 08:00", group: 3, between: true},
+		{name: "above what nothing dates", at: "2026-01-01T08:00:00Z", done: cat(quiet, []*Task{undated}),
+			title: "you last acted 1 Jan 08:00", group: 3, between: true},
+		{name: "only undated work: nothing finished since", at: "2026-01-01T08:00:00Z", done: []*Task{undated}},
+		{name: "a task known by its day alone, later", at: "2026-11-05T08:00:00Z", done: []*Task{{ID: 2, Status: Done, DoneAt: "2026-11-06"}, doneAt(1, "2026-11-05T07:00:00Z")},
+			title: "you last acted at 08:00", group: 1, rows: 0},
+		{name: "a task known by its day alone, that day: not since", at: "2026-11-06T08:00:00Z", done: []*Task{{ID: 2, Status: Done, DoneAt: "2026-11-06"}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			done := newest(tc.done)
+			gs := GroupDone(done, doneNow, 0)
+			m := MarkDone(gs, done, actedAt(t, tc.at), tc.where, doneNow)
+			if tc.title == "" {
+				if m != nil {
+					t.Fatalf("a line: %+v", m)
+				}
+				return
+			}
+			if m == nil {
+				t.Fatalf("no line, groups %s", titles(gs))
+			}
+			if m.Title != tc.title || m.Group != tc.group || m.Rows != tc.rows || m.Between != tc.between {
+				t.Errorf("mark %+v, groups %s", m, titles(gs))
+			}
+			if tc.opens != "" {
+				g := gs[m.Group]
+				if g.Title != tc.opens || !g.Open {
+					t.Errorf("opens %q open=%v, want %q; groups %s", g.Title, g.Open, tc.opens, titles(gs))
+				}
+				if len(g.Tasks) < min(m.Rows+1, g.Count) {
+					t.Errorf("read %d rows of %d, the line below %d", len(g.Tasks), g.Count, m.Rows)
+				}
+			}
+		})
+	}
+}
+
+// TestMarkDoneInLocalTime: the day, the time and the group are the viewer's.
+func TestMarkDoneInLocalTime(t *testing.T) {
+	tokyo := time.FixedZone("JST", 9*3600)
+	now := doneNow.In(tokyo) // 00:00 on Saturday 7 November there
+	done := newest([]*Task{doneAt(2, "2026-11-06T14:00:00Z"), doneAt(1, "2026-11-06T09:00:00Z")})
+	gs := GroupDone(done, now, 0)
+	m := MarkDone(gs, done, actedAt(t, "2026-11-06T10:00:00Z"), "", now)
+	if m == nil || m.Title != "you last acted at 19:00" || gs[m.Group].Title != "Yesterday" || m.Rows != 1 {
+		t.Fatalf("%+v, groups %s", m, titles(gs))
+	}
+}
+
+// TestMarkDoneDeepInAFold: a line below more rows than a page still has
+// them read, and a fold it opens says what is left to read.
+func TestMarkDoneDeepInAFold(t *testing.T) {
+	id := 0
+	var done []*Task
+	for d := range 7 {
+		done = append(done, doneOn(&id, dayAdd("2026-11-06", -d), 1)...)
+	}
+	done = append(done, doneOn(&id, "2026-09-10", 50)...) // 08:00 to 08:49
+	done = newest(done)
+	gs := GroupDone(done, doneNow, 0)
+	m := MarkDone(gs, done, actedAt(t, "2026-09-10T08:04:30Z"), "", doneNow)
+	if m == nil || m.Rows != 45 {
+		t.Fatalf("%+v", m)
+	}
+	g := gs[m.Group]
+	if !g.Open || len(g.Tasks) != 46 || g.Next != 46 {
+		t.Fatalf("open %v, %d rows, next %d", g.Open, len(g.Tasks), g.Next)
+	}
+}
