@@ -1213,6 +1213,7 @@ tm task help                              # every task command
 tm task status T12 started                # also: open ready blocked review done dropped
 tm task status T12 done --approved-by-user  # the coordinator, once the user accepted the work (§6.4)
 tm task status T12 dropped --approved-by-user --note "why"  # the coordinator, once the user decided not to do it
+tm task status T12 started --approved-by-user --note "sent back: …"  # the coordinator, once the user sent a done task back
 tm task status T12 blocked --note "waiting for API key"
 tm task edit T12 [--title "…"] [--notes "…" | --notes-file f.md] [--priority P] [--owner O] [--repo R] [--design NAME] [--after T10,T11]   # "" clears --repo, --design, --after; --priority none clears it
 tm task steps T12 add "Open a PR"
@@ -1253,6 +1254,7 @@ tm task send-back T12 --note "…"          # the human's: X, a send-back item c
 
 - **Only the human accepts work.** This is tsk's rule, because "done" is the human's acceptance of the work and the one signal the coordinator must never fake. Since the user talks only to the coordinator (§4), the coordinator relays it.
   - **Standing acceptance** (`complete_tasks`, §11.2). The user may accept in advance, per project: with `merged`, the ticker (caller `ticker`, the human's rights) marks a task in `review` done once its thread's PR merged (§7.5). (An old `released` setting reads as `user`, and `tm doctor` warns until the user picks again.) Tasks without a merged thread PR, and tasks owned by `me`, are never completed this way. The user can take it back: `X` on a done task sends it back, and the coordinator reopens it. The default, `user`, leaves every completion to the user's word.
+  - **Done stays done until the user says otherwise**, by their word or by the setting. An agent's `tm task status T12 review` (or any other status) on a done task exits 1 with `task-done` and changes nothing, so a status arriving after the merge can't reopen it. Once the user sends it back, the coordinator runs `tm task status T12 started --approved-by-user --note "sent back: …"`, journaled `coordinator task.status T12 started: sent back: … (approved by the user)`. On a task that isn't done the flag takes only `done` and `dropped` (`invalid-status`). The human's own calls are not held back, and any status still reopens a dropped task.
   - The server enforces it by caller (§11.1). An agent call to `tm task status T12 done` exits 1 with `human-only` and says how to relay the user's decision.
   - Once the user says the work is accepted ("mark T12 done"), the coordinator runs `tm task status T12 done --approved-by-user`. It is journaled as `coordinator task.status T12 done (approved by the user)`, as `tm thread start --approved-by-user` is. Threads can't set `done` at all.
   - **Dropping a task** is the user's call too, and is not done: when they decide not to do a task ("drop T12"), the coordinator runs `tm task status T12 dropped --approved-by-user --note "why"` (journaled `coordinator task.status T12 dropped: why (approved by the user)`); a plain agent call exits 1 with `human-only` and says how. `tm task add --status dropped` is the human's alone too. A dropped task can't be delegated (`task-dropped`); `tm task status T12 open` (or any other status) reopens it.
@@ -1471,7 +1473,7 @@ Sections are capped, and the output says what it left out. Two calls with the sa
 - a `delegate` item (the user pressed `D` on a task and confirmed, §4) is that go-ahead: delegate the task with `--approved-by-user`, proposing instead only at the cap or when the task needs something from the user first;
 - an `accept` item (`A`, §4) is the user's acceptance, the only way besides chat: `tm task status T12 done --approved-by-user`;
 - the project's complete-tasks setting (§11.2) is the user's standing acceptance: a `task-done` item says tm completed a task; the coordinator reports it;
-- a `send-back` item (`X`, §4) carries the user's note: forward it to the task's thread and move the task back to `started`; if that thread is resolved, propose a new thread with the note and keep the task `ready` until the user agrees; a send-back on a `done` task reopens it the same way;
+- a `send-back` item (`X`, §4) carries the user's note: forward it to the task's thread and move the task back to `started` (on a done task with `--approved-by-user`, §6.4); if that thread is resolved, propose a new thread with the note and keep the task `ready` until the user agrees; a send-back on a `done` task reopens it the same way;
 - when moving a task to `review`, make sure the user can see how to check it: the report's `## Check`, else a `Check:` note;
 - at the parallel threads cap, or the cap across projects (`over-global-cap`), propose instead of starting, and add `--over-cap` only when the user says so;
 - a `slot-free` item says a slot freed after a cap refused it: start the proposed thread if the user agreed, else remind them;
