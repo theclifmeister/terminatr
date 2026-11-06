@@ -1,0 +1,42 @@
+{
+  "name": "more than three repos: one row, any repo's, and g steps it through each, then back",
+  "answers": [
+    { "method": "tasks.list", "params": { "slug": "demo" }, "result": [] },
+    { "method": "history.get", "params": { "slug": "demo" },
+      "result": { "done": 1, "open": 0, "dropped": 0, "days": [], "timed": 0,
+        "curve": { "unit": "day", "span": "2 days", "range": "5–6 Nov", "releases": "a 1 · b 1 · c 1 · d 1 releases",
+          "points": [
+            { "from": "2026-11-05", "to": "2026-11-05", "label": "5 Nov", "done": 1, "total": 1, "tip": "" },
+            { "from": "2026-11-06", "to": "2026-11-06", "label": "6 Nov", "done": 0, "total": 1, "tip": "" }
+          ],
+          "best": { "done": 1, "word": "best day", "when": "5 Nov" },
+          "ticks": [ { "repo": "a", "points": [0] }, { "repo": "b", "points": [1] }, { "repo": "c", "points": [1] }, { "repo": "d", "points": [1] } ] } } },
+    { "method": "tasks.done", "params": { "slug": "demo", "options": { "groups": true } },
+      "result": { "total": 1, "next": 0, "groups": [], "tasks": [] } }
+  ],
+  "events": [
+    { "name": "view.opened", "project": "demo",
+      "data": { "view": "tasks", "slot": "project.tab", "project": "demo", "width": 70, "height": 20 } },
+    { "name": "ui.key", "project": "demo", "data": { "view": "tasks", "key": "h", "target": { "project": "demo" } } },
+    { "name": "ui.key", "project": "demo", "data": { "view": "tasks", "key": "g", "target": { "project": "demo" } } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "ui.view.set" },
+      { "method": "ui.view.set", "params": { "view": "tasks",
+          "widget": { "kind": "stack", "children": [
+            { "kind": "text" }, { "kind": "text" }, { "kind": "text" }, { "kind": "text" },
+            { "kind": "curve", "under": [ { "label": "done" }, { "label": "rel", "word": "any repo", "dots": [true, true] } ] },
+            { "kind": "text" },
+            { "kind": "keys", "keys": [ { "key": "h" }, { "key": "g", "label": "a only" } ] }
+          ] } } },
+      { "method": "ui.view.set", "params": { "view": "tasks",
+          "widget": { "kind": "stack", "children": [
+            { "kind": "text" }, { "kind": "text" }, { "kind": "text" }, { "kind": "text" },
+            { "kind": "curve", "under": [ { "label": "done" }, { "label": "a", "word": "only this repo", "dots": [true, false] } ] },
+            { "kind": "text" },
+            { "kind": "keys", "keys": [ { "key": "h" }, { "key": "g", "label": "b only" } ] }
+          ] } } }
+    ]
+  }
+}

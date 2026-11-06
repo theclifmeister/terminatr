@@ -1,0 +1,37 @@
+{
+  "name": "nothing finished and one design with all its tasks open: no curve, the chapter at 0 of its tasks with no date",
+  "answers": [
+    { "method": "tasks.list", "params": { "slug": "demo" }, "result": [] },
+    { "method": "history.get", "params": { "slug": "demo" },
+      "result": { "done": 0, "open": 3, "dropped": 0, "days": [], "timed": 0,
+        "chapters": [ { "name": "web", "title": "The web page", "done": 0, "total": 3 } ] } },
+    { "method": "tasks.done", "params": { "slug": "demo", "options": { "groups": true } },
+      "result": { "total": 0, "next": 0, "groups": [], "tasks": [] } }
+  ],
+  "events": [
+    { "name": "view.opened", "project": "demo",
+      "data": { "view": "tasks", "slot": "project.tab", "project": "demo", "width": 70, "height": 20 } },
+    { "name": "ui.key", "project": "demo", "data": { "view": "tasks", "key": "h", "target": { "project": "demo" } } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "ui.view.set" },
+      { "method": "ui.view.set", "params": { "view": "tasks",
+          "widget": { "kind": "stack", "children": [
+            { "kind": "text" },
+            { "kind": "text", "text": "0 done · 3 open" },
+            { "kind": "text" },
+            { "kind": "text", "text": "Nothing finished yet." },
+            { "kind": "text" },
+            { "kind": "table", "id": "chapters", "rows": [
+              { "id": "g:chapters", "spans": [{ "text": "CHAPTERS" }, { "text": "  the designs" }] },
+              { "id": "c:web", "cells": [[{ "text": "The web page" }], [{ "text": "" }],
+                [{ "icon": "bar.off" }, { "icon": "bar.off" }, { "icon": "bar.off" }, { "icon": "bar.off" }, { "icon": "bar.off" }, { "icon": "bar.off" },
+                 { "icon": "bar.off" }, { "icon": "bar.off" }, { "icon": "bar.off" }, { "icon": "bar.off" }, { "icon": "bar.off" }, { "icon": "bar.off" }],
+                [{ "text": "0/3" }]] }
+            ] },
+            { "kind": "keys" }
+          ] } } }
+    ]
+  }
+}

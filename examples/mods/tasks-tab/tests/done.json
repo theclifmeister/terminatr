@@ -200,7 +200,8 @@
                   {
                     "key": "p",
                     "label": "must only"
-                  }
+                  },
+                  { "key": "h", "label": "history" }
                 ]
               }
             ]
@@ -395,7 +396,8 @@
                   {
                     "key": "p",
                     "label": "must only"
-                  }
+                  },
+                  { "key": "h", "label": "history" }
                 ]
               }
             ]

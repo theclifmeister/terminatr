@@ -176,6 +176,8 @@ func (lo *layer) widget(w *Widget) {
 		lo.bars(w)
 	case KindBand:
 		lo.band(w)
+	case KindCurve:
+		lo.curve(w)
 	case KindKeys:
 		lo.keys(w.Keys)
 	}
@@ -524,6 +526,153 @@ func (lo *layer) bandAxis(w *Widget, start, end int, mark string) string {
 		return last
 	}
 	return first + strings.Repeat(" ", gap) + last
+}
+
+// How a curve draws: its lines of area, how many columns one value may take,
+// and the room its labels may take on the left.
+const (
+	curveLines  = 6
+	curveMaxW   = 8
+	curveMaxPad = 12
+)
+
+// curve draws Values as a filled area, the top and the middle labelled on
+// the left, the Labels under it, then the Under rows along the same columns.
+// With more values than columns each column is the last it stands for, a
+// row's most or a dot of any; with few, a value takes several columns.
+func (lo *layer) curve(w *Widget) {
+	if len(w.Values) == 0 {
+		return
+	}
+	cells, full, dot, nodot := sparkUnicode, sparkUnicode[len(sparkUnicode)-1], "•", "·"
+	if lo.look.ASCII() {
+		cells, full, dot, nodot = sparkASCII, sparkASCII[len(sparkASCII)-1], "*", "."
+	}
+	top := slices.Max(w.Values)
+	topWord, midWord := number(top), number(float64(int(top/2+0.5)))
+	gutter := ansi.StringWidth(topWord)
+	for _, u := range w.Under {
+		gutter = max(gutter, ansi.StringWidth(u.Label))
+	}
+	gutter = min(gutter, curveMaxPad, max(lo.w/4, 1))
+	cols := curveColumns(len(w.Values), max(lo.w-gutter-1, 1))
+	left := func(s string) string {
+		return lo.look.Style("faint", pad(clip(s, gutter), gutter, true)) + " "
+	}
+
+	for line := range curveLines {
+		var b strings.Builder
+		for _, c := range cols {
+			level := 0
+			if v := w.Values[c.last]; v > 0 {
+				level = max(int(v/top*float64(curveLines*len(cells))+0.5), 1)
+			}
+			over := level - (curveLines-1-line)*len(cells)
+			switch {
+			case over <= 0:
+				b.WriteByte(' ')
+			case over >= len(cells):
+				b.WriteString(full)
+			default:
+				b.WriteString(cells[over-1])
+			}
+		}
+		word := ""
+		switch line {
+		case 0:
+			word = topWord
+		case curveLines / 2:
+			word = midWord
+		}
+		lo.add(left(word) + lo.look.Style("accent", b.String()))
+	}
+	if axis := curveAxis(w.Labels, cols); axis != "" {
+		lo.add(left("") + lo.look.Style("faint", axis))
+	}
+	for i := range w.Under {
+		u := &w.Under[i]
+		row := left(u.Label)
+		var b strings.Builder
+		switch {
+		case len(u.Values) > 0:
+			high := slices.Max(u.Values)
+			for _, c := range cols {
+				v := slices.Max(u.Values[c.first : c.last+1])
+				if v <= 0 {
+					b.WriteByte(' ')
+				} else {
+					b.WriteString(cells[min(int(v/high*float64(len(cells)-1)+0.5), len(cells)-1)])
+				}
+			}
+			row += lo.look.Style("accent", b.String())
+		case len(u.Dots) > 0:
+			for n, c := range cols {
+				switch {
+				case n > 0 && cols[n-1].first == c.first: // the first of a value's columns has its mark
+					b.WriteByte(' ')
+				case slices.Contains(u.Dots[c.first:c.last+1], true):
+					b.WriteString(dot)
+				default:
+					b.WriteString(lo.look.Style("faint", nodot))
+				}
+			}
+			row += b.String()
+		}
+		if u.Word != "" && gutter+1+len(cols)+2+ansi.StringWidth(u.Word) <= lo.w {
+			row += "  " + lo.look.Style("faint", u.Word)
+		}
+		lo.add(row)
+	}
+}
+
+// curveColumn is the values one column of a curve stands for.
+type curveColumn struct{ first, last int }
+
+// curveColumns shares room columns among n values: each value several, up to
+// curveMaxW, or each column a few.
+func curveColumns(n, room int) []curveColumn {
+	if n <= room {
+		each := min(room/n, curveMaxW)
+		out := make([]curveColumn, 0, n*each)
+		for i := range n {
+			for range each {
+				out = append(out, curveColumn{i, i})
+			}
+		}
+		return out
+	}
+	out := make([]curveColumn, room)
+	for c := range room {
+		out[c] = curveColumn{c * n / room, (c+1)*n/room - 1}
+	}
+	return out
+}
+
+// curveAxis puts each label at its value's first column, leaving out one
+// that would touch the one before or pass the end.
+func curveAxis(labels []string, cols []curveColumn) string {
+	if len(labels) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	at, seen := 0, -1
+	for n, c := range cols {
+		for i := max(seen+1, c.first); i <= c.last; i++ {
+			word := labels[i]
+			w := ansi.StringWidth(word)
+			if word != "" && n >= at && n+w <= len(cols) {
+				b.WriteString(strings.Repeat(" ", n-at) + word)
+				at = n + w
+				if at < len(cols) {
+					b.WriteByte(' ')
+					at++
+				}
+				break
+			}
+		}
+		seen = c.last
+	}
+	return strings.TrimRight(b.String(), " ")
 }
 
 // number is a value as a chart labels it: whole numbers without a point.

@@ -32,7 +32,7 @@
               { "id": "g:backlog", "head": true },
               { "id": "T5" }
             ] },
-            { "kind": "keys", "keys": [{ "key": "p", "label": "must only" }] }
+            { "kind": "keys", "keys": [{ "key": "p", "label": "must only" }, { "key": "h", "label": "history" } ] }
           ] } } },
       { "method": "ui.view.set", "params": { "view": "tasks",
           "widget": { "kind": "stack", "children": [
@@ -43,7 +43,7 @@
               { "id": "T5" }
             ] },
             { "kind": "text", "text": "only the must tasks (p for the next)", "role": "faint" },
-            { "kind": "keys", "keys": [{ "key": "p", "label": "should only" }] }
+            { "kind": "keys", "keys": [{ "key": "p", "label": "should only" }, { "key": "h", "label": "history" } ] }
           ] } } },
       { "method": "ui.view.set", "params": { "view": "tasks",
           "widget": { "kind": "stack", "children": [
@@ -52,7 +52,7 @@
               { "id": "T4" }
             ] },
             { "kind": "text", "text": "only the should tasks (p for the next)" },
-            { "kind": "keys", "keys": [{ "key": "p", "label": "could only" }] }
+            { "kind": "keys", "keys": [{ "key": "p", "label": "could only" }, { "key": "h", "label": "history" } ] }
           ] } } }
     ]
   }

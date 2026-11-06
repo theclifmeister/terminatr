@@ -110,6 +110,87 @@ type History struct {
 	// Pulse is the band at the top of the board, from the days and the
 	// releases; none before it appears, and none from a paired server.
 	Pulse *HistoryPulse `json:"pulse,omitempty"`
+	// Curve is the History view's chart (design board-library, B6 and
+	// B16), from the first day with work to today, however young the
+	// project; none before the first finish, and none from a paired
+	// server.
+	Curve *HistoryCurve `json:"curve,omitempty"`
+	// Chapters are the designs with a task to build, whose last finish is
+	// newest first, those with none done before them; none without
+	// designs (B15), and none from a paired server. ChapterDone is how
+	// many done tasks belong to one.
+	Chapters    []HistoryChapter `json:"chapters,omitempty"`
+	ChapterDone int              `json:"chapter_done,omitempty"`
+}
+
+// HistoryCurve is the chart of the History view, decided here so that
+// every surface draws the same points in the same words: tasks done in
+// all by day, week or month (as the Pulse's bars), what each span added
+// under it, and each repo's releases along the same axis.
+type HistoryCurve struct {
+	// Unit is what a point stands for: PulseDay, PulseWeek or PulseMonth.
+	Unit string `json:"unit"`
+	// Span says how long the work has run ("33 days") and Range between
+	// which days ("5 Oct – 6 Nov").
+	Span  string `json:"span"`
+	Range string `json:"range"`
+	// Releases is the count in words, each repo's when the project has
+	// several: "128 releases", "terminatr 128 · site 6 releases". "" with
+	// none, where the words are left out.
+	Releases string `json:"releases,omitempty"`
+	// Points run from the first with work to the one holding today, one
+	// for every span, oldest first.
+	Points []CurvePoint `json:"points"`
+	// Best is the span most tasks finished in, the first of equals.
+	Best CurveBest `json:"best"`
+	// Ticks are each repo's releases along the points, in History.Releases'
+	// order, never added up: only the repos with a release in the span.
+	Ticks []CurveTicks `json:"ticks,omitempty"`
+}
+
+// CurvePoint is one span of the curve: the days it covers, both inclusive
+// and in the answering server's time zone, its name on the axis ("5 Oct"),
+// what finished in it, all that finished by its end, and what it says of
+// itself ("Mon 5 Oct: 28 done, 8 releases, 28 in all").
+type CurvePoint struct {
+	From  string `json:"from"`
+	To    string `json:"to"`
+	Label string `json:"label"`
+	Done  int    `json:"done"`
+	Total int    `json:"total"`
+	Tip   string `json:"tip"`
+}
+
+// CurveBest is the curve's best span: how many finished, what kind of
+// span in words ("best day", "best week", "best month") and when ("12
+// Oct", "2–8 Nov", "October 2026").
+type CurveBest struct {
+	Done int    `json:"done"`
+	Word string `json:"word"`
+	When string `json:"when"`
+}
+
+// CurveTicks is one repo's releases along a curve: the repo's name, only in
+// a project with several, and the points, from 0, that hold at least one.
+type CurveTicks struct {
+	Repo   string `json:"repo,omitempty"`
+	Points []int  `json:"points"`
+}
+
+// HistoryChapter is a design as a part of the project's history: its name,
+// title, when its tasks finished in words (Label "5–6 Nov", with its From
+// and To days; none before the first finish), its build tasks done and in
+// all, dropped ones counting as neither, and Flag, the curve's point its
+// first task finished in, from 1, or 0 for none.
+type HistoryChapter struct {
+	Name  string `json:"name"`
+	Title string `json:"title"`
+	Label string `json:"label,omitempty"`
+	From  string `json:"from,omitempty"`
+	To    string `json:"to,omitempty"`
+	Done  int    `json:"done"`
+	Total int    `json:"total"`
+	Flag  int    `json:"flag,omitempty"`
 }
 
 // What a Pulse's bars stand for (HistoryPulse.Unit).

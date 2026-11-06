@@ -35,7 +35,7 @@
             { "kind": "text", "lines": [[]] },
             { "kind": "table", "rows": [ { "id": "g:on-deck", "head": true }, { "id": "T1" }, { "id": "g:done", "head": true } ] },
             { "kind": "text", "text": "… 12 done (b shows them)" },
-            { "kind": "keys", "keys": [ { "key": "b", "label": "done" }, { "key": "p" }, { "key": "[", "label": "filter by day" } ] }
+            { "kind": "keys", "keys": [ { "key": "b", "label": "done" }, { "key": "p" }, { "key": "[", "label": "filter by day" }, { "key": "h", "label": "history" } ] }
           ] } } },
       { "method": "ui.view.set", "params": { "view": "tasks",
           "widget": { "kind": "stack", "children": [
@@ -47,7 +47,7 @@
               { "id": "m:pick", "spans": [{ "text": "  … 9 more" }] }
             ] },
             { "kind": "text", "text": "Fri 6 Nov: 10 done, 1 release" },
-            { "kind": "keys", "keys": [ { "key": "b", "label": "all tasks" }, { "key": "p" }, { "key": "[", "label": "earlier" }, { "key": "]", "label": "later" } ] }
+            { "kind": "keys", "keys": [ { "key": "b", "label": "all tasks" }, { "key": "p" }, { "key": "[", "label": "earlier" }, { "key": "]", "label": "later" }, { "key": "h", "label": "history" } ] }
           ] } } },
       { "method": "ui.view.set", "params": { "view": "tasks",
           "widget": { "kind": "stack", "children": [

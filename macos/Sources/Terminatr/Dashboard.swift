@@ -42,6 +42,8 @@ struct ProjectDashboard: View {
     /// tasks once read.
     @State private var pick: String?
     @State private var picked: [AppAPI.Task]?
+    /// Whether the Board shows the project's History in its place.
+    @State private var showsHistory = false
 
     var body: some View {
         ScrollView {
@@ -66,16 +68,20 @@ struct ProjectDashboard: View {
         // With the numbers read, the archive's too, as the Pulse above it says.
         let doneCount = app.listsDone ? max(Dashboard.doneCount(project), ledger.total, history?.done ?? 0) : 0
         if !deck.isEmpty || !backlog.isEmpty || doneCount > 0 {
-            PaneFilter(prompt: "Filter tasks", label: "Filter the board's tasks",
-                       help: "Shows the tasks whose id or title has these words, the done ones too", text: $filter)
-            let band = PulseBand(history)
-            if let band {
-                PulseBandView(band: band, pick: $pick)
-            }
-            if let band, let bar = band.bar(from: pick) {
-                pickedTasks(bar, unit: band.unit)
+            if showsHistory, let page = HistoryPage(history) {
+                HistoryPane(page: page, project: project.slug) { showsHistory = false }
             } else {
-                boardGroups(deck: deck, backlog: backlog, doneCount: doneCount)
+                PaneFilter(prompt: "Filter tasks", label: "Filter the board's tasks",
+                           help: "Shows the tasks whose id or title has these words, the done ones too", text: $filter)
+                let band = PulseBand(history)
+                if let band {
+                    PulseBandView(band: band, pick: $pick) { showsHistory = true }
+                }
+                if let band, let bar = band.bar(from: pick) {
+                    pickedTasks(bar, unit: band.unit)
+                } else {
+                    boardGroups(deck: deck, backlog: backlog, doneCount: doneCount)
+                }
             }
             Color.clear.frame(height: 0)
                 .task(id: PulseRead(project: project.slug, count: Dashboard.doneCount(project), day: Calendar.current.startOfDay(for: .now))) {
@@ -265,7 +271,9 @@ struct ProjectDashboard: View {
             }
         }
         if doneCount > 0 && (!filtering || !doneShown.isEmpty || done == nil) {
-            fold("Done", filtering && done != nil ? doneShown.count : !doneRepo.isEmpty && ledger.groups != nil ? ledger.total : doneCount, key: filtering ? nil : "done") {
+            // Too young for the Pulse, the Done heading is the way in.
+            let way: (() -> Void)? = PulseBand(history) == nil && HistoryPage(history) != nil ? { showsHistory = true } : nil
+            fold("Done", filtering && done != nil ? doneShown.count : !doneRepo.isEmpty && ledger.groups != nil ? ledger.total : doneCount, key: filtering ? nil : "done", history: way) {
                 if let doneError {
                     Text(doneError)
                         .font(theme.body(.subheadline))
@@ -488,28 +496,34 @@ struct ProjectDashboard: View {
 
     /// A group under its label: with a key, folded until the user opens
     /// it (the key is kept while the dashboard shows).
-    private func fold<C: View>(_ title: String, _ n: Int, key: String?, @ViewBuilder _ content: () -> C) -> some View {
+    private func fold<C: View>(_ title: String, _ n: Int, key: String?, history: (() -> Void)? = nil, @ViewBuilder _ content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 7) {
             if let key {
                 let open = unfolded.contains(key)
-                Button {
-                    if open { unfolded.remove(key) } else { unfolded.insert(key) }
-                } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: "chevron.right")
-                            .rotationEffect(.degrees(open ? 90 : 0))
-                            .font(theme.body(.glyph, .semibold))
-                        Text("\(title) · \(n)")
-                            .font(theme.sized(Flat.label))
+                HStack(spacing: 8) {
+                    Button {
+                        if open { unfolded.remove(key) } else { unfolded.insert(key) }
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "chevron.right")
+                                .rotationEffect(.degrees(open ? 90 : 0))
+                                .font(theme.body(.glyph, .semibold))
+                            Text("\(title) · \(n)")
+                                .font(theme.sized(Flat.label))
+                        }
+                        .foregroundStyle(theme.muted)
+                        .contentShape(Rectangle())
                     }
-                    .foregroundStyle(theme.muted)
-                    .contentShape(Rectangle())
+                    .buttonStyle(.plain)
+                    .accessibilityValue(open ? "open" : "folded")
+                    if let history { HistoryLink(open: history) }
                 }
-                .buttonStyle(.plain)
-                .accessibilityValue(open ? "open" : "folded")
                 if open { content() }
             } else {
-                PaneLabel("\(title) · \(n)")
+                HStack(spacing: 8) {
+                    PaneLabel("\(title) · \(n)")
+                    if let history { HistoryLink(open: history) }
+                }
                 content()
             }
         }
@@ -714,6 +728,8 @@ private struct PulseBandView: View {
     @Environment(\.theme) private var theme
     let band: PulseBand
     @Binding var pick: String?
+    /// Opens the History view.
+    var openHistory: (() -> Void)?
     @State private var hovered: String?
 
     private static let chart: CGFloat = 46
@@ -811,6 +827,9 @@ private struct PulseBandView: View {
             Spacer(minLength: 0)
             if let tip = band.bars.first(where: { $0.from == hovered })?.tip {
                 Text(tip).lineLimit(1).foregroundStyle(theme.ink)
+                Spacer(minLength: 0)
+            } else if let openHistory {
+                HistoryLink(open: openHistory)
                 Spacer(minLength: 0)
             }
             Text(band.bars.last?.label ?? "")

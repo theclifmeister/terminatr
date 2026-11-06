@@ -1,5 +1,5 @@
 // Package widget is the widget set a mod draws with (mods design §6): a
-// small tree of text, list, table, kv, progress, steps, bars, band and keys,
+// small tree of text, list, table, kv, progress, steps, bars, band, curve and keys,
 // stacked, that the mod publishes as JSON and terminatr draws with its own
 // theme, icons, widths, scrolling and mouse hits. A mod never writes
 // terminal bytes: span text has its control characters stripped and its
@@ -40,11 +40,12 @@ const (
 	KindSteps    = "steps"    // Steps, each done, now or open
 	KindBars     = "bars"     // Values as a bar chart, or a sparkline
 	KindBand     = "band"     // Values as one line along a time axis (mod API 1.23)
+	KindCurve    = "curve"    // A running total along a time axis, with rows under it (mod API 1.28)
 	KindKeys     = "keys"     // Keys the mod handles, drawn as hints
 )
 
 // Kinds are the widget kinds, as the API names them.
-var Kinds = []string{KindStack, KindText, KindList, KindTable, KindKV, KindProgress, KindSteps, KindBars, KindBand, KindKeys}
+var Kinds = []string{KindStack, KindText, KindList, KindTable, KindKV, KindProgress, KindSteps, KindBars, KindBand, KindCurve, KindKeys}
 
 // Roles are the theme roles a span may name (mods design §6, Spans).
 var Roles = []string{"accent", "good", "warn", "bad", "info", "faint", "head"}
@@ -56,6 +57,7 @@ var Icons = []string{
 	"ci.pass", "ci.fail", "ci.run",
 	"todo.done", "todo.now", "todo.open",
 	"hint", "remote", "paused", "inactive", "folder", "thread", "coordinator",
+	"bar.on", "bar.off", // a progress bar's cells (mod API 1.28)
 }
 
 // Widget is one node of the tree. Kind picks which of the other fields
@@ -96,6 +98,14 @@ type Widget struct {
 	Dots   []bool   `json:"dots,omitempty"`   // band: a line under the bars, a dot for each true; none if none is
 	Pick   int      `json:"pick,omitempty"`   // band: the value picked, from 1, marked and named under the bars
 	Beside [][]Span `json:"beside,omitempty"` // band: lines beside the bars and the dots, or under them where any doesn't fit
+
+	// A curve (mod API 1.28) is Values, a running total oldest first, as a
+	// filled area several lines high, with the total and half of it on
+	// its left and Labels under it, "" for none and any that would touch
+	// the one before left out. Under rows share its columns. All its
+	// values show, however wide: too many, and each column stands for a
+	// few of them; too few, and each stands wider, up to a limit.
+	Under []CurveRow `json:"under,omitempty"`
 
 	Keys []Key `json:"keys,omitempty"` // keys
 	// Actions are core actions bound in the whole view, whatever row
@@ -225,6 +235,16 @@ type Column struct {
 	Right bool   `json:"right,omitempty"` // align right, for numbers
 }
 
+// CurveRow is a line under a curve, along its axis: a Label on the left, a
+// Word on the right where there is room, and Values as bars or Dots as
+// marks, one for each of the curve's values.
+type CurveRow struct {
+	Label  string    `json:"label,omitempty"`
+	Word   string    `json:"word,omitempty"`
+	Values []float64 `json:"values,omitempty"`
+	Dots   []bool    `json:"dots,omitempty"`
+}
+
 // Pair is one kv line.
 type Pair struct {
 	Key   string `json:"key"`
@@ -262,6 +282,7 @@ const (
 	MaxColumns  = 12
 	MaxValues   = 512
 	MaxBeside   = 4 // lines beside a band
+	MaxUnder    = 6 // rows under a curve
 	MaxKeys     = 12
 	MaxActions  = 8        // bound on one row
 	MaxMore     = 64       // lines under one row
@@ -413,6 +434,9 @@ func (c *checker) widget(w *Widget, at string, depth int) {
 		for i, ss := range w.Beside {
 			c.spans(ss, fmt.Sprintf("%s[%d]", join(at, "beside"), i))
 		}
+	case KindCurve:
+		c.bars(w, at)
+		c.under(w, at)
 	case KindKeys:
 		c.keys(w, at)
 		c.actions(w.Actions, join(at, "actions"))
@@ -475,6 +499,29 @@ func (c *checker) bars(w *Widget, at string) {
 	}
 	for i := range w.Labels {
 		c.str(&w.Labels[i], fmt.Sprintf("%s[%d]", join(at, "labels"), i))
+	}
+}
+
+func (c *checker) under(w *Widget, at string) {
+	if len(w.Under) > MaxUnder {
+		c.bad(join(at, "under"), "%d rows, over %d", len(w.Under), MaxUnder)
+	}
+	for i := range w.Under {
+		u := &w.Under[i]
+		where := fmt.Sprintf("%s[%d]", join(at, "under"), i)
+		c.str(&u.Label, join(where, "label"))
+		c.str(&u.Word, join(where, "word"))
+		if len(u.Values) > 0 && len(u.Values) != len(w.Values) {
+			c.bad(join(where, "values"), "%d values for %d", len(u.Values), len(w.Values))
+		}
+		if len(u.Dots) > 0 && len(u.Dots) != len(w.Values) {
+			c.bad(join(where, "dots"), "%d dots for %d values", len(u.Dots), len(w.Values))
+		}
+		for j, v := range u.Values {
+			if v < 0 || math.IsNaN(v) || math.IsInf(v, 0) {
+				c.bad(fmt.Sprintf("%s[%d]", join(where, "values"), j), "%v is not a number from 0", v)
+			}
+		}
 	}
 }
 
@@ -586,7 +633,7 @@ func (c *checker) actions(as []Action, at string) {
 const MaxQuestionTarget = 1024
 
 // targetKeys are a target's fields, mod API v1's (modbus.Target).
-var targetKeys = []string{"project", "task", "thread", "session", "question", "option", "path"}
+var targetKeys = []string{"project", "task", "thread", "session", "question", "option", "path", "design"}
 
 // ActionTarget is a's target as the core action table takes it.
 func ActionTarget(a Action) modaction.Target { return modaction.TargetOf(a.Target) }

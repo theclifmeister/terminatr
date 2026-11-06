@@ -16,7 +16,7 @@
       { "method": "ui.view.set", "params": { "view": "tasks",
           "widget": { "kind": "stack", "children": [
             { "kind": "table" }, { "kind": "text" },
-            { "kind": "keys", "keys": [ { "key": "b" }, { "key": "p" } ] }
+            { "kind": "keys", "keys": [ { "key": "b" }, { "key": "p" }, { "key": "h" } ] }
           ] } } }
     ]
   }

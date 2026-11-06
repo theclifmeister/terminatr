@@ -55,7 +55,11 @@ func ReadIn(p *project.Project, loc *time.Location) (proto.History, error) {
 		return h, err
 	}
 	h.Releases = x.releases(p, h.FirstRecord, loc)
-	h.Pulse = PulseOf(h, len(p.Repos) > 1, time.Now().In(loc))
+	now := time.Now().In(loc)
+	named := len(p.Repos) > 1
+	h.Pulse = PulseOf(h, named, now)
+	h.Curve = CurveOf(h, named, now)
+	h.Chapters, h.ChapterDone = x.chapters(p, h.Curve, now)
 	return h, nil
 }
 
@@ -190,6 +194,8 @@ type index struct {
 	journal fs.FileInfo
 	offset  int64
 	current records
+	// doneAt is when each task finished, as the last read found it.
+	doneAt map[int]string
 	// tags are the repos' tags, cached by their refs.
 	tags releases.Cache
 }
@@ -201,7 +207,9 @@ func (x *index) read(p *project.Project, loc *time.Location) (proto.History, err
 	if err != nil {
 		return proto.History{}, err
 	}
-	return numbers(all, runsOf(sources), first, loc), nil
+	runs := runsOf(sources)
+	x.doneAt = doneTimes(runs)
+	return numbers(all, runs, first, loc), nil
 }
 
 // load reads the task list and whatever the journal added: all the tasks,

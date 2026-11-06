@@ -29,6 +29,7 @@ func (s state) Asked(slug, ref string) string { return s.asked[ref] }
 func (s state) Session(id string) bool        { return s.sessions[id] }
 func (s state) Menu(id string) []MenuQuestion { return s.menus[id] }
 func (s state) Note(slug, path string) bool   { return slug == "alpha" && path == "memory/a.md" }
+func (s state) Design(slug, name string) bool { return slug == "alpha" && name == "web" }
 
 func live() state {
 	return state{
@@ -91,6 +92,10 @@ func TestWhy(t *testing.T) {
 		{"question.answer", answer("s-1", "Done?", "Yes"), "answered already"},
 		{"question.answer", answer("s-1", "Which fruits?", "Pear"), "answered in the session"},
 		{"memory.edit", Target{Project: "alpha", Path: "memory/a.md"}, ""},
+		{"design.show", Target{Project: "alpha", Design: "web"}, ""},
+		{"design.show", Target{Project: "alpha", Design: "nope"}, "has no design"},
+		{"design.show", Target{Project: "alpha"}, "takes a target of"},
+		{"task.show", Target{Project: "alpha", Task: "T1", Design: "web"}, "takes no design"},
 		{"memory.rm", Target{Project: "alpha", Path: "memory/a.md"}, ""},
 		{"memory.rm", Target{Project: "alpha", Path: "memory/b.md"}, "has no note memory/b.md"},
 		{"memory.edit", Target{Project: "beta", Path: "memory/a.md"}, "no project beta"},
@@ -144,7 +149,7 @@ func TestTable(t *testing.T) {
 			t.Errorf("%s: label, key and precondition are all needed", a.ID)
 		}
 		switch a.On {
-		case OnTask, OnProject, OnSession, OnQuestion, OnNote:
+		case OnTask, OnProject, OnSession, OnQuestion, OnNote, OnDesign:
 		default:
 			t.Errorf("%s: target kind %q", a.ID, a.On)
 		}

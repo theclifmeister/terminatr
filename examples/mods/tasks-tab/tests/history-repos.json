@@ -1,0 +1,41 @@
+{
+  "name": "several repos: a tick row each up to three, named, and the counts listed, never added up",
+  "answers": [
+    { "method": "tasks.list", "params": { "slug": "demo" }, "result": [] },
+    { "method": "history.get", "params": { "slug": "demo" },
+      "result": { "done": 3, "open": 0, "dropped": 0, "days": [], "timed": 0,
+        "curve": { "unit": "day", "span": "2 days", "range": "5–6 Nov", "releases": "app 2 · site 1 releases",
+          "points": [
+            { "from": "2026-11-05", "to": "2026-11-05", "label": "5 Nov", "done": 1, "total": 1, "tip": "" },
+            { "from": "2026-11-06", "to": "2026-11-06", "label": "6 Nov", "done": 2, "total": 3, "tip": "" }
+          ],
+          "best": { "done": 2, "word": "best day", "when": "6 Nov" },
+          "ticks": [ { "repo": "app", "points": [0, 1] }, { "repo": "site", "points": [1] } ] } } },
+    { "method": "tasks.done", "params": { "slug": "demo", "options": { "groups": true } },
+      "result": { "total": 3, "next": 0, "groups": [], "tasks": [] } }
+  ],
+  "events": [
+    { "name": "view.opened", "project": "demo",
+      "data": { "view": "tasks", "slot": "project.tab", "project": "demo", "width": 70, "height": 20 } },
+    { "name": "ui.key", "project": "demo", "data": { "view": "tasks", "key": "h", "target": { "project": "demo" } } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "ui.view.set" },
+      { "method": "ui.view.set", "params": { "view": "tasks",
+          "widget": { "kind": "stack", "children": [
+            { "kind": "text" },
+            { "kind": "text", "text": "3 done · app 2 · site 1 releases · 0 open" },
+            { "kind": "text" },
+            { "kind": "text" },
+            { "kind": "curve", "under": [
+              { "label": "done" },
+              { "label": "app", "dots": [true, true] },
+              { "label": "site", "dots": [false, true] }
+            ] },
+            { "kind": "text" },
+            { "kind": "keys", "keys": [ { "key": "h" } ] }
+          ] } } }
+    ]
+  }
+}

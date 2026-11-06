@@ -9,7 +9,7 @@
      │                                                                                        │
      │ IN MOTION ──────────────────────────────────────────────────────────────────────────── │
      │ T2  Ship it           ● started                                                        │
-     │ p must only                                                                            │
+     │ p must only · h history                                                                │
      │                                                                                        │
      │                                                                                        │
      │                                                                                        │
