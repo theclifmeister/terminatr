@@ -28,6 +28,12 @@ type libFixture struct {
 		Names   []string `json:"names"`
 		Chips   [][]any  `json:"chips"`
 	} `json:"cases"`
+	// Order is the order the Library lists a library's files in: a seat's
+	// own first, a program's projects as they came.
+	Order []struct {
+		Library string   `json:"library"`
+		Names   []string `json:"names"`
+	} `json:"order"`
 	Filter []struct {
 		Files int    `json:"files"`
 		Query string `json:"query"`
@@ -115,6 +121,15 @@ func TestLibraryFilterFixture(t *testing.T) {
 		}
 		if !slices.Equal(got, want) {
 			t.Errorf("%s: chips %v, want %v", id, got, want)
+		}
+	}
+	for _, c := range fx.Order {
+		names := []string{}
+		for _, f := range libraryOrder(fx.Libraries[c.Library]) {
+			names = append(names, f.Name)
+		}
+		if !slices.Equal(names, c.Names) {
+			t.Errorf("%s: order %v, want %v", c.Library, names, c.Names)
 		}
 	}
 	for _, c := range fx.Filter {
@@ -515,5 +530,255 @@ func TestLibraryFoldReload(t *testing.T) {
 	m.Update(boardMsg{slug: pv.slug, err: errors.New("no board"), libOK: true, library: many})
 	if got := len(pv.libRows()); got != 7 || pv.sel[tabLibrary] != 6 || !pv.onLibFold() {
 		t.Errorf("after the reload: %d rows, on %d", got, pv.sel[tabLibrary])
+	}
+}
+
+// TestLibraryStacksFixture: the rule, on the table the Swift test reads too.
+func TestLibraryStacksFixture(t *testing.T) {
+	raw, err := os.ReadFile("testdata/library-filter.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fx struct {
+		Libraries map[string][]thread.LibFile `json:"libraries"`
+		Stacks    []struct {
+			Why     string     `json:"why"`
+			Names   []string   `json:"names"`
+			Library string     `json:"library"`
+			Rows    [][]string `json:"rows"`
+		} `json:"stacks"`
+	}
+	if err := json.Unmarshal(raw, &fx); err != nil {
+		t.Fatal(err)
+	}
+	if len(fx.Stacks) < 25 {
+		t.Fatalf("%d cases", len(fx.Stacks))
+	}
+	for _, c := range fx.Stacks {
+		files := fx.Libraries[c.Library]
+		for _, n := range c.Names {
+			files = append(files, thread.LibFile{Thread: "t-0001", Name: n})
+		}
+		pv := libStackView(files)
+		var got [][]string
+		for _, g := range pv.libShownGroups() {
+			for _, r := range g.rows {
+				switch {
+				case !r.isFile():
+				case r.stack == nil:
+					got = append(got, []string{r.f.Name})
+				default:
+					got = append(got, []string{r.stack.title, r.stack.f.Name, r.stack.other.Name, r.stack.words[0], r.stack.words[1]})
+				}
+			}
+		}
+		if fmt.Sprint(got) != fmt.Sprint(c.Rows) {
+			t.Errorf("%s: %v, want %v", c.Why, got, c.Rows)
+		}
+	}
+}
+
+// libStackView is an open Library tab over these files.
+func libStackView(files []thread.LibFile) *projectView {
+	return &projectView{slug: "app", tab: tabLibrary, library: files, libOK: true}
+}
+
+func libStackFiles() []thread.LibFile {
+	f := func(name string, size int64) thread.LibFile {
+		return thread.LibFile{Thread: "t-0001", Task: "T1", Title: "Shots", Name: name, Size: size}
+	}
+	return []thread.LibFile{f("mac-conv-dark.png", 618_000), f("mac-conv-light.png", 700_000), f("notes.md", 10)}
+}
+
+func libV() tea.KeyPressMsg { return tea.KeyPressMsg{Code: 'v', Text: "v"} }
+
+func TestLibraryStackRowAndSwitch(t *testing.T) {
+	pv := libStackView(libStackFiles())
+	body := func(w int) []string {
+		out, _, _ := pv.libraryLines(w)
+		for i := range out {
+			out[i] = ansi.Strip(out[i])
+		}
+		return out
+	}
+	text := strings.Join(body(70), "\n")
+	for _, want := range []string{"2 images · 1 note", "mac-conv.png", "dark light", "618.0 KB"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("no %q in:\n%s", want, text)
+		}
+	}
+	if strings.Contains(text, "mac-conv-light.png") || len(pv.libRows()) != 2 {
+		t.Fatalf("not one row:\n%s", text)
+	}
+	if f, _ := pv.selLib(); f.Name != "mac-conv-dark.png" {
+		t.Fatalf("first shows %s", f.Name)
+	}
+	pv.libraryKey(nil, libV())
+	if f, _ := pv.selLib(); f.Name != "mac-conv-light.png" {
+		t.Fatalf("after v shows %s", f.Name)
+	}
+	if text := strings.Join(body(70), "\n"); !strings.Contains(text, "700.0 KB") || !strings.Contains(text, "2 images · 1 note") {
+		t.Fatalf("after v:\n%s", text)
+	}
+	for _, w := range []int{70, 40} {
+		for _, l := range body(w) {
+			if ansi.StringWidth(l) > w {
+				t.Fatalf("over %d cells: %q", w, l)
+			}
+		}
+	}
+	// Narrow: the file's own name, and v still works.
+	if text := strings.Join(body(26), "\n"); !strings.Contains(text, "mac-conv-") || strings.Contains(text, "dark light") {
+		t.Fatalf("narrow:\n%s", text)
+	}
+	pv.libraryKey(nil, libV())
+	if f, _ := pv.selLib(); f.Name != "mac-conv-dark.png" {
+		t.Fatalf("v again shows %s", f.Name)
+	}
+	// v on a row that isn't a stack does nothing.
+	pv.sel[tabLibrary] = 1
+	pv.libraryKey(nil, libV())
+	if f, _ := pv.selLib(); f.Name != "notes.md" || len(pv.libShow) != 1 {
+		t.Fatalf("v on a plain row: %s, %v", f.Name, pv.libShow)
+	}
+}
+
+// A filter that leaves one of the two lists it as itself; the selection stays.
+func TestLibraryStackUnderFilter(t *testing.T) {
+	pv := libStackView(libStackFiles())
+	pv.narrowLib("light", "")
+	rows := pv.libRows()
+	if len(rows) != 1 || rows[0].stack != nil || rows[0].f.Name != "mac-conv-light.png" {
+		t.Fatalf("rows %+v", rows)
+	}
+	if f, ok := pv.selLib(); !ok || f.Name != "mac-conv-light.png" {
+		t.Fatalf("sel %v %v", f, ok)
+	}
+	// Selected on the second file, clearing brings the stack back, on it.
+	pv.narrowLib("", "")
+	if r, ok := pv.libStackRow(); !ok || pv.sel[tabLibrary] != 0 || r.stack.other.Name != "mac-conv-light.png" {
+		t.Fatalf("after clearing: %+v %v", r, ok)
+	}
+}
+
+// A long group folds by rows: 14 files in 7 stacks hide one row, and the
+// heading still counts the files.
+func TestLibraryStackFoldsByRows(t *testing.T) {
+	var files []thread.LibFile
+	for i := range 7 {
+		for _, w := range []string{"dark", "light"} {
+			files = append(files, thread.LibFile{Thread: "t-0001", Name: fmt.Sprintf("s%d-%s.png", i, w)})
+		}
+	}
+	pv := libStackView(files)
+	rows := pv.libRows()
+	if len(rows) != 7 || rows[6].more != 1 {
+		t.Fatalf("rows %d, last %+v", len(rows), rows[len(rows)-1])
+	}
+	if _, meta := libHeading(pv.libShownGroups()[0].files, 80); !strings.Contains(ansi.Strip(meta), "14 images") {
+		t.Fatalf("heading %q", meta)
+	}
+}
+
+// The viewer switches too, says to which, and the list keeps the choice.
+func TestLibraryStackViewerSwitches(t *testing.T) {
+	pv, m := libraryTab(t, libStackFiles())
+	m.src.(*fakeSource).libFiles = map[string]string{"t-0001/mac-conv-dark.png": "dark words", "t-0001/mac-conv-light.png": "light words"}
+	f, _ := pv.selLib()
+	m.openLibFile(pv, f)
+	tv, ok := m.top().(*textView)
+	if !ok || !strings.Contains(tv.keyHints(), "v light") || tv.body != "dark words" {
+		t.Fatalf("viewer: %+v", m.top())
+	}
+	tv.key(m, libV())
+	tv, ok = m.top().(*textView)
+	if !ok || tv.body != "light words" || !strings.Contains(tv.keyHints(), "v dark") {
+		t.Fatalf("after v: %+v", m.top())
+	}
+	m.pop()
+	if f, _ := pv.selLib(); f.Name != "mac-conv-light.png" {
+		t.Fatalf("back on the list: %s", f.Name)
+	}
+}
+
+func TestLibrarySwitchSpan(t *testing.T) {
+	if from, to, ok := libSwitchSpan(70); !ok || to-from != libSwitchCols {
+		t.Fatalf("span %d %d %v", from, to, ok)
+	}
+	if _, _, ok := libSwitchSpan(26); ok {
+		t.Fatal("no room at 26 cells")
+	}
+}
+
+// Through the real popup: the key's hint names the other word, v goes there,
+// and a click on the switch does the same; a click on the name only selects.
+func TestLibraryStackKeysAndClicks(t *testing.T) {
+	pv, m := libraryTab(t, libStackFiles())
+	out := screen(m)
+	for _, want := range []string{"mac-conv.png", "dark light", "v light"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("lacks %q:\n%s", want, out)
+		}
+	}
+	keyPress(m, "v")
+	if out := screen(m); !strings.Contains(out, "v dark") || !strings.Contains(out, "700.0 KB") {
+		t.Fatalf("after v:\n%s", out)
+	}
+	x, y := at(t, m, "dark light")
+	mouseAt(t, m, tea.MouseLeft, x+1, y)
+	if f, _ := pv.selLib(); f.Name != "mac-conv-dark.png" {
+		t.Fatalf("click on the switch: %s", f.Name)
+	}
+	x, y = at(t, m, "mac-conv.png")
+	mouseAt(t, m, tea.MouseLeft, x+1, y)
+	if f, _ := pv.selLib(); f.Name != "mac-conv-dark.png" {
+		t.Fatalf("click on the name: %s", f.Name)
+	}
+	keyPress(m, "down")
+	if out := screen(m); strings.Contains(out, "v light") {
+		t.Fatalf("v's hint on a plain row:\n%s", out)
+	}
+}
+
+// TestLibraryStripsFixture: the tiles' table is the Mac's (the TUI has no
+// strip), and what it counts is the TUI's rows: a stack is one here too.
+func TestLibraryStripsFixture(t *testing.T) {
+	raw, err := os.ReadFile("testdata/library-filter.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fx struct {
+		Strips []struct {
+			Why   string   `json:"why"`
+			Names []string `json:"names"`
+			Strip []string `json:"strip"`
+			Rows  []string `json:"rows"`
+			More  int      `json:"more"`
+		} `json:"strips"`
+	}
+	if err := json.Unmarshal(raw, &fx); err != nil {
+		t.Fatal(err)
+	}
+	if len(fx.Strips) < 6 {
+		t.Fatalf("%d cases", len(fx.Strips))
+	}
+	for _, c := range fx.Strips {
+		var files []thread.LibFile
+		for _, n := range c.Names {
+			files = append(files, thread.LibFile{Thread: "t-0001", Name: n})
+		}
+		var got []string
+		for _, e := range libEntries(files) {
+			got = append(got, e.title)
+		}
+		want := append(append([]string{}, c.Strip...), c.Rows...)
+		if len(got) != len(want)+c.More {
+			t.Errorf("%s: %d rows %v, want %d", c.Why, len(got), got, len(want)+c.More)
+		}
+		for _, w := range want {
+			if !slices.Contains(got, w) {
+				t.Errorf("%s: no %s in %v", c.Why, w, got)
+			}
+		}
 	}
 }

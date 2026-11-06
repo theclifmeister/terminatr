@@ -120,6 +120,13 @@ func init() {
 		// its build in after order. This server's projects only.
 		unary(proto.MethodDesignList, false, designListParams, designsOf),
 
+		// A project's daily numbers (app API 58; the server's caps say
+		// history), and a paired server's (caps peer-history): done per
+		// day and the facts, from tm's records. Read again when the
+		// board's done count changes.
+		unary(proto.MethodProjectHistory, false, historyParams, historyOf),
+		unary(proto.MethodPeerHistory, false, peerPagesParams, historyOf),
+
 		// A project's history, as tm search asks it (app API 41; the
 		// server's caps say search): hits, a hit's timeline and the
 		// chunks' text, as the human sees them (the coordinator's notes
@@ -168,7 +175,7 @@ func init() {
 		// The board's done tasks, which projects.watch leaves out, for
 		// the board's Show Done, and the task templates of the
 		// project's mods for New Task (app API 20).
-		unary(proto.MethodTaskDone, false, taskDoneParams, doneTasksOf),
+		unary(proto.MethodTaskDone, false, taskDoneListParams, doneTasksOf),
 		unary(proto.MethodTaskTemplates, false, taskDoneParams, templatesOf),
 		// What a project's link waits on the user for, answered in place
 		// (app API 16; the server's caps say link-act), with tm link's
@@ -530,8 +537,16 @@ func taskAddParams(p TaskAddParams) proto.TaskAddParams {
 	return proto.TaskAddParams{Project: p.Project, Title: p.Title, Notes: p.Notes, Template: p.Template}
 }
 
+func historyParams(p ProjectParams) proto.HistoryParams {
+	return proto.HistoryParams{Project: p.Project}
+}
+
 func taskDoneParams(p ProjectParams) proto.TaskDoneParams {
 	return proto.TaskDoneParams{Project: p.Project}
+}
+
+func taskDoneListParams(p TaskDoneParams) proto.TaskDoneParams {
+	return proto.TaskDoneParams{Project: p.Project, Groups: p.Groups, From: p.From, To: p.To, Archived: p.Archived, Offset: p.Offset, Limit: p.Limit, TZ: p.TZ}
 }
 
 func projectActiveParams(p ProjectActiveParams) proto.ProjectActiveParams {
@@ -583,8 +598,8 @@ func memoryReadParams(p MemoryReadParams) proto.MemoryReadParams {
 	return proto.MemoryReadParams{Project: p.Project, Path: p.Path}
 }
 
-func libraryListParams(p ProjectParams) proto.ProjectFilesParams {
-	return proto.ProjectFilesParams{Project: p.Project}
+func libraryListParams(p LibraryListParams) proto.ProjectFilesParams {
+	return proto.ProjectFilesParams{Project: p.Project, Program: p.Program.slug()}
 }
 
 func designListParams(p ProjectParams) proto.DesignListParams {
@@ -625,9 +640,9 @@ func filesReposParams(p FilesReposParams) proto.FilesReposParams {
 }
 
 func libraryThumbnailParams(p LibraryThumbnailParams) proto.LibraryThumbnailParams {
-	return proto.LibraryThumbnailParams{Project: p.Project, ID: p.ID, Name: p.Name}
+	return proto.LibraryThumbnailParams{Project: p.Project, Program: p.Program.slug(), ID: p.ID, Name: p.Name}
 }
 
 func libraryReadParams(p LibraryReadParams) proto.LibraryReadParams {
-	return proto.LibraryReadParams{Project: p.Project, ID: p.ID, Name: p.Name, Offset: p.Offset}
+	return proto.LibraryReadParams{Project: p.Project, Program: p.Program.slug(), ID: p.ID, Name: p.Name, Offset: p.Offset}
 }

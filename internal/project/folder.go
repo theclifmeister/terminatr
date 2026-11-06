@@ -43,9 +43,10 @@ func (p *Folder) Path(elem ...string) string {
 // SharedOwned is what in the folder only tm writes, of the parts every
 // Folder has (Project.Owned lists a project's, which adds threads and
 // the role files): the inbox, journal archives, messages, uploads, the
-// journal, questions.json and designs.json, with their lock files.
+// seat's own library (tm library add), the journal, questions.json and
+// designs.json, with their lock files.
 func (p *Folder) SharedOwned() (dirs, files []string) {
-	for _, d := range []string{"inbox", "journal", "messages", "uploads"} {
+	for _, d := range []string{"inbox", "journal", "messages", "uploads", "library"} {
 		dirs = append(dirs, p.Path(d))
 	}
 	for _, name := range []string{"JOURNAL.md", questionsFile, designsFile} {

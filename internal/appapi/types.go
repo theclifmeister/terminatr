@@ -434,6 +434,9 @@ type Task struct {
 	// (2026-11-06T09:10:44Z), or a day (2026-11-06) when only that is
 	// known; absent when nothing dates it, and from an older tm.
 	DoneAt string `json:"done_at,omitempty"`
+	// Archived (app API 57) is set on a task in the archive, off the
+	// board: it shows, and nothing acts on it.
+	Archived bool `json:"archived,omitempty"`
 	// After (app API 44; task.get only) are the tasks it comes after,
 	// this board's and other projects', with another program member's
 	// dependency state while programs are on.
@@ -719,6 +722,9 @@ type Peer struct {
 	// Files says whether it does with this server. Without, it runs an
 	// older tm, and is never asked.
 	Worktree bool `json:"worktree,omitempty"`
+	// FilesHere (app API 60) are the projects of this server whose files it
+	// may read, this server's files switch for it (docs/SPEC.md §16.18).
+	FilesHere []string `json:"files_here,omitempty"`
 }
 
 // PeerProject is a project a paired server shares: its goal line,
@@ -971,7 +977,7 @@ func projectOf(p server.SideProject) Project {
 
 func taskOf(t server.SideTask) Task {
 	out := Task{ID: t.ID, Ref: (&tasks.Task{ID: t.ID}).Ref(), Title: t.Title, Status: string(t.Status), Priority: string(t.Priority), Notes: t.Notes,
-		Thread: t.Thread, Owner: t.Owner, Created: t.Created, Updated: t.Updated, DoneAt: t.DoneAt, WaitsFor: t.WaitsFor, Waiters: t.Waiters}
+		Thread: t.Thread, Owner: t.Owner, Created: t.Created, Updated: t.Updated, DoneAt: t.DoneAt, Archived: t.Archived, WaitsFor: t.WaitsFor, Waiters: t.Waiters}
 	for _, s := range t.Steps {
 		out.Steps = append(out.Steps, Step{N: s.N, Text: s.Text, Done: s.Done})
 	}
@@ -1053,7 +1059,7 @@ func peerListOf(l proto.PeerList) PeerList {
 		peer := Peer{Alias: p.Alias, Name: p.Name, ID: p.ID, State: p.State, Reason: p.Reason, Since: p.Since,
 			Projects: make([]PeerProject, 0, len(p.Projects)), ShareWaits: proto.ShareWaits([]proto.PeerMirror{p}),
 			Pane: p.Pane, Panes: p.Panes, Transcript: p.Transcript, Conversations: p.Conversations, Needs: p.Needs, Picks: p.NeedPicks, Uploads: p.Uploads,
-			Version: textsafe.Line(p.Version, 40), RTT: p.RTT, Worktree: p.Worktree}
+			Version: textsafe.Line(p.Version, 40), RTT: p.RTT, Worktree: p.Worktree, FilesHere: p.FilesHere}
 		for _, q := range p.Shares {
 			if !q.Out && q.Pending() {
 				peer.ShareRequests = append(peer.ShareRequests, shareRequestOf(q))
@@ -1218,16 +1224,96 @@ func taskAddedOf(r proto.TaskAddResult) TaskAdded {
 	return TaskAdded{Task: r.Task, Existing: r.Existing}
 }
 
-// DoneTasks is task.done's result: the board's done tasks, newest first
-// since app API 54 (board order before), without their notes and steps.
+// TaskDoneParams are task.done's params (app API 57; only project
+// before). Groups asks for Done's headings instead of a list; From and To
+// narrow the list to days, both inclusive; Archived reads the archive
+// too; Offset and Limit take a page (Limit 0: all). The days are TZ's, an
+// IANA zone name, the server's own when empty or unknown.
+type TaskDoneParams struct {
+	Project  string `json:"project"`
+	Groups   bool   `json:"groups,omitempty"`
+	From     string `json:"from,omitempty"`
+	To       string `json:"to,omitempty"`
+	Archived bool   `json:"archived,omitempty"`
+	Offset   int    `json:"offset,omitempty"`
+	Limit    int    `json:"limit,omitempty"`
+	TZ       string `json:"tz,omitempty"`
+}
+
+// DoneTasks is task.done's result: done tasks, newest first since app API
+// 54 (board order before), without their notes and steps. Since app API
+// 57: Groups are Done's headings when asked for, Total how many tasks they
+// or the range hold, Next the offset to read on from (0 at the end).
 type DoneTasks struct {
-	Tasks []Task `json:"tasks"`
+	Tasks  []Task      `json:"tasks"`
+	Groups []DoneGroup `json:"groups,omitempty"`
+	Total  int         `json:"total,omitempty"`
+	Next   int         `json:"next,omitempty"`
+}
+
+// DoneGroup is one heading of Done (app API 57): kind day, week, month or
+// undated; its title in tm's words; its days, from to to; how many tasks
+// it holds and how many of those are archived. An open one comes with its
+// first tasks; Next is the offset to read on from (0: all there).
+type DoneGroup struct {
+	Kind     string `json:"kind"`
+	Title    string `json:"title"`
+	From     string `json:"from"`
+	To       string `json:"to"`
+	Count    int    `json:"count"`
+	Archived int    `json:"archived,omitempty"`
+	Open     bool   `json:"open,omitempty"`
+	Tasks    []Task `json:"tasks,omitempty"`
+	Next     int    `json:"next,omitempty"`
 }
 
 func doneTasksOf(r server.TaskDone) DoneTasks {
-	out := DoneTasks{Tasks: []Task{}}
+	out := DoneTasks{Tasks: []Task{}, Total: r.Total, Next: r.Next}
 	for _, t := range r.Tasks {
 		out.Tasks = append(out.Tasks, taskOf(t))
+	}
+	for _, g := range r.Groups {
+		d := DoneGroup{Kind: g.Kind, Title: g.Title, From: g.From, To: g.To, Count: g.Count, Archived: g.Archived, Open: g.Open, Next: g.Next}
+		for _, t := range g.Tasks {
+			d.Tasks = append(d.Tasks, taskOf(t))
+		}
+		out.Groups = append(out.Groups, d)
+	}
+	return out
+}
+
+// History is project.history's and peer.history's result: a project's
+// daily numbers, from tm's records alone, its days in the answering
+// server's time zone. Typical and TypicalSeconds come from 10 timed
+// tasks; Truncated says a paired server left out its oldest days.
+type History struct {
+	FirstRecord    string       `json:"first_record,omitempty"`
+	Done           int          `json:"done"`
+	Open           int          `json:"open"`
+	Dropped        int          `json:"dropped"`
+	Days           []HistoryDay `json:"days"`
+	BestDay        *HistoryDay  `json:"best_day,omitempty"`
+	Timed          int          `json:"timed"`
+	TypicalSeconds int64        `json:"typical_seconds,omitempty"`
+	Typical        string       `json:"typical,omitempty"`
+	Truncated      bool         `json:"truncated,omitempty"`
+}
+
+// HistoryDay is a day with work (2026-11-06) and how many tasks finished
+// on it.
+type HistoryDay struct {
+	Day  string `json:"day"`
+	Done int    `json:"done"`
+}
+
+func historyOf(r proto.History) History {
+	out := History{FirstRecord: r.FirstRecord, Done: r.Done, Open: r.Open, Dropped: r.Dropped, Days: make([]HistoryDay, 0, len(r.Days)),
+		Timed: r.Timed, TypicalSeconds: r.TypicalSeconds, Typical: r.Typical, Truncated: r.Truncated}
+	for _, d := range r.Days {
+		out.Days = append(out.Days, HistoryDay{Day: d.Day, Done: d.Done})
+	}
+	if r.BestDay != nil {
+		out.BestDay = &HistoryDay{Day: r.BestDay.Day, Done: r.BestDay.Done}
 	}
 	return out
 }
@@ -1624,22 +1710,46 @@ type (
 		Project string `json:"project"`
 		Path    string `json:"path"`
 	}
-	// LibraryReadParams are library.read's: the file of thread (or
-	// message) ID named Name, the chunk from Offset.
-	LibraryReadParams struct {
-		Project string `json:"project"`
-		ID      string `json:"id"`
-		Name    string `json:"name"`
-		Offset  int64  `json:"offset,omitempty"`
+	// LibraryProgram names a program in library.list, library.read and
+	// library.thumbnail (app API 59), in place of a project; absent
+	// from an app that doesn't ask, so a tm that doesn't know it isn't
+	// sent it. A tagged struct because a bare field would go out empty.
+	LibraryProgram struct {
+		Slug string `json:"slug"`
 	}
-	// LibraryThumbnailParams are library.thumbnail's: the file of thread
-	// (or message) ID named Name.
+	// LibraryListParams are library.list's: a project's library, or
+	// Program's: its director's own files, then its members'.
+	LibraryListParams struct {
+		Project string          `json:"project"`
+		Program *LibraryProgram `json:"program,omitempty"`
+	}
+	// LibraryReadParams are library.read's: the file of thread (or
+	// message, or SeatID for the seat's own) ID named Name, the chunk from
+	// Offset. Program for its director's own file.
+	LibraryReadParams struct {
+		Project string          `json:"project"`
+		Program *LibraryProgram `json:"program,omitempty"`
+		ID      string          `json:"id"`
+		Name    string          `json:"name"`
+		Offset  int64           `json:"offset,omitempty"`
+	}
+	// LibraryThumbnailParams are library.thumbnail's: the file library.read
+	// would name.
 	LibraryThumbnailParams struct {
-		Project string `json:"project"`
-		ID      string `json:"id"`
-		Name    string `json:"name"`
+		Project string          `json:"project"`
+		Program *LibraryProgram `json:"program,omitempty"`
+		ID      string          `json:"id"`
+		Name    string          `json:"name"`
 	}
 )
+
+// slug is the program named, "" for none.
+func (p *LibraryProgram) slug() string {
+	if p == nil {
+		return ""
+	}
+	return p.Slug
+}
 
 // MemoryFiles are memory.list's result: CONTEXT.md and MEMORY.md when
 // they are there, then the notes by title.
@@ -1665,9 +1775,12 @@ type MemoryText struct {
 	Truncated bool   `json:"truncated,omitempty"`
 }
 
-// Library is library.list's result, newest file first.
+// Library is library.list's result, newest file first; a program's in its
+// order (the director's own, then each member's), with what it leaves out
+// for now in Note (app API 59).
 type Library struct {
 	Files []LibraryFile `json:"files"`
+	Note  string        `json:"note,omitempty"`
 }
 
 // LibraryFile is a file a thread's report attached (Thread, with its
@@ -1676,8 +1789,10 @@ type Library struct {
 // the status of the thread's task, "" for none (app API 55; the Library's
 // heading says it). Repo is the folder name of the thread's repository in
 // a project with several (app API 53; the Library's filter finds by it and
-// its heading names it). library.read names it by
-// Thread, else Message, and Name.
+// its heading names it). A coordinator's or director's own file has "seat"
+// for its Thread (app API 59). In a program's listing Project is the member
+// it is in and Server that member's paired server, both empty for the
+// director's own. library.read names it by Thread, else Message, and Name.
 type LibraryFile struct {
 	Thread     string    `json:"thread,omitempty"`
 	Task       string    `json:"task,omitempty"`
@@ -1690,6 +1805,8 @@ type LibraryFile struct {
 	Time       time.Time `json:"time"`
 	Peer       string    `json:"peer,omitempty"`
 	Message    string    `json:"message,omitempty"`
+	Project    string    `json:"project,omitempty"`
+	Server     string    `json:"server,omitempty"`
 }
 
 // LibraryChunk is library.read's result: Data from Offset (at most
@@ -1716,10 +1833,10 @@ func memoryTextOf(r proto.MemoryReadResult) MemoryText {
 }
 
 func libraryOf(r proto.LibraryListResult) Library {
-	out := Library{Files: []LibraryFile{}}
+	out := Library{Files: []LibraryFile{}, Note: r.Note}
 	for _, f := range r.Files {
 		out.Files = append(out.Files, LibraryFile{Thread: f.Thread, Task: f.Task, TaskStatus: f.TaskStatus, Title: f.Title, Repo: f.Repo, State: f.State,
-			Name: f.Name, Size: f.Size, Time: f.Time, Peer: f.Peer, Message: f.Message})
+			Name: f.Name, Size: f.Size, Time: f.Time, Peer: f.Peer, Message: f.Message, Project: f.Project, Server: f.Server})
 	}
 	return out
 }
@@ -1817,6 +1934,9 @@ type FileEntry struct {
 	Ignored bool      `json:"ignored,omitempty"`
 	Link    bool      `json:"link,omitempty"`
 	LinkOut bool      `json:"link_out,omitempty"`
+	// Withheld (app API 60): a paired server's listing shows it by name and
+	// won't open it.
+	Withheld bool `json:"withheld,omitempty"`
 }
 
 // FilesList is files.list's result. Root is the folder's absolute path;
@@ -1911,7 +2031,7 @@ func filesListOf(r proto.FilesListResult) FilesList {
 		Entries: make([]FileEntry, 0, len(r.Entries)), Truncated: r.Truncated}
 	for _, e := range r.Entries {
 		out.Entries = append(out.Entries, FileEntry{Name: e.Name, Path: e.Path, Kind: e.Kind, Size: e.Size, MTime: e.MTime,
-			Status: e.Status, Changed: e.Changed, Ignored: e.Ignored, Link: e.Link, LinkOut: e.LinkOut})
+			Status: e.Status, Changed: e.Changed, Ignored: e.Ignored, Link: e.Link, LinkOut: e.LinkOut, Withheld: e.Withheld})
 	}
 	return out
 }

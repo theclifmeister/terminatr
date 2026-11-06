@@ -55,6 +55,7 @@ var popupKeys = []keyHelp{
 	{"+ X", "on the overview: add a repository / remove the selected one (asks first)"},
 	{"enter", "on a task (Tasks tab): show it, with what it is blocked on, or how to check it and whether its pull request merged"},
 	{"/ t", "in the Library tab: filter by file name, task, thread or repository (from 7 files) / step through the kinds (with two or more)"},
+	{"v", "on a stack (Library tab, or while reading it): switch between its two files, dark and light or before and after"},
 	{"enter", "on a file (Library tab): read it, read-only: text as it is, JSON indented, an image in half-blocks with 24-bit colour, other files by name and size; on +N more or show fewer: open or fold its group"},
 	{"o", "on a file (Library tab, or while reading it): open it in this computer's viewer"},
 	{"X D", "on a file (Library tab): delete it / all of its thread's files (asks first, journaled)"},
@@ -129,7 +130,7 @@ func keyGroups(mods []keyHelp) []keyGroup {
 	dash = append([]keyHelp{{"type", "on a running coordinator's row: typing writes to the coordinator. The first printable key (a letter of either case, a digit, space, / and the other symbols) attaches it and lands in its prompt with every key after it; the keys below are prefix+key there. Arrows, enter, tab, esc, pgup pgdown, home end and ctrl keys keep their meaning. A thread's row takes enter first"}}, dash...)
 	side = append([]keyHelp{{"type", "on a running coordinator's row: typing writes to it, as on the list (its pane gets the keyboard and every key); the sidebar's letter keys work on the other rows"}}, side...)
 	panel = append(panel, keyHelp{"A", "the info panel beside a coordinator with questions waiting: have it open them in its question dialog (info.questions)"})
-	panel = append(panel, keyHelp{"F", "the info panel: its Files view, the thread's worktree or the coordinator's main checkout as a tree with git's marks, and the files attached (/ filter by name, c changed only, i ignored files too, a Worktree or Attached, enter reads a file), and back (info.files)"})
+	panel = append(panel, keyHelp{"F", "the info panel: its Files view, the thread's worktree or the coordinator's main checkout as a tree with git's marks, and the files attached (/ filter by name, c changed only, i ignored files too, a Worktree or Attached, enter reads a file; on a paired server's session, read only, where it shares the files), and back; beside a director its files and its members', with t kinds (info.files)"})
 	groups := []keyGroup{
 		{"On the dashboard", dash},
 		{"With the mouse", mouseKeys},

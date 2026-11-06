@@ -13,7 +13,9 @@ import (
 // The Library's biggest-first sort (docs/SPEC.md §4): s turns the tab from
 // its groups, newest first, to one flat list of the files the filter and
 // kind leave, biggest first, each with its task's title. Equal sizes keep
-// the list's order, newest first, so a reload doesn't shuffle them. The Mac
+// the list's order, newest first, so a reload doesn't shuffle them. A stack
+// comes apart: the sort is there to show what takes the room, and a pair has
+// no one size to rank by, so each half has its own row and no switch. The Mac
 // does the same (LibraryPage in TerminatrKit):
 // testdata/library-filter.json pins both.
 
@@ -50,15 +52,12 @@ func libSource(f thread.LibFile) string {
 	return f.Thread
 }
 
-// libSizeCells is a row's size column.
-const libSizeCells = 9
-
 // libSizeWords is a row's size, right-aligned in its column.
-func libSizeWords(n int64) string { return fmt.Sprintf("%*s", libSizeCells, sizeWords(n)) }
+func libSizeWords(n int64) string { return fmt.Sprintf("%*s", libSizeCols, sizeWords(n)) }
 
 // libRowRoom is the cells a row has for its name and title, less its indent,
 // gaps and size.
-func libRowRoom(w int) int { return w - libSizeCells - 4 }
+func libRowRoom(w int) int { return w - libSizeCols - 4 }
 
 // libFlatName is the flat list's name column for w cells: the longest name,
 // up to three fifths of the room, so the titles line up.

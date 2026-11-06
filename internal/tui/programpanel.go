@@ -109,6 +109,7 @@ func programPanel(pi *programInfo, w int) (*panel, []infoHit) {
 	}
 	about = append(about, counted(len(pi.members), "member"))
 	line(th().Faint.Render(strings.Join(about, " · ")), infoHit{})
+	line(th().Faint.Render("F files: the director's and its members'"), infoHit{kind: hitFiles})
 	pl.block("needs")
 	switch n := pi.waiting(); {
 	case pi.needs == nil:

@@ -13,6 +13,8 @@ struct PickList<ID: Hashable, Content: View>: View {
     var name: String
     /// Scrolls to the pick when the list appears: the Library's new order.
     var reveal = false
+    /// Whether ← and → move the pick too: rows of tiles, in the Library.
+    var across = false
     @ViewBuilder var content: Content
     /// A pick takes the keys here, so ↑ and ↓ go on from it.
     @FocusState private var focused: Bool
@@ -35,7 +37,9 @@ struct PickList<ID: Hashable, Content: View>: View {
                 if reveal, let selection { proxy.scrollTo(selection) }
             }
             .onMoveCommand { direction in
-                guard let next = PickStep.next(order, from: selection, up: direction == .up, down: direction == .down) else { return }
+                let back = direction == .up || (across && direction == .left)
+                let on = direction == .down || (across && direction == .right)
+                guard let next = PickStep.next(order, from: selection, up: back, down: on) else { return }
                 selection = next
                 proxy.scrollTo(next)
             }
@@ -53,6 +57,8 @@ struct PickRow<ID: Hashable, Label: View>: View {
     var open: (() -> Void)?
     /// A click's act besides the pick: a Library fold opens.
     var act: (() -> Void)?
+    /// A tile: its fill close around it.
+    var tile = false
     @ViewBuilder var label: Label
 
     var body: some View {
@@ -64,8 +70,8 @@ struct PickRow<ID: Hashable, Label: View>: View {
         } label: {
             label
                 .font(theme.sized(Flat.text))
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
+                .padding(.horizontal, tile ? 3 : 8)
+                .padding(.vertical, tile ? 3 : 6)
                 .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
                 .background(on ? theme.selection : .clear, in: shape)
                 .contentShape(shape)

@@ -14,14 +14,14 @@ import (
 // task's status, its thread, the repository in a project with several,
 // its newest file's day, its kinds and its size, all of the files the
 // filter and kind leave; a group over six files folds to six rows and
-// "+N more". The Mac does the same (LibraryPage in TerminatrKit):
+// "+N more", a stack counting as one row. The Mac does the same (LibraryPage in TerminatrKit):
 // testdata/library-filter.json pins both.
 
 // libFoldAt is how many rows a folded group shows.
 const libFoldAt = 6
 
-// libFold is how a group of n files lists: how many rows, how many files
-// its fold hides, and whether it offers to fold again. Words in the filter
+// libFold is how a group of n rows lists (a stack is one): how many show, how
+// many its fold hides, and whether it offers to fold again. Words in the filter
 // open every fold, so what they find shows.
 func libFold(n int, open bool, query string) (rows, more int, fewer bool) {
 	switch {
@@ -72,9 +72,9 @@ func libTotal(files []thread.LibFile) int64 {
 }
 
 // libWhere is where a group's files came from, without the day: its thread
-// and repository. A linked project's group has neither.
+// and repository. A linked project's group has neither, nor a seat's own.
 func libWhere(f thread.LibFile) []string {
-	if f.Peer != "" {
+	if f.Peer != "" || f.IsSeat() {
 		return nil
 	}
 	out := []string{f.Thread}
@@ -126,8 +126,12 @@ func libHeading(files []thread.LibFile, w int) (title, meta string) {
 // for a fold's row the group's first.
 type libRow struct {
 	f     thread.LibFile
-	more  int  // the row that opens the group: how many it hides
+	more  int  // the row that opens the group: how many rows it hides
 	fewer bool // the row that folds it again
+
+	// stack is the two files a stack's row switches between (librarystack.go);
+	// f is the one it shows.
+	stack *libEntry
 }
 
 func (r libRow) isFile() bool { return r.more == 0 && !r.fewer }
@@ -168,9 +172,10 @@ func (pv *projectView) libShownGroups() []libShownGroup {
 			end++
 		}
 		g := libShownGroup{files: files[start:end]}
-		rows, more, fewer := libFold(len(g.files), pv.libOpen[files[start].Group()], pv.libFilter)
-		for _, f := range g.files[:rows] {
-			g.rows = append(g.rows, libRow{f: f})
+		entries := libEntries(g.files)
+		rows, more, fewer := libFold(len(entries), pv.libOpen[files[start].Group()], pv.libFilter)
+		for _, e := range entries[:rows] {
+			g.rows = append(g.rows, pv.libRowFor(e))
 		}
 		if more > 0 || fewer {
 			g.rows = append(g.rows, libRow{f: files[start], more: more, fewer: fewer})
@@ -193,7 +198,7 @@ func (pv *projectView) libRows() []libRow {
 // libRowOf is the row of the first file same says yes to, -1 for none.
 func (pv *projectView) libRowOf(same func(thread.LibFile) bool) int {
 	for i, r := range pv.libRows() {
-		if r.isFile() && same(r.f) {
+		if r.isFile() && (same(r.f) || r.stack != nil && same(r.otherFile())) {
 			return i
 		}
 	}

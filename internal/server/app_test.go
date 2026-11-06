@@ -3,11 +3,14 @@ package server
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/client"
@@ -370,6 +373,86 @@ status: open · updated: 2026-11-03
 	var perr *proto.Error
 	if err := app.Call(proto.MethodTaskDone, proto.TaskDoneParams{Project: "nope"}, nil); !errors.As(err, &perr) || perr.Code != proto.ErrBadParams {
 		t.Errorf("task.done of no project: %v", err)
+	}
+}
+
+// TestTaskDoneGroups: task.done's groups and ranges, the archive counted,
+// and read for a range only when asked; task.get finds an archived task.
+// A plain folder, a repo with no tags, several repos and one on another
+// host get the same groups, and git never runs.
+func TestTaskDoneGroups(t *testing.T) {
+	p := testPaths(t)
+	startServer(t, p)
+	app, err := client.DialAs(p, proto.ClientApp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+	// Real repositories with no tags, one on another host.
+	repo := func(remote string) string {
+		t.Helper()
+		dir := t.TempDir()
+		for _, args := range [][]string{{"init", "-q"}, {"remote", "add", "origin", remote}} {
+			cmd := exec.Command("git", args...)
+			cmd.Dir = dir
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("git %v: %v: %s", args, err, out)
+			}
+		}
+		return dir
+	}
+	a, b, c := repo("https://github.com/o/a"), repo("https://github.com/o/b"), repo("https://gitlab.example/o/c")
+	bin := t.TempDir()
+	mark := filepath.Join(bin, "git-ran")
+	if err := os.WriteFile(filepath.Join(bin, "git"), []byte("#!/bin/sh\ntouch '"+mark+"'\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	now := time.Now().UTC()
+	today := now.Format(time.DateOnly)
+	old := now.AddDate(-1, 0, 0).Format(time.DateOnly)
+	var first []SideDoneGroup
+	for slug, repos := range map[string][]string{"plain": nil, "one": {a}, "several": {a, b}, "other": {c}} {
+		pr, err := project.New(project.Options{Slug: slug, Repos: repos})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(pr.Tasks().TasksPath(), []byte("# Tasks\n\n## Done\n\n### T1 Today\nstatus: done · updated: "+today+"\ndone_at: "+today+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(pr.Tasks().ArchivePath(), []byte("# Archive\n\n### T2 Old\nstatus: done · updated: "+old+"\ndone_at: "+old+"\n\nWhy.\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		os.Remove(mark) // New may look at the repos; task.done may not.
+		var res TaskDone
+		if err := app.Call(proto.MethodTaskDone, proto.TaskDoneParams{Project: slug, Groups: true, TZ: "UTC"}, &res); err != nil {
+			t.Fatalf("%s: %v", slug, err)
+		}
+		if _, err := os.Stat(mark); err == nil {
+			t.Errorf("%s: task.done ran git", slug)
+		}
+		if res.Total != 2 || len(res.Groups) != 2 || res.Groups[0].Title != "Today" || !res.Groups[0].Open || res.Groups[0].Tasks[0].ID != 1 ||
+			res.Groups[1].Archived != 1 || !res.Groups[1].Open || res.Groups[1].Tasks[0].Notes != "" {
+			t.Fatalf("%s: groups %+v", slug, res)
+		}
+		if first == nil {
+			first = res.Groups
+		} else if !reflect.DeepEqual(first, res.Groups) {
+			t.Errorf("%s: %+v, another setup %+v", slug, res.Groups, first)
+		}
+		// The archive for a range only when asked.
+		var board, both TaskDone
+		if err := app.Call(proto.MethodTaskDone, proto.TaskDoneParams{Project: slug, From: old, To: today}, &board); err != nil || board.Total != 1 {
+			t.Errorf("%s: the board's range: %+v %v", slug, board, err)
+		}
+		if err := app.Call(proto.MethodTaskDone, proto.TaskDoneParams{Project: slug, From: old, To: old, Archived: true, Limit: 1}, &both); err != nil ||
+			both.Total != 1 || len(both.Tasks) != 1 || !both.Tasks[0].Archived || both.Next != 0 {
+			t.Errorf("%s: the archive's range: %+v %v", slug, both, err)
+		}
+		var got SideTask
+		if err := app.Call(proto.MethodTaskGet, proto.TaskGetParams{Project: slug, Task: "T2"}, &got); err != nil || !got.Archived || got.Notes != "Why." {
+			t.Errorf("%s: task.get of an archived task: %+v %v", slug, got, err)
+		}
 	}
 }
 

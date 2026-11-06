@@ -15,7 +15,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/peer"
+	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/relay"
 )
@@ -350,4 +352,54 @@ func TestPeerRelayUpdate(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.expect(1, "relay-update-too-soon", human, "peer", "relay-update", "mini")
+}
+
+// TestPeerFiles: tm peer files is the human's, needs the project shared, and
+// shows in tm peer list and tm network; sharing again doesn't bring it back.
+func TestPeerFiles(t *testing.T) {
+	h := newHarness(t)
+	dir, err := peer.Dir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := peer.EnsureIdentity(dir); err != nil {
+		t.Fatal(err)
+	}
+	k1, _, _ := ed25519.GenerateKey(nil)
+	if err := peer.SavePeers(dir, []peer.Peer{{Alias: "mini", Key: k1, Relay: "wss://r.example.net"}}); err != nil {
+		t.Fatal(err)
+	}
+	stubPeerServer(t, nil)
+	h.ok(human, "project", "new", "demo")
+	if code, _, stderr := h.run(human, "", "peer", "files", "mini", "demo", "on"); code == 0 || !strings.Contains(stderr, "isn't shared") {
+		t.Fatalf("on while not shared: %d %q", code, stderr)
+	}
+	if err := config.SetProject("demo", "share", true); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, stderr := h.run(human, "", "peer", "files", "mini", "demo", "maybe"); code == 0 || !strings.Contains(stderr, "isn't one") {
+		t.Fatalf("a bad word: %d %q", code, stderr)
+	}
+	if code, _, stderr := h.run(human, "", "peer", "files", "nobody", "demo", "on"); code == 0 || !strings.Contains(stderr, "no peer") {
+		t.Fatalf("a peer that isn't: %d %q", code, stderr)
+	}
+	if out := h.ok(human, "peer", "files", "mini", "demo", "on"); !strings.Contains(out, "read-only") || !strings.Contains(out, "git-ignored") {
+		t.Fatalf("on says: %q", out)
+	}
+	if out := h.ok(human, "peer", "list"); !strings.Contains(out, "files: demo") {
+		t.Fatalf("list: %q", out)
+	}
+	if out := h.ok(human, "network"); !strings.Contains(out, "reads files of demo") {
+		t.Fatalf("network: %q", out)
+	}
+	p, _ := project.Open("demo")
+	if j, _ := os.ReadFile(filepath.Join(p.Dir, "JOURNAL.md")); !strings.Contains(string(j), "peer.files") {
+		t.Errorf("journal:\n%s", j)
+	}
+	if out := h.ok(human, "peer", "files", "mini", "demo", "off"); !strings.Contains(out, "Files off") {
+		t.Fatalf("off says: %q", out)
+	}
+	if out := h.ok(human, "peer", "list"); strings.Contains(out, "files:") {
+		t.Fatalf("list after off: %q", out)
+	}
 }

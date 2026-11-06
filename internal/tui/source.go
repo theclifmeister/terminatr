@@ -223,6 +223,9 @@ type LogSource interface {
 type PollSource interface {
 	Load() Data
 	Board(slug string) (*tasks.Board, error)
+	// ArchivedTask is project slug's task ref in its archive, nil when it
+	// has none.
+	ArchivedTask(slug, ref string) *tasks.Task
 	// Library lists the files of every thread's library, newest first,
 	// for the project popup's Library tab; LibraryRead reads up to max
 	// bytes of one (truncated says it was longer); LibraryRemove
@@ -439,6 +442,10 @@ type PeerSource interface {
 	// on or off for project (§16.17), as tm peer pages does, and has the
 	// server read the peers again.
 	SetPeerPages(alias, project string, on bool) error
+	// SetPeerFiles turns the paired server alias's files switch on or off
+	// for project (§16.18), as tm peer files does, journals it and has the
+	// server read the peers again.
+	SetPeerFiles(alias, project string, on bool) error
 	// ActOnNeed acts on a need of a paired server's shared project as
 	// this server's user (peer.need-act, §16.16): that server checks it
 	// again and refuses it when the need changed.
@@ -868,6 +875,23 @@ func (s *ServerSource) Board(slug string) (*tasks.Board, error) {
 		return nil, err
 	}
 	return p.Tasks().Load()
+}
+
+// ArchivedTask reads task ref of slug's archive.
+func (s *ServerSource) ArchivedTask(slug, ref string) *tasks.Task {
+	id, ok := tasks.ParseRef(ref)
+	if !ok {
+		return nil
+	}
+	p, err := project.Open(slug)
+	if err != nil {
+		return nil
+	}
+	a, err := p.Tasks().LoadArchive()
+	if err != nil {
+		return nil
+	}
+	return a.Find(id)
 }
 
 // Library is the project's library files and, in their own groups, the

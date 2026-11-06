@@ -29,15 +29,32 @@ import (
 // beside a coordinator that folder is a repo's main checkout, which the
 // view says, with a picker when the project has more than one;
 // Attached is the Library's files of that thread, of the whole project
-// beside a coordinator. Enter reads a file in the Library's viewer,
+// beside a coordinator, its own first; beside a director, which has no
+// folder to list and no Worktree tab, its own files and then every member's
+// by project, with the Library's filter and kinds so they can all be
+// searched (library.list's program form, programFiles). Enter reads a file in the Library's viewer,
 // drawn over the session, with its changes since the base marked
 // (files.diff; filesdiff.go). Everything a folder holds is data: names go
 // through oneLine and text through libText and textsafe, so no control
 // character reaches the terminal, and the panel's draw takes styles only
 // (plainUnder).
+//
+// On a paired server's session (docs/SPEC.md §16.18) the view asks the same
+// methods, and that server holds every rule: it says "on studio · read only",
+// has no ignored files to show, keeps nothing on disk and opens nothing
+// elsewhere. Off, what showed goes; offline, it stays, marked.
 
-// filesEvery is how often the view asks whether its folders changed.
-const filesEvery = 2 * time.Second
+const (
+	// filesEvery is how often the view asks whether its folders changed.
+	filesEvery = 2 * time.Second
+	// filesFarEvery is how often it asks of a paired server's: that is a
+	// request to the other machine.
+	filesFarEvery = 5 * time.Second
+)
+
+// programFilesEvery is how often a director's view reads its program's
+// library again.
+const programFilesEvery = 10 * time.Second
 
 // filesCall calls a files method of the server; a variable for tests.
 var filesCall = func(paths tmclient.Paths, method string, params, res any) error {
@@ -72,6 +89,7 @@ type filesView struct {
 	session string
 	slug    string
 	thread  string // "" beside a coordinator: the whole project's files
+	program string // beside a director: its program, whose library is all this shows
 
 	repos   []proto.FileRepo // a coordinator's choices (files.repos)
 	repo    string           // the one chosen, "" for the first
@@ -84,16 +102,18 @@ type filesView struct {
 	ignored  bool   // git-ignored files show
 	changed  bool   // only what git marks
 
-	open   map[string]bool              // the unfolded folders
-	dirs   map[string][]proto.FileEntry // the folders as last listed
-	found  []proto.FileEntry            // a filter's or changed's files
-	tree   map[string][]proto.FileEntry // changed's files by folder
-	shut   map[string]bool              // the folders changed's tree has folded
-	sum    proto.FilesListResult        // the top's totals
-	cut    bool                         // a listing was cut
-	err    string                       // why the worktree doesn't show
-	loaded bool
-	lib    []thread.LibFile
+	open    map[string]bool              // the unfolded folders
+	dirs    map[string][]proto.FileEntry // the folders as last listed
+	found   []proto.FileEntry            // a filter's or changed's files
+	tree    map[string][]proto.FileEntry // changed's files by folder
+	shut    map[string]bool              // the folders changed's tree has folded
+	sum     proto.FilesListResult        // the top's totals
+	cut     bool                         // a listing was cut
+	err     string                       // why the worktree doesn't show
+	loaded  bool
+	lib     []thread.LibFile
+	pick    string // the kind a director's view is narrowed to
+	libNote string // what a program's listing leaves out for now
 
 	sel     int    // the selected row
 	selPath string // its path, to find it again after a refresh
@@ -102,6 +122,17 @@ type filesView struct {
 	stamp  string
 	polled time.Time
 	gen    int // the newest fetch; an older one's answer is dropped
+
+	// far is the paired server whose session this is, as the panel calls
+	// it, "" for this server's; farAlias keys it. The rest only for a far one:
+	farAlias string
+	far      string
+	done     bool            // the thread is resolved there, as the mirror has it
+	gone     string          // it stopped sharing the files, in words: what showed left
+	offline  bool            // the link is down: what shows is as of readAt
+	slow     bool            // the last look got no answer in time
+	readAt   time.Time       // when it last answered
+	notText  map[string]bool // files a read found aren't text
 }
 
 func newFilesView(d *infoData) *filesView {
@@ -109,7 +140,64 @@ func newFilesView(d *infoData) *filesView {
 	if d.watch == nil {
 		fv.thread = d.session.Thread
 	}
+	if r := d.remote; r != nil {
+		fv.far, fv.farAlias, fv.slug, fv.thread = oneLine(r.shown), r.alias, d.session.Project, d.session.Thread
+		if r.found {
+			fv.slug, fv.thread = r.sess.Project, r.sess.Thread
+		}
+		if fv.slug == "" && r.project != nil {
+			fv.slug = r.project.Project
+		}
+		if r.project != nil && r.project.Watch != nil && fv.thread != "" {
+			fv.done = !slices.ContainsFunc(r.project.Watch.Threads, func(t proto.WatchThread) bool { return t.ID == fv.thread })
+		}
+	}
+	if d.prog != nil {
+		fv.program, fv.attached = d.slug, true
+	}
 	return fv
+}
+
+// every is how often the view asks whether its folders changed.
+func (fv *filesView) every() time.Duration {
+	if fv.program != "" {
+		return programFilesEvery // each paired member's server is asked
+	}
+	if fv.far != "" {
+		return filesFarEvery
+	}
+	return filesEvery
+}
+
+// farStopped says why a far session's folder can't be read: nothing runs it.
+func (fv *filesView) farStopped() string {
+	switch {
+	case fv.thread == "":
+		return fv.far + "'s coordinator isn't running, so its repos can't be read from here."
+	case fv.done:
+		return "This thread is done, so its worktree is gone from " + fv.far + "."
+	}
+	return "This thread's agent isn't running on " + fv.far + ", so its worktree can't be read from here."
+}
+
+// farGone says the far server's files switch went off, or its sharing did.
+func (fv *filesView) farGone() string {
+	return fv.far + " stopped sharing " + fv.slug + "'s files. What showed here is gone."
+}
+
+// clearTree drops all that shows of the folder.
+func (fv *filesView) clearTree() {
+	fv.dirs, fv.found, fv.tree = map[string][]proto.FileEntry{}, nil, nil
+	fv.sum, fv.cut = proto.FilesListResult{}, false
+	fv.open, fv.shut, fv.stamp = map[string]bool{}, nil, ""
+	fv.repos, fv.repo, fv.picking = nil, "", false
+}
+
+// stopSharing is the far server's refusal to show its files any more. c.mu
+// held.
+func (fv *filesView) stopSharing() {
+	fv.clearTree()
+	fv.gone, fv.err, fv.offline, fv.slow = fv.farGone(), "", false, false
 }
 
 // repoShown is the index in repos of the repo the view shows, -1 for none
@@ -222,6 +310,12 @@ func (r fileRow) id() string {
 // rows are the view's rows, as they list.
 func (fv *filesView) rows() []fileRow {
 	var out []fileRow
+	if fv.program != "" {
+		for _, f := range libraryOrder(libShown(fv.lib, fv.filter, fv.pick)) {
+			out = append(out, fileRow{lib: &f})
+		}
+		return out
+	}
 	if fv.attached {
 		for _, f := range libraryOrder(fv.lib) {
 			if fv.filter == "" || strings.Contains(strings.ToLower(f.Name), strings.ToLower(fv.filter)) {
@@ -283,9 +377,26 @@ func filesLay(fv *filesView, w int, focused bool) ([]string, []infoHit) {
 	}
 	lines := []string{th().Title.Render("FILES") + "  " + tab("Worktree", !fv.attached) + th().Faint.Render(" · ") + tab("Attached", fv.attached)}
 	hits := []infoHit{{kind: hitFilesTab}}
+	if fv.program != "" {
+		// Nothing to switch to: a director has no folder here.
+		lines, hits = []string{th().Title.Render("FILES") + "  " + tab("Attached", true)}, []infoHit{{}}
+	}
 	add := func(l string) {
 		lines = append(lines, l)
 		hits = append(hits, infoHit{})
+	}
+	if fv.far != "" {
+		add(th().Faint.Render("on " + fv.far + " · read only"))
+		if fv.gone != "" && !fv.attached {
+			add("")
+			for _, l := range wrapLines(fv.gone, max(w, 8)) {
+				add(l)
+			}
+			add("")
+			add(th().Faint.Render("a Attached · esc back"))
+			fv.lineOf = nil
+			return lines, hits
+		}
 	}
 	if shown := fv.repoShown(); !fv.attached && shown >= 0 {
 		const says = " · main checkout"
@@ -320,13 +431,25 @@ func filesLay(fv *filesView, w int, focused bool) ([]string, []infoHit) {
 	rows := fv.rows()
 	fv.settle(rows)
 	switch {
+	case fv.program != "" && fv.err != "":
+		add(th().Warn.Render(oneLine(fv.err)))
+	case fv.program != "" && !fv.loaded:
+		add(th().Faint.Render("loading…"))
 	case fv.attached && len(rows) > 0:
 		add(th().Faint.Render(fileCount(len(rows))))
 	case fv.attached:
+	case fv.err != "" && fv.far != "":
+		for _, l := range wrapLines(oneLine(fv.err), max(w, 8)) {
+			add(th().Warn.Render(l))
+		}
 	case fv.err != "":
 		add(th().Warn.Render(oneLine(fv.err)))
+	case fv.offline:
+		add(th().Warn.Render(fv.far + " is offline: as of " + age(infoClock().Sub(fv.readAt)) + " ago"))
 	case !fv.loaded:
 		add(th().Faint.Render("loading…"))
+	case fv.slow:
+		add(th().Faint.Render(fv.far + " is slow to answer"))
 	case fv.sum.Git:
 		add(fileChanged(fv.sum.Files) + " " + th().Good.Render(fmt.Sprintf("+%d", fv.sum.Added)) + " " + th().Bad.Render(fmt.Sprintf("−%d", fv.sum.Deleted)))
 	default:
@@ -350,8 +473,16 @@ func filesLay(fv *filesView, w int, focused bool) ([]string, []infoHit) {
 	if len(flags) > 0 {
 		add(th().Faint.Render(strings.Join(flags, " · ")))
 	}
+	if fv.program != "" {
+		if fv.libNote != "" {
+			add(th().Warn.Render(oneLine(fv.libNote)))
+		}
+		for i, l := range libChipLinesOf(fv.lib, fv.filter, fv.pick, w) {
+			lines, hits = append(lines, l.text), append(hits, infoHit{kind: hitFilesChip, task: i})
+		}
+	}
 	fv.lineOf = make([]int, len(rows))
-	group := ""
+	group, place := "", ""
 	groups := map[string]int{}
 	if fv.attached {
 		for _, r := range rows {
@@ -359,19 +490,44 @@ func filesLay(fv *filesView, w int, focused bool) ([]string, []infoHit) {
 		}
 	}
 	for i, r := range rows {
+		if r.lib != nil && libPlace(*r.lib) != place {
+			place = libPlace(*r.lib)
+			add(th().Title.Render(fit(libPlaceWords(*r.lib), w)))
+		}
 		if r.lib != nil && r.lib.Group() != group {
 			group = r.lib.Group()
-			add(libGroup(*r.lib, groups[group], w))
+			if fv.program != "" {
+				title, meta := libHeading(groupFiles(rows, group), w)
+				add(title)
+				add(meta)
+			} else {
+				add(libGroup(*r.lib, groups[group], w))
+			}
 		}
 		fv.lineOf[i] = len(lines)
-		l := fileRowLine(r, w, fv.unfolded(r.e.Path))
-		if i == fv.sel && focused {
+		l := fileRowLine(r, w, fv.unfolded(r.e.Path), fv.far, fv.notText[r.e.Path])
+		switch {
+		case i == fv.sel && focused:
 			l = th().Sel.Render(fit(ansi.Strip(l), w))
+		case fv.offline:
+			l = th().Faint.Render(ansi.Strip(l))
 		}
 		lines = append(lines, l)
 		hits = append(hits, infoHit{kind: hitFileRow, task: i})
 	}
 	switch {
+	case len(rows) == 0 && fv.far != "" && fv.attached && fv.libNote != "":
+		for _, l := range wrapLines(oneLine(fv.libNote), max(w, 8)) {
+			add(th().Faint.Render(l))
+		}
+	case len(rows) == 0 && fv.program != "" && len(fv.lib) > 0:
+		add(th().Faint.Render("nothing matches: esc clears"))
+	case len(rows) == 0 && fv.program != "":
+		if fv.loaded {
+			add(th().Faint.Render("no files: the director keeps its own (tm library add), threads attach theirs"))
+		}
+	case len(rows) == 0 && fv.attached && fv.thread == "":
+		add(th().Faint.Render("no files: a thread's report attaches them, the coordinator keeps its own (tm library add)"))
 	case len(rows) == 0 && fv.attached:
 		add(th().Faint.Render("no files: a thread's report attaches them"))
 	case len(rows) == 0 && fv.loaded && fv.err == "":
@@ -380,7 +536,31 @@ func filesLay(fv *filesView, w int, focused bool) ([]string, []infoHit) {
 	if fv.cut && !fv.attached {
 		add(th().Faint.Render("… more files than show here"))
 	}
+	if fv.sel < len(rows) && rows[fv.sel].lib == nil && rows[fv.sel].e.Withheld && focused {
+		for _, l := range wrapLines(withheldWords(rows[fv.sel].e, fv.far), max(w, 8)) {
+			add(th().Faint.Render(l))
+		}
+	}
 	return lines, hits
+}
+
+// groupFiles are the files of group among rows.
+func groupFiles(rows []fileRow, group string) []thread.LibFile {
+	var out []thread.LibFile
+	for _, r := range rows {
+		if r.lib != nil && r.lib.Group() == group {
+			out = append(out, *r.lib)
+		}
+	}
+	return out
+}
+
+// libPlaceWords is the heading over a member's files in a program's list.
+func libPlaceWords(f thread.LibFile) string {
+	if f.Server != "" {
+		return oneLine(f.Project) + " on " + oneLine(f.Server)
+	}
+	return oneLine(f.Project)
 }
 
 // fileCount is a number of files in words.
@@ -394,8 +574,18 @@ func fileCount(n int) string {
 // fileChanged is a number of changed files in words.
 func fileChanged(n int) string { return fmt.Sprintf("%d changed", n) }
 
-// fileRowLine is a row: its fold mark and name, its mark at the end.
-func fileRowLine(r fileRow, w int, open bool) string {
+// withheldWords say why a far server's entry shows and doesn't open.
+func withheldWords(e proto.FileEntry, far string) string {
+	if e.Kind == proto.FileKindDir {
+		return "it may hold secrets, or be a checkout of its own, so it stays on " + far
+	}
+	return "its name says it may hold secrets, so it stays on " + far
+}
+
+// fileRowLine is a row: its fold mark and name, its mark at the end. far is
+// the paired server it is on, "" for this one's; notText says a read of it
+// found no text, or its name does.
+func fileRowLine(r fileRow, w int, open bool, far string, notText bool) string {
 	if f := r.lib; f != nil {
 		size := fmt.Sprintf("%9s", sizeWords(f.Size))
 		return fit("  "+oneLine(f.Name), max(w-len(size), 4)) + size
@@ -416,6 +606,8 @@ func fileRowLine(r fileRow, w int, open bool) string {
 	}
 	mark, look := "", th().Faint
 	switch {
+	case e.Withheld:
+		mark = "stays on " + far
 	case e.Status == proto.FileModified:
 		mark, look = "M", th().Warn
 	case e.Status == proto.FileAdded:
@@ -426,14 +618,17 @@ func fileRowLine(r fileRow, w int, open bool) string {
 		mark, look = "•", th().Warn
 	case e.Ignored:
 		mark = "ignored"
+	case far != "" && e.Kind == proto.FileKindFile && (notText || thumb.Supported(e.Name)):
+		mark = "not text"
 	}
 	width := max(w-ansi.StringWidth(lead)-2-ansi.StringWidth(mark)-1, 4)
 	text := fit(name, width)
-	if e.Ignored || e.Status == proto.FileDeleted || e.LinkOut {
+	if e.Ignored || e.Status == proto.FileDeleted || e.LinkOut || e.Withheld || mark == "not text" {
 		text = th().Faint.Render(text)
 	}
 	fold := "  "
 	switch {
+	case e.Withheld:
 	case e.Kind == proto.FileKindDir && open:
 		fold = "▾ "
 	case e.Kind == proto.FileKindDir:
@@ -452,15 +647,35 @@ type filesFetched struct {
 	err     string
 	noFiles bool
 	lib     []thread.LibFile
+	note    string           // a program's listing's
 	repos   []proto.FileRepo // nil: not asked, or the server has no list
 	offList bool             // the chosen repo left the project's list
+	code    string           // a refusal's code
 }
 
 // fetchFiles asks the server for what the view shows. The stamp comes
 // first: a change during the listing moves the next one.
 func fetchFiles(paths tmclient.Paths, fv filesView, folders []string) filesFetched {
 	var out filesFetched
-	out.lib, _ = attachedFiles(fv.slug, fv.thread)
+	if fv.program != "" {
+		lib, note, err := programFiles(paths, fv.program)
+		out.lib, out.note = lib, note
+		if err != nil {
+			out.err, _ = filesErrText(err)
+		}
+		return out
+	}
+	if fv.far != "" {
+		out.lib, out.note = attachedFar(paths, fv.farAlias, fv.slug, fv.thread)
+		if fv.attached {
+			// A request to the other machine for what doesn't show. The tab
+			// back to Worktree asks.
+			out.code = "attached"
+			return out
+		}
+	} else {
+		out.lib, _ = attachedFiles(fv.slug, fv.thread)
+	}
 	if fv.thread == "" {
 		// A server without the method leaves the first repo, unnamed.
 		var rs proto.FilesReposResult
@@ -485,6 +700,7 @@ func fetchFiles(paths tmclient.Paths, fv filesView, folders []string) filesFetch
 		res, err := list(proto.FilesListParams{Query: fv.filter, Changed: fv.changed})
 		if err != nil {
 			out.err, out.noFiles = filesErrText(err)
+			out.code = filesErrCode(err)
 			return out
 		}
 		out.sum, out.found, out.cut = res, res.Entries, res.Truncated
@@ -494,8 +710,10 @@ func fetchFiles(paths tmclient.Paths, fv filesView, folders []string) filesFetch
 	for i, d := range folders {
 		res, err := list(proto.FilesListParams{Path: d})
 		if err != nil {
-			if i == 0 {
+			code := filesErrCode(err)
+			if i == 0 || fv.far != "" && farHolds(code) {
 				out.err, out.noFiles = filesErrText(err)
+				out.code = code
 				return out
 			}
 			continue // gone since: it drops off the tree
@@ -507,6 +725,33 @@ func fetchFiles(paths tmclient.Paths, fv filesView, folders []string) filesFetch
 		out.cut = out.cut || res.Truncated
 	}
 	return out
+}
+
+// farHolds says a far server's refusal isn't about the folder asked for, so
+// the rest of the tree mustn't drop for it.
+func farHolds(code string) bool {
+	switch code {
+	case proto.ErrPeerOffline, proto.ErrRateLimited, proto.ErrFilesOff, proto.ErrNotShared, proto.ErrNoPeerFiles, proto.ErrUnknownSession:
+		return true
+	}
+	return false
+}
+
+// attachedFar are the files of thread (all the project's for "") a paired
+// server's project pages show, and why there are none when it says why.
+func attachedFar(paths tmclient.Paths, alias, slug, id string) ([]thread.LibFile, string) {
+	var res proto.PeerLibrary
+	if err := filesCall(paths, proto.MethodPeerLibraryList, proto.PeerPagesReadParams{Alias: alias, Project: slug}, &res); err != nil {
+		msg, _ := filesErrText(err)
+		return nil, msg
+	}
+	var out []thread.LibFile
+	for _, f := range res.Files {
+		if id == "" || f.Thread == id {
+			out = append(out, thread.LibFile{Thread: f.Thread, Task: f.Task, Title: f.Title, State: f.State, Name: f.Name, Size: f.Size, Time: f.Time})
+		}
+	}
+	return out, ""
 }
 
 // attachedFiles are the files of thread (all the project's for "") in
@@ -525,6 +770,21 @@ func attachedFiles(slug, id string) ([]thread.LibFile, error) {
 	return out, nil
 }
 
+// programFiles is program slug's library as its director's view lists it:
+// its own, then each member's, with what that leaves out for now.
+func programFiles(paths tmclient.Paths, slug string) ([]thread.LibFile, string, error) {
+	var res proto.LibraryListResult
+	if err := filesCall(paths, proto.MethodLibraryList, proto.ProjectFilesParams{Program: slug}, &res); err != nil {
+		return nil, "", err
+	}
+	out := make([]thread.LibFile, 0, len(res.Files))
+	for _, f := range res.Files {
+		out = append(out, thread.LibFile{Thread: f.Thread, Task: f.Task, TaskStatus: f.TaskStatus, Title: f.Title, Repo: f.Repo, State: f.State,
+			Name: f.Name, Size: f.Size, Time: f.Time, Peer: f.Peer, Message: f.Message, Project: f.Project, Server: f.Server})
+	}
+	return out, res.Note, nil
+}
+
 // filesErrText is a refusal in words, and whether it means the session
 // has no folder at all.
 func filesErrText(err error) (string, bool) {
@@ -533,6 +793,15 @@ func filesErrText(err error) (string, bool) {
 		return perr.Message, perr.Code == proto.ErrNoFiles
 	}
 	return err.Error(), false
+}
+
+// filesErrCode is a refusal's code, "" for an error that isn't one.
+func filesErrCode(err error) string {
+	var perr *proto.Error
+	if errors.As(err, &perr) {
+		return perr.Code
+	}
+	return ""
 }
 
 // filesFolders are the folders the view lists, the top first.
@@ -596,7 +865,35 @@ func (c *client) filesFetch() {
 func (fv *filesView) take(got filesFetched) {
 	first := !fv.loaded
 	fv.loaded = true
-	fv.lib = got.lib
+	fv.lib, fv.libNote = got.lib, got.note
+	if fv.program != "" {
+		fv.err = got.err
+		return
+	}
+	if fv.far != "" {
+		switch got.code {
+		case "attached":
+			return
+		case proto.ErrPeerOffline:
+			fv.offline, fv.slow, fv.err = true, false, ""
+			if fv.readAt.IsZero() {
+				fv.err = fv.far + " is offline, so its files can't be read now."
+			}
+			return
+		case proto.ErrRateLimited:
+			fv.slow, fv.offline = true, false
+			return
+		case proto.ErrFilesOff, proto.ErrNotShared:
+			fv.stopSharing()
+			return
+		case proto.ErrUnknownSession:
+			got.err = fv.farStopped()
+		}
+		fv.offline, fv.slow, fv.gone = false, false, ""
+		if got.err == "" {
+			fv.readAt = infoClock()
+		}
+	}
 	if got.repos != nil {
 		fv.repos = got.repos
 	}
@@ -633,19 +930,19 @@ func (c *client) filesPoll() {
 		return
 	}
 	fv := c.info.files
-	if fv == nil || time.Since(fv.polled) < filesEvery {
+	if fv == nil || time.Since(fv.polled) < fv.every() {
 		c.mu.Unlock()
 		return
 	}
 	fv.polled = time.Now()
 	session, repo, folders, paths, attached, had := fv.session, fv.repo, fv.filesFolders(), c.paths, fv.attached, fv.stamp
-	coordinator, repos := fv.thread == "", fv.repos
+	coordinator, repos, far, gone := fv.thread == "", fv.repos, fv.far != "", fv.gone != ""
 	c.mu.Unlock()
 	if attached {
 		c.filesFetch() // the Library's, a few stats
 		return
 	}
-	if coordinator {
+	if coordinator && !gone {
 		// The project's list moves without the folder's stamp moving.
 		var rs proto.FilesReposResult
 		if filesCall(paths, proto.MethodFilesRepos, proto.FilesReposParams{Session: session}, &rs) == nil && !slices.Equal(rs.Repos, repos) {
@@ -655,9 +952,14 @@ func (c *client) filesPoll() {
 	}
 	var st proto.FilesStampResult
 	if filesCall(paths, proto.MethodFilesStamp, proto.FilesStampParams{Session: session, Repo: repo, Folders: folders}, &st) != nil {
+		// A far server's refusal says what the tree must do: the listing
+		// finds out which. While the switch is off, nothing to ask.
+		if far && !gone {
+			c.filesFetch()
+		}
 		return
 	}
-	if st.Stamp != had {
+	if st.Stamp != had || gone {
 		c.filesFetch()
 	}
 }
@@ -676,8 +978,13 @@ func (c *client) filesFollow(d *infoData) bool {
 			return true
 		}
 	}
-	if fv := c.info.files; fv != nil && (fv.session != id || d.remote != nil || d.prog != nil) {
+	if fv := c.info.files; fv != nil && fv.session != id {
 		c.info.files = nil
+		return true
+	}
+	// Unpaired, the link closes and takes what showed with it.
+	if fv := c.info.files; fv != nil && fv.far != "" && d.remote != nil && d.remote.peer == nil && fv.gone == "" {
+		fv.stopSharing()
 		return true
 	}
 	return false
@@ -702,10 +1009,8 @@ func (c *client) filesToggle() {
 	switch {
 	case d == nil:
 		c.flash = "no files here"
-	case d.remote != nil:
-		c.flash = oneLine(d.remote.shown) + "'s worktrees can't be browsed from here"
-	case d.prog != nil:
-		c.flash = "a director has no repo: its projects' threads have the files"
+	case d.remote != nil && filesFarRefused(d.remote) != "":
+		c.flash = filesFarRefused(d.remote)
 	default:
 		ip.files = newFilesView(d)
 		ip.top = 0
@@ -721,6 +1026,23 @@ func (c *client) filesToggle() {
 	c.poke()
 }
 
+// filesFarRefused says why paired server r's session opens no Files view, ""
+// when it opens: older tm, a project it doesn't share, or its files switch off.
+func filesFarRefused(r *remoteData) string {
+	name := oneLine(r.shown)
+	switch {
+	case r.peer == nil:
+		return name + " isn't paired with this server"
+	case !r.peer.Worktree && r.peer.State == proto.LinkUp:
+		return name + " runs an older tm, which can't share files"
+	case r.project == nil:
+		return name + " doesn't share this project"
+	case !r.project.Files:
+		return name + " doesn't share " + oneLine(r.project.Project) + "'s files"
+	}
+	return ""
+}
+
 // filesHint is the status bar's note while the view has the keyboard.
 func filesHint(fv *filesView) string {
 	switch {
@@ -728,8 +1050,14 @@ func filesHint(fv *filesView) string {
 		return "filter ▸ type a name · enter keep · esc clear"
 	case fv.picking:
 		return "repo ▸ ↑ ↓ · enter show · esc back"
+	case fv.program != "":
+		return "files ▸ ↑ ↓ · enter read · / filter · t kinds · F info · esc back"
 	case fv.attached:
 		return "files ▸ ↑ ↓ · enter read · / filter · a worktree · F info · esc back"
+	case fv.far != "" && len(fv.repos) > 1:
+		return "files ▸ ↑ ↓ ← → · enter read · r repo · / filter · c changed · a attached · F info · esc back"
+	case fv.far != "":
+		return "files ▸ ↑ ↓ ← → · enter read · / filter · c changed · a attached · F info · esc back"
 	case len(fv.repos) > 1:
 		return "files ▸ ↑ ↓ ← → · enter read · r repo · / filter · c changed · i ignored · a attached · F info · esc back"
 	}
@@ -787,10 +1115,16 @@ func (c *client) filesKeyboard(k uv.Key) {
 		fv.picking, fv.pickSel, ip.top = true, fv.repoShown(), 0
 	case name == "/":
 		fv.typing = true
+	case name == "a" && fv.program != "":
+		c.flash = "a director has no worktree: its projects' threads have those"
+	case name == "t" && fv.program != "":
+		if chips := libChips(fv.lib, fv.filter, fv.pick); chips != nil {
+			fv.narrow(libNextKind(chips, libPicked(fv.lib, fv.pick)))
+		}
 	case name == "a":
 		fv.attached, fv.sel = !fv.attached, 0
 		refetch = true
-	case name == "i" && !fv.attached:
+	case name == "i" && !fv.attached && fv.far == "":
 		fv.ignored, refetch = !fv.ignored, true
 	case name == "c" && !fv.attached:
 		fv.changed, fv.shut, fv.sel, refetch = !fv.changed, nil, 0, true
@@ -807,13 +1141,16 @@ func (c *client) filesKeyboard(k uv.Key) {
 		move(0)
 	case op == panelLast:
 		move(len(rows) - 1)
+	case op == panelBack && fv.program != "" && (fv.filter != "" || fv.pick != ""):
+		fv.filter, fv.pick = "", ""
+		fv.sel = 0
 	case op == panelBack && fv.filter != "":
 		fv.filter, refetch = "", !fv.attached
 	case op == panelBack:
 		c.kb = areaMain
 	case fv.sel >= len(rows):
 	case op == panelUnfold:
-		if e := rows[fv.sel].e; e.Kind == proto.FileKindDir && !fv.flat() && rows[fv.sel].lib == nil {
+		if e := rows[fv.sel].e; e.Kind == proto.FileKindDir && !e.Withheld && !fv.flat() && rows[fv.sel].lib == nil {
 			if fv.unfolded(e.Path) {
 				move(fv.sel + 1)
 			} else {
@@ -825,7 +1162,7 @@ func (c *client) filesKeyboard(k uv.Key) {
 			break
 		}
 		e := rows[fv.sel].e
-		if e.Kind == proto.FileKindDir && fv.unfolded(e.Path) {
+		if e.Kind == proto.FileKindDir && !e.Withheld && fv.unfolded(e.Path) {
 			fv.fold(e.Path)
 			break
 		}
@@ -838,6 +1175,8 @@ func (c *client) filesKeyboard(k uv.Key) {
 	case op == panelEnter:
 		r := rows[fv.sel]
 		switch {
+		case r.lib == nil && r.e.Withheld:
+			c.flash = withheldWords(r.e, fv.far)
 		case r.lib == nil && r.e.Kind == proto.FileKindDir && !fv.flat():
 			refetch = fv.fold(r.e.Path)
 		case r.lib == nil && r.e.Kind == proto.FileKindDir:
@@ -863,6 +1202,11 @@ func (c *client) filesKeyboard(k uv.Key) {
 	if read != nil {
 		filesGo(func() { c.filesRead(*read) })
 	}
+}
+
+// narrow shows the kind: the selection stays on its file while that shows.
+func (fv *filesView) narrow(kind string) {
+	fv.pick, fv.sel = kind, 0
 }
 
 // pickRepo closes the picker on repos[i], and says whether that changed
@@ -897,11 +1241,19 @@ func (c *client) filesReveal() {
 // filesClick is a click on the view's line with hit h: a tab switches, a
 // row selects, a folder then folds or unfolds, and a selected file
 // reads. c.mu held; released here.
-func (c *client) filesClick(h infoHit) {
+func (c *client) filesClick(h infoHit, col int) {
 	fv := c.info.files
 	refetch := false
 	var read *fileRow
 	switch h.kind {
+	case hitFilesChip:
+		if ls := libChipLinesOf(fv.lib, fv.filter, fv.pick, max(c.infoW-1, 1)); h.task < len(ls) {
+			for _, s := range ls[h.task].spans {
+				if col >= s.from && col < s.to {
+					fv.narrow(s.kind)
+				}
+			}
+		}
 	case hitFilesTab:
 		fv.attached, fv.sel, fv.picking, refetch = !fv.attached, 0, false, true
 	case hitFilesRepo:
@@ -916,6 +1268,8 @@ func (c *client) filesClick(h infoHit) {
 			fv.sel = h.task
 			fv.note(rows)
 			switch {
+			case r.lib == nil && r.e.Withheld:
+				c.flash = withheldWords(r.e, fv.far)
 			case r.lib == nil && r.e.Kind == proto.FileKindDir && !fv.flat():
 				refetch = fv.fold(r.e.Path)
 			case again:
@@ -951,7 +1305,13 @@ func (c *client) filesRead(r fileRow) {
 	switch {
 	case !c.dashboard:
 		flash = "tm reads files on the dashboard"
+	case r.lib != nil && fv.far != "" && fv.offline:
+		flash = fv.far + " is offline, so that can't be read now"
 	case r.lib != nil:
+	case r.e.Withheld:
+		flash = withheldWords(r.e, fv.far)
+	case fv.far != "" && fv.offline:
+		flash = fv.far + " is offline, so that can't be read now"
 	case r.e.LinkOut:
 		flash = oneLine(r.e.Name) + " is a link that doesn't open: it leads out of the folder, or nowhere"
 	case r.e.Kind != proto.FileKindFile:
@@ -964,12 +1324,20 @@ func (c *client) filesRead(r fileRow) {
 		c.poke()
 		return
 	}
-	session, repo, slug, ignored, paths := fv.session, fv.repo, fv.slug, fv.ignored, c.paths
+	session, repo, slug, ignored, paths, program, far, alias := fv.session, fv.repo, fv.slug, fv.ignored, c.paths, fv.program, fv.far, fv.farAlias
+	gone := fv.farGone()
 	c.mu.Unlock()
 	var tv *textView
-	if r.lib != nil {
+	switch {
+	case r.lib != nil && program != "":
+		tv = programFileViewer(paths, program, *r.lib)
+	case r.lib != nil && far != "":
+		tv = attachedFarViewer(paths, alias, slug, *r.lib)
+	case r.lib != nil:
 		tv = attachedViewer(paths, slug, *r.lib)
-	} else {
+	case far != "":
+		tv = farViewer(paths, session, repo, r.e, gone)
+	default:
 		tv = worktreeViewer(paths, session, repo, r.e, ignored)
 	}
 	if !c.lock() {
@@ -979,8 +1347,60 @@ func (c *client) filesRead(r fileRow) {
 		c.mu.Unlock()
 		return
 	}
+	if far != "" && r.lib == nil && tv.note == noTextNote {
+		if fv.notText == nil {
+			fv.notText = map[string]bool{}
+		}
+		fv.notText[r.e.Path] = true
+		c.infoLayout()
+	}
 	filesKept.Store(fv)
 	c.goOver(&Over{Viewer: tv})
+}
+
+// noTextNote is what a viewer on a file without text says.
+const noTextNote = "not text: only its name and size show"
+
+// farViewer is the viewer on a file of a paired server's session: its text
+// with its changes marked, and nothing else. Its bytes never cross if it
+// isn't text, so there is no picture and nothing to open elsewhere. It looks
+// while it shows whether the switch went off (textView.keep), and then what
+// shows goes, in the words gone.
+func farViewer(paths tmclient.Paths, session, repo string, e proto.FileEntry, gone string) *textView {
+	tv := worktreeViewer(paths, session, repo, e, false)
+	tv.image, tv.open = nil, nil
+	tv.keep = func() string {
+		var st proto.FilesStampResult
+		err := filesCall(paths, proto.MethodFilesStamp, proto.FilesStampParams{Session: session, Repo: repo}, &st)
+		switch filesErrCode(err) {
+		case proto.ErrFilesOff, proto.ErrNotShared:
+			return gone
+		}
+		return ""
+	}
+	return tv
+}
+
+// attachedFarViewer is the viewer on a file a paired server's project pages
+// show: text, as far as there is any, and nothing to open elsewhere.
+func attachedFarViewer(paths tmclient.Paths, alias, slug string, f thread.LibFile) *textView {
+	tv := &textView{title: oneLine(f.Name) + " · " + sizeWords(f.Size)}
+	var data []byte
+	for {
+		var res proto.LibraryReadResult
+		err := filesCall(paths, proto.MethodPeerLibraryRead, proto.PeerLibraryReadReadParams{Alias: alias, Project: slug, Thread: f.Thread, Name: f.Name, Offset: int64(len(data))}, &res)
+		if err != nil {
+			msg, _ := filesErrText(err)
+			tv.note = "can't read it: " + oneLine(msg)
+			return tv
+		}
+		data = append(data, res.Data...)
+		if len(res.Data) == 0 || int64(len(data)) >= min(res.Size, libMax) {
+			tv.body, tv.note = libText(f.Name, data[:min(len(data), libMax)], res.Size > libMax)
+			tv.body = textsafe.Text(tv.body)
+			return tv
+		}
+	}
 }
 
 // attachedViewer is the viewer on a Library file.
@@ -1009,6 +1429,75 @@ func attachedViewer(paths tmclient.Paths, slug string, f thread.LibFile) *textVi
 	return tv
 }
 
+// programFileViewer is the viewer on a file of a program's list: the
+// director's own, or a member's here or on its paired server, each read as
+// a console off this machine's files reads it, so a path never crosses.
+func programFileViewer(paths tmclient.Paths, program string, f thread.LibFile) *textView {
+	tv := &textView{title: oneLine(f.Name) + " · " + sizeWords(f.Size)}
+	if f.Project != "" {
+		tv.title += " · " + libPlaceWords(f)
+	}
+	tv.open = func(m *dash) tea.Cmd {
+		return m.openCopy(f.Name, func() ([]byte, bool, error) { return programFileBytes(paths, program, f, openMax) })
+	}
+	if previewable() && thumb.Supported(f.Name) {
+		var res proto.LibraryThumbnailResult
+		if programFileThumb(paths, program, f, &res) == nil {
+			if tv.image = newImagePreview(res.Data); tv.image != nil {
+				return tv
+			}
+		}
+	}
+	data, truncated, err := programFileBytes(paths, program, f, libMax)
+	if err != nil {
+		tv.note = "can't read it: " + oneLine(err.Error())
+		return tv
+	}
+	tv.body, tv.note = libText(f.Name, data, truncated)
+	tv.body = textsafe.Text(tv.body)
+	return tv
+}
+
+// programFileThumb asks for the thumbnail of a file of a program's list.
+func programFileThumb(paths tmclient.Paths, program string, f thread.LibFile, res *proto.LibraryThumbnailResult) error {
+	switch {
+	case f.Server != "":
+		return filesCall(paths, proto.MethodPeerLibraryThumbnail, proto.PeerLibraryThumbnailReadParams{Alias: f.Server, Project: f.Project, Thread: f.Thread, Name: f.Name}, res)
+	case f.Project != "":
+		return filesCall(paths, proto.MethodLibraryThumbnail, proto.LibraryThumbnailParams{Project: f.Project, ID: libFileID(f), Name: f.Name}, res)
+	}
+	return filesCall(paths, proto.MethodLibraryThumbnail, proto.LibraryThumbnailParams{Program: program, ID: libFileID(f), Name: f.Name}, res)
+}
+
+// programFileBytes reads up to most bytes of a file of a program's list, a
+// chunk at a time; truncated says it was longer.
+func programFileBytes(paths tmclient.Paths, program string, f thread.LibFile, most int64) (data []byte, truncated bool, err error) {
+	for {
+		var res proto.LibraryReadResult
+		off := int64(len(data))
+		switch {
+		case f.Server != "":
+			err = filesCall(paths, proto.MethodPeerLibraryRead, proto.PeerLibraryReadReadParams{Alias: f.Server, Project: f.Project, Thread: f.Thread, Name: f.Name, Offset: off}, &res)
+		case f.Project != "":
+			err = filesCall(paths, proto.MethodLibraryRead, proto.LibraryReadParams{Project: f.Project, ID: libFileID(f), Name: f.Name, Offset: off}, &res)
+		default:
+			err = filesCall(paths, proto.MethodLibraryRead, proto.LibraryReadParams{Program: program, ID: libFileID(f), Name: f.Name, Offset: off}, &res)
+		}
+		if err != nil {
+			return nil, false, err
+		}
+		data = append(data, res.Data...)
+		switch {
+		case int64(len(data)) >= res.Size:
+			return data, false, nil
+		case int64(len(data)) >= most:
+			return data[:most], true, nil
+		case len(res.Data) == 0:
+			return nil, false, errors.New("it changed while it was read")
+		}
+	}
+}
+
 // worktreeViewer is the viewer on a file of the session's folder, its
 // changes marked; a deleted file shows what it held.
 func worktreeViewer(paths tmclient.Paths, session, repo string, e proto.FileEntry, ignored bool) *textView {
@@ -1029,11 +1518,11 @@ func worktreeViewer(paths tmclient.Paths, session, repo string, e proto.FileEntr
 		}
 		tv.title = oneLine(e.Path) + " · " + sizeWords(res.Size)
 		if res.Binary {
-			tv.note = "not text: only its name and size show"
+			tv.note = noTextNote
 			if d := fileDiff(paths, session, repo, e.Path, ignored); d.Status != "" {
 				tv.title += " · " + changeWords(d)
 			}
-			if thumb.Supported(e.Name) {
+			if thumb.Supported(e.Name) && !strings.Contains(session, "/") { // a paired server's id has one: no bytes cross
 				tv.open = func(m *dash) tea.Cmd {
 					return m.openCopy(e.Name, func() ([]byte, bool, error) { return worktreeBytes(paths, session, repo, e.Path, ignored) })
 				}

@@ -1,32 +1,187 @@
 {
   "name": "opened to show a done task, the tab lists the done tasks so its row is there; tasks.changed lists the tasks again",
   "answers": [
-    { "method": "tasks.list", "params": { "slug": "demo" },
+    {
+      "method": "tasks.list",
+      "params": {
+        "slug": "demo"
+      },
       "result": [
-        { "id": "T5", "title": "Idea", "status": "open", "steps_done": 0, "steps_total": 0, "steps": [] },
-        { "id": "T6", "title": "Old", "status": "done", "steps_done": 0, "steps_total": 0, "steps": [], "updated": "2026-09-01" }
-      ] }
+        {
+          "id": "T5",
+          "title": "Idea",
+          "status": "open",
+          "steps_done": 0,
+          "steps_total": 0,
+          "steps": []
+        },
+        {
+          "id": "T6",
+          "title": "Old",
+          "status": "done",
+          "steps_done": 0,
+          "steps_total": 0,
+          "steps": [],
+          "updated": "2026-09-01"
+        }
+      ]
+    },
+    {
+      "method": "tasks.done",
+      "params": {
+        "slug": "demo",
+        "options": {
+          "groups": true,
+          "reveal": "T6"
+        }
+      },
+      "result": {
+        "tasks": [],
+        "total": 1,
+        "next": 0,
+        "groups": [
+          {
+            "kind": "day",
+            "title": "Tue 1 Sep",
+            "from": "2026-09-01",
+            "to": "2026-09-01",
+            "count": 1,
+            "archived": 0,
+            "open": true,
+            "tasks": [
+              {
+                "id": "T6",
+                "title": "Old",
+                "status": "done",
+                "steps_done": 0,
+                "steps_total": 0,
+                "steps": [],
+                "updated": "2026-09-01"
+              }
+            ],
+            "next": 0
+          }
+        ]
+      }
+    }
   ],
   "events": [
-    { "name": "view.opened", "project": "demo",
-      "data": { "view": "tasks", "slot": "project.tab", "project": "demo", "task": "T6", "width": 70, "height": 20 } },
-    { "name": "tasks.changed", "project": "demo", "data": { "project": "demo" } }
+    {
+      "name": "view.opened",
+      "project": "demo",
+      "data": {
+        "view": "tasks",
+        "slot": "project.tab",
+        "project": "demo",
+        "task": "T6",
+        "width": 70,
+        "height": 20
+      }
+    },
+    {
+      "name": "tasks.changed",
+      "project": "demo",
+      "data": {
+        "project": "demo"
+      }
+    }
   ],
   "expect": {
     "calls": [
-      { "method": "tasks.list", "params": { "slug": "demo" } },
-      { "method": "ui.view.set", "params": { "view": "tasks",
-          "widget": { "kind": "stack", "children": [
-            { "kind": "table", "rows": [
-              { "id": "g:backlog", "head": true },
-              { "id": "T5" },
-              { "id": "g:done", "head": true },
-              { "id": "T6" }
-            ] },
-            { "kind": "keys", "keys": [{ "key": "b", "label": "hide done" }, { "key": "p", "label": "must only" }] }
-          ] } } },
-      { "method": "tasks.list", "params": { "slug": "demo" } },
-      { "method": "ui.view.set", "params": { "view": "tasks" } }
+      {
+        "method": "tasks.list",
+        "params": {
+          "slug": "demo"
+        }
+      },
+      {
+        "method": "tasks.list",
+        "params": {
+          "slug": "demo"
+        }
+      },
+      {
+        "method": "tasks.done",
+        "params": {
+          "slug": "demo",
+          "options": {
+            "groups": true,
+            "reveal": "T6"
+          }
+        }
+      },
+      {
+        "method": "ui.view.set",
+        "params": {
+          "view": "tasks",
+          "widget": {
+            "kind": "stack",
+            "children": [
+              {
+                "kind": "table",
+                "rows": [
+                  {
+                    "id": "g:backlog",
+                    "head": true
+                  },
+                  {
+                    "id": "T5"
+                  },
+                  {
+                    "id": "g:done",
+                    "head": true
+                  },
+                  {
+                    "id": "f:2026-09-01:2026-09-01"
+                  },
+                  {
+                    "id": "T6"
+                  }
+                ]
+              },
+              {
+                "kind": "keys",
+                "keys": [
+                  {
+                    "key": "b",
+                    "label": "hide done"
+                  },
+                  {
+                    "key": "enter",
+                    "label": "open or fold"
+                  },
+                  {
+                    "key": "p",
+                    "label": "must only"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      {
+        "method": "tasks.list",
+        "params": {
+          "slug": "demo"
+        }
+      },
+      {
+        "method": "tasks.done",
+        "params": {
+          "slug": "demo",
+          "options": {
+            "groups": true,
+            "reveal": "T6"
+          }
+        }
+      },
+      {
+        "method": "ui.view.set",
+        "params": {
+          "view": "tasks"
+        }
+      }
     ]
   }
 }

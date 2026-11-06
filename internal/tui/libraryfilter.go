@@ -46,18 +46,28 @@ func libKind(name string) string {
 }
 
 // libMatches says whether every word of the filter is in the file's
-// name, task, title, thread, repository or linked project.
+// name, task, title, thread, repository or linked project, or a program's
+// member and its server.
 func libMatches(f thread.LibFile, words []string) bool {
 	if len(words) == 0 {
 		return true
 	}
-	hay := strings.ToLower(strings.Join([]string{f.Name, f.Task, f.Title, f.Thread, f.Repo, f.Peer}, "\n"))
+	hay := strings.ToLower(strings.Join([]string{f.Name, f.Task, f.Title, f.Thread, f.Repo, f.Peer, f.Project, f.Server}, "\n"))
 	for _, w := range words {
 		if !strings.Contains(hay, w) {
 			return false
 		}
 	}
 	return true
+}
+
+// libPlace is the project a program's list has f under, "" for the
+// director's own or for a project's own library.
+func libPlace(f thread.LibFile) string {
+	if f.Project == "" {
+		return ""
+	}
+	return f.Server + "/" + f.Project
 }
 
 func libWords(query string) []string { return strings.Fields(strings.ToLower(query)) }

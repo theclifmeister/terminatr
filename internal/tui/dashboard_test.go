@@ -43,6 +43,7 @@ func statusLine(s proto.SessionInfo, ts *thread.Status, pending bool, cols int, 
 // settings file under the test's TERMINATR_HOME, and Load reads them
 // back once one was set.
 type fakeSource struct {
+	archived *tasks.Task
 	// pneeds are program.needs' answers by program; panswers the
 	// AnswerProgram calls (slug/Q2=labels); newPrograms NewProgram's.
 	pneeds      map[string]proto.ProgramNeedsResult
@@ -219,6 +220,13 @@ func (f *fakeSource) Load() Data {
 	}
 	return f.data
 }
+func (f *fakeSource) ArchivedTask(_, ref string) *tasks.Task {
+	if f.archived != nil && f.archived.Ref() == ref {
+		return f.archived
+	}
+	return nil
+}
+
 func (f *fakeSource) Board(string) (*tasks.Board, error) {
 	if f.board != nil {
 		return f.board, nil
@@ -452,6 +460,19 @@ func (f *fakeSource) SetPeerNeeds(alias, level string) error {
 	}
 	return nil
 }
+func (f *fakeSource) SetPeerFiles(alias, project string, on bool) error {
+	for i := range f.peers.Peers {
+		if f.peers.Peers[i].Alias != alias {
+			continue
+		}
+		f.peers.Peers[i].Files = slices.DeleteFunc(f.peers.Peers[i].Files, func(s string) bool { return s == project })
+		if on {
+			f.peers.Peers[i].Files = append(f.peers.Peers[i].Files, project)
+		}
+	}
+	return nil
+}
+
 func (f *fakeSource) SetPeerPages(alias, project string, on bool) error {
 	f.pagesSet = append(f.pagesSet, fmt.Sprintf("%s %s %v", alias, project, on))
 	for i := range f.peers.Peers {

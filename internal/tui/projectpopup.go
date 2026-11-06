@@ -86,6 +86,9 @@ type projectView struct {
 	// filter's words and the kind ("" for all); libTyping says the keyboard
 	// is in the filter.
 	libFilter string
+	// libShow is which file a switched stack's row shows (librarystack.go).
+	libShow map[string]string
+
 	// libOpen are the groups opened past their fold (libraryheads.go).
 	libOpen   map[string]bool
 	libPick   string
@@ -360,7 +363,11 @@ func (pv *projectView) messagesKey(m *dash, s string) tea.Cmd {
 // openTask shows task t of the popup's project over it; esc comes back
 // to the popup.
 func (m *dash) openTask(pv *projectView, t *tasks.Task) tea.Cmd {
-	m.push(&taskView{pv: pv, id: t.ID})
+	tv := &taskView{pv: pv, id: t.ID}
+	if t.Archived {
+		tv.archived = t
+	}
+	m.push(tv)
 	return nil
 }
 
@@ -369,9 +376,15 @@ func (m *dash) openTask(pv *projectView, t *tasks.Task) tea.Cmd {
 type taskView struct {
 	pv *projectView
 	id int
+	// archived is the task when it is in the archive, off the board: it
+	// shows, and no key acts on it.
+	archived *tasks.Task
 }
 
 func (tv *taskView) task() *tasks.Task {
+	if tv.archived != nil {
+		return tv.archived
+	}
 	if tv.pv.board != nil {
 		for _, t := range tv.pv.board.Tasks {
 			if t.ID == tv.id {
@@ -387,7 +400,7 @@ func (tv *taskView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	case "esc":
 		m.pop()
 	case "D", "A", "X", "c", "P":
-		if t := tv.task(); t != nil {
+		if t := tv.task(); t != nil && tv.archived == nil {
 			return m.taskKey(tv.pv.slug, t, k.String())
 		}
 	}
@@ -413,6 +426,9 @@ func (tv *taskView) render(m *dash) string {
 	for i, l := range d.lines {
 		// The box has its own gutters.
 		d.lines[i] = strings.TrimRight(strings.TrimSuffix(strings.TrimPrefix(l, " "), reset), " ") + reset
+	}
+	if tv.archived != nil {
+		return m.popup(box{title: title + " · archived", body: d.lines, sel: -1, keys: "esc back"})
 	}
 	return m.popup(box{title: title, body: d.lines, sel: -1, keys: joinKeys(taskKeys(t), "esc back")})
 }
@@ -545,6 +561,9 @@ func (pv *projectView) box(m *dash) box {
 			keys = "enter open or fold the group · " + keys
 		case len(pv.libFiles()) > 0:
 			keys = libTabKeys
+			if r, ok := pv.libStackRow(); ok {
+				keys = "v " + r.otherWord() + " · " + keys
+			}
 		}
 	case tabDesigns:
 		body, sel, hits = pv.designLines(w)
@@ -675,16 +694,30 @@ func (pv *projectView) click(m *dash, item, col int, double bool) tea.Cmd {
 	if l := pv.list(); l != nil {
 		return l.click(m, item, col)
 	}
+	listW := 0
 	if pv.tab == tabLibrary {
 		// The preview column isn't the row beside it.
 		w := m.inner(viewWidth)
-		if cols := pv.libPreviewCols(m, w); cols > 0 && col >= w-cols-libPreviewGap {
-			return nil
+		listW = w
+		if cols := pv.libPreviewCols(m, w); cols > 0 {
+			if col >= w-cols-libPreviewGap {
+				return nil
+			}
+			listW = w - cols - libPreviewGap
 		}
 	}
 	pv.sel[pv.tab] = item
 	if pv.tab == tabLibrary && pv.toggleLibFold() {
 		return nil
+	}
+	if pv.tab == tabLibrary {
+		// A click on a stack's switch switches it.
+		if r, ok := pv.libStackRow(); ok {
+			if from, to, fits := libSwitchSpan(listW); fits && col >= from && col < to {
+				pv.switchLib(r)
+				return nil
+			}
+		}
 	}
 	if pv.tab == tabMessages {
 		// A click opens a message, as enter does.

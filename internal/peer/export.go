@@ -70,6 +70,8 @@ type dispatcher struct {
 	worktrees func(project string) bool
 	// worktreeLimit is this peer's rate on them.
 	worktreeLimit worktreeRate
+	// worktreeRead notes that one was answered; nil for no note.
+	worktreeRead func()
 	// uploads says whether this server's pane switch for the peer is write
 	// now, read at each request; nil where sessions take no files.
 	uploads func() bool
@@ -118,6 +120,7 @@ func (d *dispatcher) methods() map[string]handler {
 		d.needsMethods(m)
 		d.pagesMethods(m)
 		d.designsMethods(m)
+		d.historyMethods(m)
 		d.worktreeMethods(m)
 		d.uploadMethods(m)
 	}

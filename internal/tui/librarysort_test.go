@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/theclifmeister/terminatr/internal/thread"
@@ -252,5 +253,87 @@ func TestLibraryFlatRowFits(t *testing.T) {
 		if w >= 60 && !strings.Contains(l, "T1  title") {
 			t.Errorf("%d cells: no title: %q", w, l)
 		}
+	}
+}
+
+// libSortStackFiles is a stack with a file between its halves in rank.
+func libSortStackFiles() []thread.LibFile {
+	return []thread.LibFile{
+		{Thread: "t-0001", Task: "T1", Title: "Site", Name: "site-dark.png", Size: 3000},
+		{Thread: "t-0001", Task: "T1", Title: "Site", Name: "site-light.png", Size: 200},
+		{Thread: "t-0002", Task: "T2", Title: "Other", Name: "between.md", Size: 500},
+	}
+}
+
+// TestLibraryBiggestPartsAStack: in the flat list a stack's two files are two
+// rows with their own rank, name and size, and neither has a switch: not v, not
+// a click, not the key hint.
+func TestLibraryBiggestPartsAStack(t *testing.T) {
+	pv, m := libraryTab(t, libSortStackFiles())
+	pv.libraryKey(m, tea.KeyPressMsg{Code: 's', Text: "s"})
+	rows := pv.libRows()
+	var names []string
+	for _, r := range rows {
+		names = append(names, r.f.Name)
+		if r.stack != nil {
+			t.Errorf("a stack's row in the flat list: %+v", r)
+		}
+	}
+	if want := []string{"site-dark.png", "between.md", "site-light.png"}; !slices.Equal(names, want) {
+		t.Fatalf("rows %v, want %v", names, want)
+	}
+	if out := screen(m); !strings.Contains(out, "site-light.png") || !strings.Contains(out, "3.0 KB") || !strings.Contains(out, "200 B") {
+		t.Errorf("each half's name and size:\n%s", out)
+	}
+	pv.sel[tabLibrary] = 0
+	pv.libraryKey(m, tea.KeyPressMsg{Code: 'v', Text: "v"})
+	w := m.inner(viewWidth)
+	if from, _, fits := libSwitchSpan(w); fits {
+		pv.click(m, 0, from, false)
+	}
+	if len(pv.libShow) != 0 {
+		t.Errorf("a switch moved in the flat list: %v", pv.libShow)
+	}
+	if f, ok := pv.selLib(); !ok || f.Name != "site-dark.png" {
+		t.Errorf("selected %q %v", f.Name, ok)
+	}
+}
+
+// TestLibrarySortKeepsAStacksFile: the file selected stays the file selected
+// both ways, so X names the same one: the half showing goes to its own row,
+// and the second half brings its stack back showing it.
+func TestLibrarySortKeepsAStacksFile(t *testing.T) {
+	pv, m := libraryTab(t, libSortStackFiles())
+	if r, ok := pv.libStackRow(); !ok {
+		t.Fatalf("no stack: %+v", r)
+	} else {
+		pv.switchLib(r) // showing light
+	}
+	pv.sortLib(true)
+	if f, ok := pv.selLib(); !ok || f.Name != "site-light.png" {
+		t.Fatalf("to biggest: %q %v", f.Name, ok)
+	}
+	pv.sortLib(false)
+	if f, ok := pv.selLib(); !ok || f.Name != "site-light.png" {
+		t.Fatalf("back with light showing: %q %v", f.Name, ok)
+	}
+
+	// Picked in the flat list with the stack on its other file: dark shows.
+	pv.sortLib(true)
+	pv.sel[tabLibrary] = 0
+	if f, _ := pv.selLib(); f.Name != "site-dark.png" {
+		t.Fatalf("flat's first: %q", f.Name)
+	}
+	pv.sortLib(false)
+	r, ok := pv.libStackRow()
+	if !ok || r.f.Name != "site-dark.png" {
+		t.Fatalf("back on dark: %+v %v", r, ok)
+	}
+	if f, ok := pv.selLib(); !ok || f.Name != "site-dark.png" {
+		t.Errorf("X would name %q %v", f.Name, ok)
+	}
+	pv.libraryKey(m, tea.KeyPressMsg{Code: 'X', Text: "X"})
+	if out := screen(m); !strings.Contains(out, "site-dark.png (3.0 KB)") {
+		t.Errorf("X names another file:\n%s", out)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
@@ -27,22 +28,41 @@ import (
 // in half-blocks (imagepreview.go); X deletes the selected file and D the
 // files of its thread, each after y; / filters and t steps through the
 // kinds (libraryfilter.go). A group's heading says its task's status, kinds
-// and size, and a long group folds (libraryheads.go); s lists the files
-// flat, biggest first (librarysort.go). A file shows by name and size, never
-// a path.
+// and size, and a long group folds (libraryheads.go). Two images that are one
+// picture twice list as one row, and v switches it (librarystack.go); s lists
+// the files flat, biggest first, a stack's two apart (librarysort.go). A file
+// shows by name and size, never a path.
 
 // libraryOrder are the library's files grouped by thread (or linked
-// project), the group with the newest file first and each group's files
-// newest first.
+// project), the seat's own group first, then the group with the newest
+// file first and each group's files newest first. A program's list keeps
+// its projects in the order they came, each ordered so.
 func libraryOrder(files []thread.LibFile) []thread.LibFile {
 	var ids []string
 	by := map[string][]thread.LibFile{}
+	places := map[string]int{}
 	for _, f := range files { // newest first already
 		if _, ok := by[f.Group()]; !ok {
 			ids = append(ids, f.Group())
 		}
 		by[f.Group()] = append(by[f.Group()], f)
+		if _, ok := places[libPlace(f)]; !ok {
+			places[libPlace(f)] = len(places)
+		}
 	}
+	slices.SortStableFunc(ids, func(a, b string) int {
+		fa, fb := by[a][0], by[b][0]
+		if d := places[libPlace(fa)] - places[libPlace(fb)]; d != 0 {
+			return d
+		}
+		switch {
+		case fa.IsSeat() && !fb.IsSeat():
+			return -1
+		case fb.IsSeat() && !fa.IsSeat():
+			return 1
+		}
+		return 0
+	})
 	out := make([]thread.LibFile, 0, len(files))
 	for _, id := range ids {
 		out = append(out, by[id]...)
@@ -61,7 +81,8 @@ func (pv *projectView) libFiles() []thread.LibFile {
 }
 
 // narrowLib sets the filter and the kind; the selection stays on its file
-// while that still shows, else it goes to the first.
+// while that still shows, else it goes to the first. A stack the filter leaves
+// one file of is that file's row.
 func (pv *projectView) narrowLib(query, pick string) {
 	at, ok := pv.selLib()
 	pv.libFilter, pv.libPick = query, pick
@@ -69,7 +90,8 @@ func (pv *projectView) narrowLib(query, pick string) {
 }
 
 // keepLibSel puts the selection back on file at (if ok) after the list
-// changed, opening its group's fold if it went under one, else on the first.
+// changed, opening its group's fold if it went under one and making a stack's
+// row show it, else on the first.
 func (pv *projectView) keepLibSel(at thread.LibFile, ok bool) {
 	pv.sel[tabLibrary] = 0
 	if ok {
@@ -77,7 +99,12 @@ func (pv *projectView) keepLibSel(at thread.LibFile, ok bool) {
 		if slices.IndexFunc(pv.libFiles(), same) >= 0 && pv.libRowOf(same) < 0 {
 			pv.setLibOpen(at.Group(), true) // the file is under its group's fold
 		}
-		pv.sel[tabLibrary] = max(pv.libRowOf(same), 0)
+		if i := pv.libRowOf(same); i >= 0 {
+			pv.sel[tabLibrary] = i
+			if r := pv.libRows()[i]; r.stack != nil && !same(r.f) {
+				pv.switchLib(r) // the row shows the file that was selected
+			}
+		}
 	}
 }
 
@@ -123,11 +150,17 @@ type libChipSpan struct {
 // libChipLines are the chips laid out on lines of w cells, the picked one
 // marked: every kind stays in reach at any width.
 func (pv *projectView) libChipLines(w int) []libChipLine {
-	chips := libChips(pv.library, pv.libFilter, pv.libPick)
+	return libChipLinesOf(pv.library, pv.libFilter, pv.libPick, w)
+}
+
+// libChipLinesOf are files' chips under the filter and the kind, laid out
+// on lines of w cells.
+func libChipLinesOf(files []thread.LibFile, query, kind string, w int) []libChipLine {
+	chips := libChips(files, query, kind)
 	if chips == nil {
 		return nil
 	}
-	pick := libPicked(pv.library, pv.libPick)
+	pick := libPicked(files, kind)
 	var out []libChipLine
 	cur := libChipLine{}
 	x := 0
@@ -210,14 +243,18 @@ func (pv *projectView) selLib() (thread.LibFile, bool) {
 
 // libGroup is the title line of a thread's files: task, title, thread
 // and the date of its newest file; of a linked project's, the project
-// and how many (n).
+// and how many (n); of a seat's own, whose they are and how many.
 func libGroup(f thread.LibFile, n, w int) string {
-	if f.Peer != "" {
+	if f.Peer != "" || f.IsSeat() {
 		rest := fmt.Sprintf(" · %d files", n)
 		if n == 1 {
 			rest = " · 1 file"
 		}
-		return th().Head.Render(ansi.Truncate("from "+f.Peer, max(w-ansi.StringWidth(rest), 8), "…")) + th().Faint.Render(rest)
+		head := "from " + f.Peer
+		if f.IsSeat() {
+			head = oneLine(f.Title)
+		}
+		return th().Head.Render(ansi.Truncate(head, max(w-ansi.StringWidth(rest), 8), "…")) + th().Faint.Render(rest)
 	}
 	rest := " · " + f.Thread + " · " + f.Time.Local().Format("2006-01-02")
 	if f.State == "archived" {
@@ -249,7 +286,7 @@ func (pv *projectView) libraryLines(w int) ([]string, int, []int) {
 		return []string{th().Faint.Render("loading…")}, -1, nil
 	}
 	if len(pv.library) == 0 {
-		return []string{th().Faint.Render("no files: a thread's report attaches them (tm report --attach)")}, -1, nil
+		return []string{th().Faint.Render("no files: a thread's report attaches them (tm report --attach), the coordinator keeps its own (tm library add)")}, -1, nil
 	}
 	groups := pv.libShownGroups()
 	if len(groups) == 0 {
@@ -279,6 +316,11 @@ func (pv *projectView) libraryLines(w int) ([]string, int, []int) {
 				l = "  " + fit(oneLine(r.f.Name), max(libRowRoom(w), 4)) + "  " + libSizeWords(r.f.Size)
 			}
 			switch {
+			case r.stack != nil:
+				if on {
+					sel = len(out)
+				}
+				l = libStackLine(r, w, on)
 			case on:
 				sel = len(out)
 				l = th().Sel.Render(fit(l, w))
@@ -296,9 +338,9 @@ func (pv *projectView) libraryLines(w int) ([]string, int, []int) {
 	return out, sel, hits
 }
 
-// libraryKey: / filters, t steps through the kinds and s turns the sort;
-// enter reads the selected file, X deletes it and D its thread's files,
-// each after y.
+// libraryKey: / filters, t steps through the kinds and s turns the sort; v
+// switches a stack; enter reads the selected file, X deletes it and D its
+// thread's files, each after y.
 func (pv *projectView) libraryKey(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	switch k.String() {
 	case "/":
@@ -312,6 +354,11 @@ func (pv *projectView) libraryKey(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	case "s":
 		if libShowsSort(pv.library) {
 			pv.sortLib(!pv.libFlat())
+		}
+		return nil
+	case "v":
+		if r, ok := pv.libStackRow(); ok {
+			pv.switchLib(r)
 		}
 		return nil
 	}
@@ -334,7 +381,11 @@ func (pv *projectView) libraryKey(m *dash, k tea.KeyPressMsg) tea.Cmd {
 			})
 			break
 		}
-		m.confirm("Delete a library file", "Delete "+oneLine(f.Name)+" ("+sizeWords(f.Size)+") of thread "+f.Thread+"? It can't be brought back.", func() tea.Cmd {
+		whose := "thread " + f.Thread
+		if f.IsSeat() {
+			whose = "the coordinator's files"
+		}
+		m.confirm("Delete a library file", "Delete "+oneLine(f.Name)+" ("+sizeWords(f.Size)+") of "+whose+"? It can't be brought back.", func() tea.Cmd {
 			return m.libRemove(pv.slug, f.Thread, f.Name, "deleted "+oneLine(f.Name))
 		})
 	case "D":
@@ -348,8 +399,12 @@ func (pv *projectView) libraryKey(m *dash, k tea.KeyPressMsg) tea.Cmd {
 				n++
 			}
 		}
-		m.confirm("Delete a thread's library", fmt.Sprintf("Delete all %d library files of thread %s? They can't be brought back.", n, f.Thread), func() tea.Cmd {
-			return m.libRemove(pv.slug, f.Thread, "", fmt.Sprintf("deleted %d files of %s", n, f.Thread))
+		whose, short := "thread "+f.Thread, f.Thread
+		if f.IsSeat() {
+			whose, short = "the coordinator's files", "the coordinator's"
+		}
+		m.confirm("Delete a thread's library", fmt.Sprintf("Delete all %d library files of %s? They can't be brought back.", n, whose), func() tea.Cmd {
+			return m.libRemove(pv.slug, f.Thread, "", fmt.Sprintf("deleted %d files of %s", n, short))
 		})
 	}
 	return nil
@@ -394,6 +449,46 @@ type textView struct {
 	// open, on a file o opens, opens it in this computer's viewer.
 	image *imagePreview
 	open  func(m *dash) tea.Cmd
+
+	// switchTo, on a stack's file, reads its other file instead, and
+	// switchWord says which that is.
+	switchTo   func(m *dash) tea.Cmd
+	switchWord string
+
+	// keep, on a paired server's file, looks whether it may still show: ""
+	// while it may, else the words to put in its place. kept is when it
+	// last looked. Nil for all else (viewerWatch).
+	keep func() string
+	kept time.Time
+}
+
+// viewerGoneMsg says tv's file may no longer show.
+type viewerGoneMsg struct {
+	tv    *textView
+	words string
+}
+
+// viewerWatch looks, on the dashboard's tick, whether the file on top may
+// still show; nil when nothing is to be looked at yet.
+func (m *dash) viewerWatch() tea.Cmd {
+	tv, ok := m.top().(*textView)
+	if !ok || tv.keep == nil || time.Since(tv.kept) < filesFarEvery {
+		return nil
+	}
+	tv.kept = time.Now()
+	keep := tv.keep
+	return func() tea.Msg {
+		if words := keep(); words != "" {
+			return viewerGoneMsg{tv: tv, words: words}
+		}
+		return nil
+	}
+}
+
+// goes empties the viewer: what showed left, and why stays.
+func (tv *textView) goes(words string) {
+	tv.body, tv.note, tv.diff, tv.wrapped, tv.wrapOf, tv.wrapW, tv.keep, tv.scroll = "", words, nil, nil, "", 0, nil, 0
+	tv.title, _, _ = strings.Cut(tv.title, " · ")
 }
 
 // scrollKey scrolls *scroll for key k over n lines; it says whether k
@@ -414,6 +509,15 @@ func (m *dash) openLibFile(pv *projectView, f thread.LibFile) tea.Cmd {
 		tv.title = oneLine(f.Name) + " · " + sizeWords(f.Size) + " · from " + f.Peer
 	}
 	tv.open = func(m *dash) tea.Cmd { return m.openLibCopy(pv.slug, id, f.Name) }
+	if r, ok := pv.libStackOf(f); ok {
+		// v switches here too: comparing is what a stack is for.
+		tv.switchWord = r.otherWord()
+		tv.switchTo = func(m *dash) tea.Cmd {
+			pv.switchLib(r)
+			m.pop()
+			return m.openLibFile(pv, r.otherFile())
+		}
+	}
 	if previewable() && thumb.Supported(f.Name) {
 		key := thumbKey(f)
 		img, known := pv.thumbs[key]
@@ -550,6 +654,9 @@ func (tv *textView) key(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	if s == "o" && tv.open != nil {
 		return tv.open(m)
 	}
+	if s == "v" && tv.switchTo != nil {
+		return tv.switchTo(m)
+	}
 	if s == "esc" || s == "q" && tv.quit {
 		m.pop()
 	}
@@ -566,6 +673,9 @@ func (tv *textView) keyHints() string {
 	}
 	if tv.open != nil {
 		keys = "o open · " + keys
+	}
+	if tv.switchTo != nil {
+		keys = "v " + tv.switchWord + " · " + keys
 	}
 	return keys
 }
