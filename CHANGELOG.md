@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.83.0](https://github.com/theclifmeister/terminatr/compare/v0.82.1...v0.83.0) (2026-11-06)
+
+
+### Features
+
+* **app:** JetBrains Mono NL for mono text and conversation text in the Mac and iPhone apps ([#1131](https://github.com/theclifmeister/terminatr/issues/1131)) ([e95ba15](https://github.com/theclifmeister/terminatr/commit/e95ba15a48d2e95af699f027e4b8272a18ef9dec))
+* **app:** the Mac status bar's server and working counts open a menu ([#1137](https://github.com/theclifmeister/terminatr/issues/1137)) ([b75985b](https://github.com/theclifmeister/terminatr/commit/b75985bff01bbf2a0c75b80e2cfa4f39699bd74c))
+* per-file diffs in the Files view, with added and removed line colours ([#1129](https://github.com/theclifmeister/terminatr/issues/1129)) ([b7e3f96](https://github.com/theclifmeister/terminatr/commit/b7e3f965614089e44bed44d4c9c1cdd887e1bceb))
+* repo picker and main-checkout label in a coordinator's Files view ([#1132](https://github.com/theclifmeister/terminatr/issues/1132)) ([dd7d5d6](https://github.com/theclifmeister/terminatr/commit/dd7d5d61b45e7613b3aeabef699d800ba2e1e5b2))
+
+
+### Bug Fixes
+
+* **app:** say plainly that a paired server's worktrees can't be browsed from here ([#1138](https://github.com/theclifmeister/terminatr/issues/1138)) ([7a31043](https://github.com/theclifmeister/terminatr/commit/7a31043c45b92584d5c66eb04bc8d432543e6250))
+* **app:** the Mac composer's buttons go under a narrow field ([#1133](https://github.com/theclifmeister/terminatr/issues/1133)) ([7d7b95d](https://github.com/theclifmeister/terminatr/commit/7d7b95db087ba9093b4e3c497fa991d24f18e93d))
+* **app:** the Mac's focus border follows the focused section, not only the window ([#1134](https://github.com/theclifmeister/terminatr/issues/1134)) ([493be2e](https://github.com/theclifmeister/terminatr/commit/493be2e5cd758a925de21f0b2308c5a5056bd9c6))
+* **app:** the Mac's sheets and dialogs use the flat look ([#1136](https://github.com/theclifmeister/terminatr/issues/1136)) ([ce07b1b](https://github.com/theclifmeister/terminatr/commit/ce07b1b966e04eee9e27f3730a51af3df91d42e1))
+* Changed only keeps the folder structure in the Files view, in the TUI and the Mac ([#1135](https://github.com/theclifmeister/terminatr/issues/1135)) ([853b3bd](https://github.com/theclifmeister/terminatr/commit/853b3bd846b0810b91f957dc71fd38b8a62a26f1))
+
 ## [0.82.1](https://github.com/theclifmeister/terminatr/compare/v0.82.0...v0.82.1) (2026-11-06)
 
 
