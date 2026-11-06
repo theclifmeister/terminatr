@@ -76,7 +76,7 @@ func Detail(t *Task) string {
 	if t.Priority != NoPriority {
 		meta = append(meta, "priority: "+string(t.Priority))
 	}
-	for _, kv := range [][2]string{{"owner", t.Owner}, {"repo", t.Repo}, {"thread", t.Thread}, {"created", t.Created}, {"updated", t.Updated}} {
+	for _, kv := range [][2]string{{"owner", t.Owner}, {"repo", t.Repo}, {"thread", t.Thread}, {"created", t.Created}, {"updated", t.Updated}, {"done_at", t.DoneAt}} {
 		if kv[1] != "" {
 			meta = append(meta, kv[0]+": "+one(kv[1]))
 		}
@@ -119,7 +119,10 @@ type JSON struct {
 	Repo     string   `json:"repo,omitempty"`
 	Created  string   `json:"created"`
 	Updated  string   `json:"updated"`
-	Archived bool     `json:"archived,omitempty"`
+	// DoneAt is when a done task finished: a UTC time, or a day when
+	// only that is known; absent when nothing dates it.
+	DoneAt   string `json:"done_at,omitempty"`
+	Archived bool   `json:"archived,omitempty"`
 	// Parts are an umbrella task's parts (programs, §5.3).
 	Parts []string `json:"parts,omitempty"`
 }
@@ -133,6 +136,6 @@ func ToJSON(t *Task) JSON {
 	return JSON{
 		ID: t.Ref(), Title: t.Title, Status: t.Status, Priority: t.Priority, Group: string(GroupOf(t.Status)),
 		Notes: t.Notes, Steps: steps, Thread: t.Thread, Owner: t.Owner, Repo: t.Repo,
-		Created: t.Created, Updated: t.Updated, Archived: t.Archived, Parts: t.Parts,
+		Created: t.Created, Updated: t.Updated, DoneAt: t.DoneAt, Archived: t.Archived, Parts: t.Parts,
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Status is one of the seven task statuses (§6.1).
@@ -177,9 +178,14 @@ type Task struct {
 	// ("acme-api/T12", "mini/acme-ios/T7"), in the order they were
 	// added. Its status is derived from theirs (program.Derive). Only
 	// a program's board holds them (SetParts).
-	Parts    []string
-	Created  string
-	Updated  string
+	Parts   []string
+	Created string
+	Updated string
+	// DoneAt is when a done task finished: RFC 3339 in UTC, as tm's own
+	// status change writes it, or YYYY-MM-DD when only the day is known
+	// (FillDoneAt). "" on a task that isn't done, and on a done task
+	// nothing has dated yet, which sorts by Updated (DoneKey).
+	DoneAt   string
 	Archived bool
 }
 
@@ -275,6 +281,59 @@ func Less(a, b *Task) bool {
 	return a.ID < b.ID
 }
 
+// DoneKey is what orders a done task among the others: when it finished,
+// else the day it last changed. Dates sort as text, a day before the
+// times of that day.
+func (t *Task) DoneKey() string {
+	if t.DoneAt != "" {
+		return t.DoneAt
+	}
+	return t.Updated
+}
+
+// DoneLabel is what a done row says of DoneAt, in now's time zone: the
+// time alone today, the day and time before that, the year too for
+// another year's, and no time when only the day is known; "" when
+// nothing dates the task, or it doesn't read.
+func DoneLabel(at string, now time.Time) string {
+	t, err := time.Parse(time.RFC3339, at)
+	timed := err == nil
+	if timed {
+		t = t.In(now.Location())
+	} else if t, err = time.ParseInLocation("2006-01-02", at, now.Location()); err != nil {
+		return ""
+	}
+	day := "2 Jan"
+	if t.Year() != now.Year() {
+		day = "2 Jan 2006"
+	}
+	switch {
+	case !timed:
+		return t.Format(day)
+	case t.Year() == now.Year() && t.YearDay() == now.YearDay():
+		return t.Format("15:04")
+	}
+	return t.Format(day + " 15:04")
+}
+
+// NewestDoneFirst is ts in board order but for its done tasks, which
+// list newest first (DoneKey), then by highest id: the order of every
+// list of what finished. ts stays as it is.
+func NewestDoneFirst(ts []*Task) []*Task {
+	out := slices.Clone(ts)
+	sort.SliceStable(out, func(i, j int) bool {
+		a, b := out[i], out[j]
+		if a.Status != Done || b.Status != Done {
+			return Less(a, b)
+		}
+		if ka, kb := a.DoneKey(), b.DoneKey(); ka != kb {
+			return ka > kb
+		}
+		return a.ID > b.ID
+	})
+	return out
+}
+
 // SortByID orders tasks by id only, as the archive does.
 func (b *Board) SortByID() {
 	sort.SliceStable(b.Tasks, func(i, j int) bool { return b.Tasks[i].ID < b.Tasks[j].ID })
@@ -310,6 +369,9 @@ func checkNotes(s string) (string, error) {
 	}
 	if _, ok := readPartsLine(lines[0]); ok {
 		return "", refuse("invalid-notes", fmt.Sprintf("notes can't start with %q, which reads as an umbrella task's parts; set them with tm program task edit --parts", lines[0]))
+	}
+	if doneAtLine.MatchString(lines[0]) {
+		return "", refuse("invalid-notes", fmt.Sprintf("notes can't start with %q, which reads as when the task finished; tm sets that when the task becomes done", lines[0]))
 	}
 	if stepLine.MatchString(lines[len(lines)-1]) {
 		return "", refuse("invalid-notes", "notes end in a checklist, which would read as steps; add steps with `tm task steps add` or end the notes with text")

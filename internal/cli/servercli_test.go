@@ -5,8 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/service"
 )
@@ -75,6 +78,114 @@ func TestSessionKeysParams(t *testing.T) {
 	for _, args := range [][]string{nil, {"s-1"}, {"s-1", "-x"}} {
 		if _, err := keysParams(args); err == nil {
 			t.Errorf("%q: no error", args)
+		}
+	}
+}
+
+// serverHumanCommands are the server commands only the human runs. None
+// of them reaches a server here: each test has a scratch home of its own,
+// with no server in it.
+var serverHumanCommands = [][]string{
+	{"server", "stop"},
+	{"server", "stop", "--yes"},
+	{"server", "stop", "--force"},
+	{"server", "restart"},
+	{"server", "restart", "--yes"},
+	{"server", "restart", "--no-launchd"},
+	{"server", "service", "install"},
+	{"server", "service", "uninstall"},
+	{"server", "service", "install", "--print"},
+}
+
+// TestServerCommandsHumanOnly: every agent's stop, restart and service
+// are refused as the human's, with where the user runs them for those in
+// a pane, and nothing is run; the agent's other server commands stay.
+func TestServerCommandsHumanOnly(t *testing.T) {
+	h := newHarness(t)
+	serviceRun = func(name string, args ...string) error {
+		t.Errorf("ran %s %v", name, args)
+		return nil
+	}
+	t.Cleanup(func() { serviceRun = nil })
+	director := caller.Caller{Kind: caller.Director, Project: "prog"}
+	for _, c := range []caller.Caller{coord, thr, director, caller.ForMod("m"), caller.ForPeer("mini")} {
+		for _, args := range serverHumanCommands {
+			code, out, errs := h.run(c, "", args...)
+			if code != ExitRefused || out != "" || !strings.Contains(errs, "human-only") || !strings.Contains(errs, "the user's, in their own terminal") {
+				t.Errorf("%s %v: exit %d, stdout %q, stderr %q", c.Kind, args, code, out, errs)
+			}
+			if c.Kind != caller.Mod && c.Kind != caller.Peer && !strings.Contains(errs, "in the "+string(c.Kind)+"'s session") {
+				t.Errorf("%s %v: no pane hint: %q", c.Kind, args, errs)
+			}
+		}
+		// Its status, help and usage errors are as before.
+		if code, _, errs := h.run(c, "", "server", "status"); code != ExitRefused || strings.Contains(errs, "human-only") {
+			t.Errorf("%s status: exit %d, stderr %q", c.Kind, code, errs)
+		}
+		h.expect(ExitUsage, "unknown flag", c, "server", "stop", "--nope")
+		if code, out, _ := h.run(c, "", "server", "stop", "--help"); code != ExitOK || !strings.Contains(out, "usage: tm server") {
+			t.Errorf("%s stop --help: exit %d, stdout %q", c.Kind, code, out)
+		}
+	}
+}
+
+// TestServerCommandsHuman: the human's stop and service run as before
+// (restart, which goes on to start a server, is TestRestartServer's).
+func TestServerCommandsHuman(t *testing.T) {
+	h := newHarness(t)
+	ran := 0
+	serviceRun = func(string, ...string) error { ran++; return nil }
+	t.Cleanup(func() { serviceRun = nil })
+	for _, args := range [][]string{{"server", "stop"}, {"server", "stop", "--yes"}, {"server", "stop", "--force"}} {
+		if out := h.ok(human, args...); out != "not running\n" {
+			t.Errorf("%v: %q", args, out)
+		}
+	}
+	if out := h.ok(human, "server", "service", "install", "--print"); !strings.Contains(out, "server") {
+		t.Errorf("--print: %q", out)
+	}
+	if ran != 0 {
+		t.Errorf("--print ran the service manager %d times", ran)
+	}
+	if out := h.ok(human, "server", "service", "uninstall"); !strings.Contains(out, "removed") {
+		t.Errorf("uninstall: %q", out)
+	}
+}
+
+// TestServerHumanAsksTheServer: an agent whose session's variables are
+// gone is still refused when the server knows it; with no answer, in time
+// or at all, the environment decides, so the user can stop a hung server.
+func TestServerHumanAsksTheServer(t *testing.T) {
+	newHarness(t)
+	run := func(identify func() (caller.Caller, bool), args ...string) (int, string, string) {
+		var out, errb bytes.Buffer
+		e := &Env{Stdin: strings.NewReader(""), Stdout: &out, Stderr: &errb, Getenv: func(string) string { return "" },
+			Cwd: t.TempDir(), Caller: human, Identify: identify}
+		code, ok := e.Run(args)
+		if !ok {
+			t.Fatalf("not handled: %v", args)
+		}
+		return code, out.String(), errb.String()
+	}
+	run(nil, "server", "stop") // makes the run folder --force looks in
+	for _, c := range []caller.Caller{thr, coord} {
+		code, out, errs := run(func() (caller.Caller, bool) { return c, true }, "server", "stop", "--force")
+		if code != ExitRefused || out != "" || !strings.Contains(errs, "human-only") {
+			t.Errorf("%s: exit %d, stdout %q, stderr %q", c.Kind, code, out, errs)
+		}
+	}
+	old := identifyWait
+	identifyWait = 10 * time.Millisecond
+	t.Cleanup(func() { identifyWait = old })
+	hung := make(chan struct{})
+	t.Cleanup(func() { close(hung) })
+	for name, identify := range map[string]func() (caller.Caller, bool){
+		"human":   func() (caller.Caller, bool) { return human, true },
+		"no one":  func() (caller.Caller, bool) { return caller.Caller{}, false },
+		"silence": func() (caller.Caller, bool) { <-hung; return thr, true },
+	} {
+		if code, out, errs := run(identify, "server", "stop", "--force"); code != ExitOK || out != "not running\n" {
+			t.Errorf("%s: exit %d, stdout %q, stderr %q", name, code, out, errs)
 		}
 	}
 }

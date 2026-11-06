@@ -113,6 +113,8 @@ type fakeSource struct {
 	lifecycle    []string // "slug verb"
 	library      []thread.LibFile
 	libFiles     map[string]string // "t-0001/name" -> content
+	thumbs       map[string][]byte // "t-0001/name" -> its thumbnail
+	thumbAsked   []string          // the thumbnails asked for
 	libRemoved   []string          // "t-0001/name", "t-0001/" for all
 	notesRemoved []string          // "demo/memory/a.md"
 	done         []string          // action.done: "mod action project/task ok"
@@ -345,6 +347,13 @@ func (f *fakeSource) Library(string) ([]thread.LibFile, error)      { return f.l
 func (f *fakeSource) Designs(string) ([]project.DesignBuild, error) { return f.designs, nil }
 func (f *fakeSource) LibraryRead(_, id, name string, max int64) ([]byte, bool, error) {
 	return []byte(f.libFiles[id+"/"+name]), false, nil
+}
+func (f *fakeSource) LibraryThumbnail(_, id, name string) ([]byte, error) {
+	f.thumbAsked = append(f.thumbAsked, id+"/"+name)
+	if data, ok := f.thumbs[id+"/"+name]; ok {
+		return data, nil
+	}
+	return nil, &proto.Error{Code: proto.ErrNoThumbnail, Message: name + " has no thumbnail"}
 }
 func (f *fakeSource) LinkFileRead(_, _, id, name string, max int64) ([]byte, bool, error) {
 	data, ok := f.libFiles[id+"/"+name]

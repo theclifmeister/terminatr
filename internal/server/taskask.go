@@ -109,8 +109,8 @@ func (s *Server) taskGet(p proto.TaskGetParams) (any, *proto.Error) {
 	return out, nil
 }
 
-// TaskDone is task.done's result: the board's done tasks, in board
-// order, without their notes and steps.
+// TaskDone is task.done's result: the board's done tasks, newest first
+// (tasks.NewestDoneFirst), without their notes and steps.
 type TaskDone struct {
 	Tasks []SideTask `json:"tasks"`
 }
@@ -126,7 +126,7 @@ func (s *Server) taskDone(p proto.TaskDoneParams) (any, *proto.Error) {
 		return nil, taskError(err)
 	}
 	out := TaskDone{Tasks: []SideTask{}}
-	for _, t := range b.Tasks {
+	for _, t := range tasks.NewestDoneFirst(b.Tasks) {
 		if t.Status == tasks.Done {
 			st := sideTask(t)
 			st.Notes, st.Steps = "", nil

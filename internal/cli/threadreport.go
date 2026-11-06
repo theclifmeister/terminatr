@@ -17,8 +17,19 @@ import (
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
+// openThreadProject is openProject for tm report, status and done. They
+// are a thread's: a director has none, here or in any member, so it is
+// refused before the project is looked up, whichever one it names.
+func (e *Env) openThreadProject(flag string) (*project.Project, error) {
+	if e.Caller.DirectorOf() != "" {
+		return nil, &tasks.Error{Code: "thread-only", Msg: "threads report; a director has no thread to report for"}
+	}
+	return e.openProject(flag)
+}
+
 // ownThread is the thread a report, status or done call is about: the
-// caller's own, or --thread for the human (by hand, or in tests).
+// caller's own, or --thread for the human (by hand, or in tests). A
+// director never gets here (openThreadProject).
 func (e *Env) ownThread(p *project.Project, flag string) (*thread.Record, error) {
 	switch e.Caller.Kind {
 	case caller.Thread:
@@ -64,7 +75,7 @@ func runReport(e *Env, args []string) error {
 	if len(pos) != 0 || (*show && f.anySet("file", "attach")) {
 		return usagef("%s", reportUsage)
 	}
-	p, err := e.openProject(*slug)
+	p, err := e.openThreadProject(*slug)
 	if err != nil {
 		return err
 	}
@@ -188,7 +199,7 @@ func runStatus(e *Env, args []string) error {
 			return usagef("--percent takes 0-100")
 		}
 	}
-	p, err := e.openProject(*slug)
+	p, err := e.openThreadProject(*slug)
 	if err != nil {
 		return err
 	}
@@ -243,7 +254,7 @@ func runDone(e *Env, args []string) error {
 	if len(pos) > 1 {
 		return usagef("usage: tm done [\"summary\"]")
 	}
-	p, err := e.openProject(*slug)
+	p, err := e.openThreadProject(*slug)
 	if err != nil {
 		return err
 	}

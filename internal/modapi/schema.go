@@ -157,6 +157,14 @@ type Task struct {
 	// Mod API 1.13: its priority, must, should or could; none while it
 	// has none. The list is in board order: by group, then priority.
 	Priority string `json:"priority,omitempty"`
+	// Mod API 1.14: when a done task finished: a UTC time
+	// (2026-11-06T09:10:44Z), or a day (2026-11-06) when only that is
+	// known; none when nothing dates it. DoneLabel is what a row says of
+	// it in the server's time zone, which a mod's host may not know:
+	// "10:10" today, "5 Nov 10:10" before, "5 Oct" when only the day is
+	// known.
+	DoneAt    string `json:"done_at,omitempty"`
+	DoneLabel string `json:"done_label,omitempty"`
 }
 
 // TaskStep is one step of a task (mod API 1.2).

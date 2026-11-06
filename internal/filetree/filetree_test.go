@@ -374,7 +374,7 @@ func TestCacheStampPaced(t *testing.T) {
 	if got := c.Stamp(ctx, s, nil); got != first {
 		t.Error("a slow repo's status was asked again at once")
 	}
-	if got := c.Stamp(ctx, s, []string{""}); got == s.stamp(seen.fp, nil) {
+	if got := c.Stamp(ctx, s, []string{""}); got == s.stamp(seen.fp, nil, nil) {
 		t.Error("the folders didn't count")
 	}
 	seen.at = time.Now().Add(-maxStampRest - time.Second)

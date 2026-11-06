@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/doctor"
@@ -35,6 +36,9 @@ func TestCheckPrinterLayout(t *testing.T) {
 // before any check runs, and so before any fix could; the human's own run is
 // judged by doctorFixAllowed alone, so that no test ever applies a real fix.
 func TestDoctorFixByRole(t *testing.T) {
+	old := identifyWait
+	identifyWait = 10 * time.Millisecond
+	t.Cleanup(func() { identifyWait = old })
 	human := caller.Caller{Kind: caller.Human}
 	thread := caller.Caller{Kind: caller.Thread, Project: "demo", Thread: "t-0001"}
 	for _, who := range []caller.Caller{
@@ -60,6 +64,7 @@ func TestDoctorFixByRole(t *testing.T) {
 		{"human, the server agrees", human, func() (caller.Caller, bool) { return human, true }, true},
 		{"human, no server answers", human, func() (caller.Caller, bool) { return caller.Caller{}, false }, true},
 		{"variables unset, the server sees a thread", human, func() (caller.Caller, bool) { return thread, true }, false},
+		{"human, the server hangs", human, func() (caller.Caller, bool) { select {} }, true},
 	} {
 		e := &Env{Getenv: func(string) string { return "" }, Caller: c.env, Identify: c.identify}
 		if err := e.doctorFixAllowed(); (err == nil) != c.allowed {

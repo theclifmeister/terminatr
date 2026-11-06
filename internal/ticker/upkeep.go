@@ -21,6 +21,13 @@ import (
 // with work left in its worktree or branch stays as it is.
 func (t *Ticker) upkeep(p *project.Project, safety config.Safety, now time.Time) {
 	days := func(n int) time.Duration { return time.Duration(n) * t.o.Day }
+	// Old tasks once; after that only what an older tm or a hand edit
+	// marked done.
+	if n, err := p.FillDoneAt(); err != nil {
+		t.o.Log.Printf("ticker: %s: date done tasks: %v", p.Slug, err)
+	} else if n > 0 {
+		t.o.Log.Printf("ticker: %s: dated %d done tasks", p.Slug, n)
+	}
 	// Journaled as the ticker's task.archive.
 	if ids, err := p.ArchiveOldDone(caller.Caller{Kind: caller.Ticker}, now, days(safety.ArchiveTasksDays)); err != nil {
 		t.o.Log.Printf("ticker: %s: archive done tasks: %v", p.Slug, err)

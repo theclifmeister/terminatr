@@ -568,7 +568,7 @@ func modTasks(board *tasks.Board, items []project.Item) []ModTask {
 		out = append(out, ModTask{ID: t.Ref(), Title: t.Title, Status: string(t.Status),
 			StepsDone: t.StepsDone(), StepsTotal: len(t.Steps), Thread: t.Thread,
 			Steps: steps, Updated: t.Updated, Asked: project.TaskAsked(items, t.Ref()),
-			Design: t.Design, After: taskRefs(t.After), Priority: string(t.Priority)})
+			Design: t.Design, After: taskRefs(t.After), Priority: string(t.Priority), DoneAt: t.DoneAt, DoneLabel: tasks.DoneLabel(t.DoneAt, time.Now())})
 	}
 	return out
 }

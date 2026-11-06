@@ -176,6 +176,8 @@ tm server restart         # stop, start, resume the agents
 tm server stop --force    # a hung server: SIGKILL the pid that holds the lock
 ```
 
+Stopping, restarting and `tm server service` are yours: run them in a terminal of your own, since tm refuses them to its agents, even typed with `!` in an agent's pane.
+
 ### Over SSH (macOS)
 
 On macOS a server started from an SSH login would run in that login's security session, and so would every session under it: the keychain refuses them, so the PR CLI (`gh`, or `az` if its token cache is in the keychain) says its token is invalid and git's credential helper fails ("Interaction with the Security Server is not allowed"). So every start (`tm server start` or `restart`, `tm update`'s restart, a command that auto-starts it, the TUI) goes through launchd: tm hands the server to your desktop session (`launchctl kickstart gui/<uid>/dev.terminatr.server`), wherever you typed the command. Starting over SSH is then the same as starting at the Mac, with the same environment: the server gets your shell's (`PATH`, `LANG`, tokens), less the SSH login's own variables.

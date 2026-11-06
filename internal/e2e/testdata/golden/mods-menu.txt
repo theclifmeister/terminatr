@@ -3,36 +3,36 @@
  └─ coordi…             ·          │  coordinator                      —           not running; enter starts it  3 inbox
     ├─ T1    50% ☐ 2%   ○          │  T1 Fix the login              ○ idle      2%     report new  50% 1/2 ▸ Fix it  <duration>…
     └─ T2        ☐ 4%   ○          │        steps 1/2
-                                   │          ✓ 1 Reproduce the bug
-                                   │          ○ 2 Fix it
-                                   │ ╭─ terminatr dev ─────────────────────────────╮
-                                   │ │ back to the last place                    ; │   <duration>  t-0002
-                                   │ │ open the selected row                 enter │
-                                   │ │ adopt as a thread                         O │────────────────────────────────────
-                                   │ │ activate / deactivate the project         S │
-                                   │ │ fold / unfold the mod card                Z │───────────────────────────────────
-                                   │ │ new project                               + │
-                                   │ │ project popup                             A │t's state is in its files, so
-                                   │ │ tasks                                     T │
-                                   │ │ inbox                                     I │───────────────────────────────────
-                                   │ │ effective access                          E │
-                                   │ │ next project                              ] │
-                                   │ │ previous project                          [ │
-                                   │ │ smaller list                              < │
-                                   │ │ larger list                               > │
-                                   │ │ narrower sidebar                          { │
-                                   │ │ wider sidebar                             } │
-                                   │ │ sidebar: slim / hide / full               B │
-                                   │ │ details panel on / off                    | │
-                                   │ │ settings                                  , │
-                                   │ │ network                                   N │
-                                   │ │ notifications from mods                   M │
-                                   │ │ help: keys and mouse                      ? │
-                                   │ │ quit                               prefix+q │
-                                   │ │ Standup · standup                         U │
-                                   │ │                                             │
-                                   │ │ enter pick · esc close                      │
- ───────────────────────────────── │ ╰─────────────────────────────────────────────╯
+                                   │ ╭─ terminatr dev ────────────────────────────────╮
+                                   │ │ back to the last place                       ; │
+                                   │ │ open the selected row                    enter │
+                                   │ │ accept the director's recommendation         K │<duration>  t-0002
+                                   │ │ adopt as a thread                            O │
+                                   │ │ activate / deactivate the project            S │─────────────────────────────────
+                                   │ │ fold / unfold the mod card                   Z │
+                                   │ │ new project                                  + │────────────────────────────────
+                                   │ │ project popup                                A │
+                                   │ │ tasks                                        T │ state is in its files, so
+                                   │ │ search                                       F │
+                                   │ │ inbox                                        I │────────────────────────────────
+                                   │ │ effective access                             E │
+                                   │ │ next project                                 ] │
+                                   │ │ previous project                             [ │
+                                   │ │ smaller list                                 < │
+                                   │ │ larger list                                  > │
+                                   │ │ narrower sidebar                             { │
+                                   │ │ wider sidebar                                } │
+                                   │ │ sidebar: slim / hide / full                  B │
+                                   │ │ details panel on / off                       | │
+                                   │ │ settings                                     , │
+                                   │ │ network                                      N │
+                                   │ │ notifications from mods                      M │
+                                   │ │ help: keys and mouse                         ? │
+                                   │ │ quit                                  prefix+q │
+                                   │ │ Standup · standup                            U │
+                                   │ │                                                │
+                                   │ │ enter pick · esc close                         │
+ ───────────────────────────────── │ ╰────────────────────────────────────────────────╯
  demo · active                     │────────────────────────────────────────────────────────────────────────────────────
  2 threads · coordinator not runn… │
  tab sidebar · ? help              │

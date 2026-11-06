@@ -76,7 +76,8 @@ public enum PeerPages {
     /// The board's backlog (open tasks), in board order.
     public static func backlog(_ p: AppAPI.PeerPages) -> [AppAPI.Task] { p.tasks.filter { $0.status == "open" } }
 
-    /// The board's done tasks, in board order.
+    /// The board's done tasks, in the order they cross: newest first, or
+    /// board order from an older tm.
     public static func done(_ p: AppAPI.PeerPages) -> [AppAPI.Task] { p.tasks.filter { $0.status == "done" } }
 
     /// The board's tasks in motion, in board order.

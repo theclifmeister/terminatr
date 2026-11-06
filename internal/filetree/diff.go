@@ -46,6 +46,9 @@ func (s *Scope) Diff(ctx context.Context, rel string, ignored bool, cs *changes.
 		return res, fmt.Errorf("%w: the top is a folder", ErrNotFile)
 	}
 	res.Name, res.Path = path.Base(rel), rel
+	if err := s.farName(rel); err != nil {
+		return proto.FilesDiffResult{}, err
+	}
 	real, err := s.resolve(rel)
 	missing := errors.Is(err, ErrGone)
 	switch {
@@ -67,6 +70,12 @@ func (s *Scope) Diff(ctx context.Context, rel string, ignored bool, cs *changes.
 			return res, fmt.Errorf("%w: %s", ErrGone, rel)
 		}
 		return res, nil // no changes
+	}
+	if s.far && f != nil && f.Old != "" {
+		// What it was renamed from answers too: its old lines would cross.
+		if err := s.gate(ctx, f.Old, false); err != nil {
+			return proto.FilesDiffResult{}, err
+		}
 	}
 	res.Base = cs.Base
 	if f != nil {
@@ -168,15 +177,19 @@ func (s *Scope) diffHunks(ctx context.Context, from, real string, res *proto.Fil
 	if err != nil {
 		return fmt.Errorf("%w: git can't say: %v", ErrNoRoot, err)
 	}
-	res.Hunks, res.Binary, res.Truncated = parseHunks(out, over)
+	most := maxDiffWire
+	if s.far {
+		most = proto.PeerWorktreeMaxHunks
+	}
+	res.Hunks, res.Binary, res.Truncated = parseHunks(out, over, most)
 	return nil
 }
 
 // parseHunks reads a -U0 patch of one file: its hunks, whether git calls it
 // binary, and whether they stop short of all it changed: over says git's
-// answer was cut, and what's over maxDiffWire goes too. Lines added are the
+// answer was cut, and what's over most bytes on the wire goes too. Lines added are the
 // file's own and aren't kept, only counted.
-func parseHunks(patch string, over bool) (hunks []proto.FilesHunk, binary, cut bool) {
+func parseHunks(patch string, over bool, most int) (hunks []proto.FilesHunk, binary, cut bool) {
 	lines := strings.Split(patch, "\n")
 	wire := 0
 	for i := 0; i < len(lines); i++ {
@@ -209,7 +222,7 @@ func parseHunks(patch string, over bool) (hunks []proto.FilesHunk, binary, cut b
 			case text[0] == '-':
 				removed := cleanRemoved(text[1:])
 				enc, _ := json.Marshal(removed)
-				if wire += len(enc) + 1; wire > maxDiffWire {
+				if wire += len(enc) + 1; wire > most {
 					return append(hunks, h), false, true
 				}
 				h.Removed = append(h.Removed, removed)
@@ -217,7 +230,7 @@ func parseHunks(patch string, over bool) (hunks []proto.FilesHunk, binary, cut b
 			left--
 		}
 		hunks = append(hunks, h)
-		if wire > maxDiffWire {
+		if wire > most {
 			return hunks, false, true
 		}
 	}

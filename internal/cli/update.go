@@ -235,7 +235,7 @@ func updateCmd(e *Env, args []string, u *updater) error {
 // (the user has it update the Mac after a release), restarting the server
 // the human's alone. --check stays open to every caller.
 func (e *Env) updateAllowed(restart bool) error {
-	e.identify()
+	e.identifyBriefly()
 	switch {
 	case !e.Caller.IsAgent():
 		return nil

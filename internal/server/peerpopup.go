@@ -38,7 +38,7 @@ func (e peerExport) Popup(c caller.Caller, slug string) (proto.PeerPopup, error)
 	out := proto.PeerPopup{Project: slug, Goal: p.Meta.Goal, Repos: len(p.Repos),
 		Tasks: []proto.PeerTask{}, Links: []proto.PeerPopupLink{}}
 	if b, err := p.Tasks().Load(); err == nil {
-		for _, t := range b.Tasks {
+		for _, t := range tasks.NewestDoneFirst(b.Tasks) {
 			if !t.Archived && len(out.Tasks) < proto.PeerPopupMaxTasks {
 				out.Tasks = append(out.Tasks, peerTaskOf(t))
 			}
@@ -56,7 +56,7 @@ func (e peerExport) Popup(c caller.Caller, slug string) (proto.PeerPopup, error)
 // and steps' words stay home.
 func peerTaskOf(t *tasks.Task) proto.PeerTask {
 	return proto.PeerTask{ID: t.ID, Title: t.Title, Status: string(t.Status), Thread: t.Thread,
-		StepsDone: t.StepsDone(), StepsTotal: len(t.Steps), Created: t.Created, Updated: t.Updated}
+		StepsDone: t.StepsDone(), StepsTotal: len(t.Steps), Created: t.Created, Updated: t.Updated, DoneAt: t.DoneAt}
 }
 
 // peerSettingsOf is s as a paired server may see it (proto.PeerSettings).

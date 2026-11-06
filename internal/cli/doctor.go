@@ -141,7 +141,7 @@ func doctorCmd(e *Env, args []string) error {
 // doctorFixAllowed: --fix removes worktrees and branches and restarts the
 // server, so it is the human's. The checks stay open to every caller.
 func (e *Env) doctorFixAllowed() error {
-	e.identify()
+	e.identifyBriefly()
 	if e.Caller.IsAgent() {
 		return &project.Error{Code: "human-only", Msg: "tm doctor --fix is the user's, in their own terminal: tell them what tm doctor found"}
 	}

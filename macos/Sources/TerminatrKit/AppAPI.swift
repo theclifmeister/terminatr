@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 53
+    public static let version = 54
 
     public struct AdoptRequestParams: Codable, Sendable, Hashable {
         public var id: String
@@ -1224,6 +1224,7 @@ public enum AppAPI {
         public var thread: String
         public var task: String
         public var title: String
+        public var repo: String
         public var state: String
         public var name: String
         public var size: Int
@@ -1231,10 +1232,11 @@ public enum AppAPI {
         public var peer: String
         public var message: String
 
-        public init(thread: String = "", task: String = "", title: String, state: String, name: String, size: Int, time: Date, peer: String = "", message: String = "") {
+        public init(thread: String = "", task: String = "", title: String, repo: String = "", state: String, name: String, size: Int, time: Date, peer: String = "", message: String = "") {
             self.thread = thread
             self.task = task
             self.title = title
+            self.repo = repo
             self.state = state
             self.name = name
             self.size = size
@@ -1247,6 +1249,7 @@ public enum AppAPI {
             case thread
             case task
             case title
+            case repo
             case state
             case name
             case size
@@ -4124,9 +4127,10 @@ public enum AppAPI {
         public var owner: String
         public var created: String
         public var updated: String
+        public var doneAt: String
         public var after: [TaskDep]
 
-        public init(id: Int, ref: String, title: String, status: String, priority: String = "", notes: String = "", steps: [Step] = [], thread: String = "", owner: String = "", created: String = "", updated: String = "", after: [TaskDep] = []) {
+        public init(id: Int, ref: String, title: String, status: String, priority: String = "", notes: String = "", steps: [Step] = [], thread: String = "", owner: String = "", created: String = "", updated: String = "", doneAt: String = "", after: [TaskDep] = []) {
             self.id = id
             self.ref = ref
             self.title = title
@@ -4138,6 +4142,7 @@ public enum AppAPI {
             self.owner = owner
             self.created = created
             self.updated = updated
+            self.doneAt = doneAt
             self.after = after
         }
 
@@ -4153,6 +4158,7 @@ public enum AppAPI {
             case owner
             case created
             case updated
+            case doneAt = "done_at"
             case after
         }
     }
@@ -5609,6 +5615,7 @@ extension AppAPI.LibraryFile {
         self.thread = try c.decodeIfPresent(String.self, forKey: .thread) ?? ""
         self.task = try c.decodeIfPresent(String.self, forKey: .task) ?? ""
         self.title = try c.decode(String.self, forKey: .title)
+        self.repo = try c.decodeIfPresent(String.self, forKey: .repo) ?? ""
         self.state = try c.decode(String.self, forKey: .state)
         self.name = try c.decode(String.self, forKey: .name)
         self.size = try c.decode(Int.self, forKey: .size)
@@ -6938,6 +6945,7 @@ extension AppAPI.Task {
         self.owner = try c.decodeIfPresent(String.self, forKey: .owner) ?? ""
         self.created = try c.decodeIfPresent(String.self, forKey: .created) ?? ""
         self.updated = try c.decodeIfPresent(String.self, forKey: .updated) ?? ""
+        self.doneAt = try c.decodeIfPresent(String.self, forKey: .doneAt) ?? ""
         self.after = try c.decodeIfPresent([AppAPI.TaskDep].self, forKey: .after) ?? []
     }
 }

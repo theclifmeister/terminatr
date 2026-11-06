@@ -118,7 +118,8 @@ public enum Designs {
         return all ? "Hide done and archived" : "Show \(hidden) done or archived"
     }
 
-    /// The Overview's one line of designs under way: "2 designs: 1
+    /// The one line of designs under way, on the Mac's Overview and the
+    /// phone's project screen: "2 designs: 1
     /// building, 1 waiting for you", "2 designs building", "1 design
     /// waiting for you"; nil with neither. One with open questions is
     /// waiting, whatever its status, so the counts add up.

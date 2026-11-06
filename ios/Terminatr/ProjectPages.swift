@@ -125,7 +125,8 @@ struct MemoryFileScreen: View {
 
 /// A project's library: the files threads attached to their reports
 /// and those linked projects sent, grouped by thread, newest first
-/// (LibraryPage). A tap opens a file in Quick Look, whose share button
+/// (LibraryPage), with a filter from 7 files and chips for its kinds
+/// (T1054). A tap opens a file in Quick Look, whose share button
 /// sends it on; Share… in its menu goes straight to the share sheet.
 struct LibraryScreen: View {
     @Environment(PhoneModel.self) private var model
@@ -139,17 +140,33 @@ struct LibraryScreen: View {
     @State private var looking: URL?
     @State private var sharing: SharedFile?
     @State private var reading: AppAPI.LibraryFile?
+    @State private var query = ""
+    @State private var kind: LibraryPage.Kind?
 
     var body: some View {
         PanelPage {
             if let failure { Failure(text: failure) }
             if let files {
+                let shown = LibraryPage.shown(files, query: query, kind: kind)
+                let chips = LibraryPage.chips(files, query: query, kind: kind)
+                if !chips.isEmpty {
+                    LibraryChips(chips, kind: Binding { LibraryPage.picked(files, kind) } set: { kind = $0 })
+                }
                 if files.isEmpty {
                     Text("No files: a thread's report attaches them (tm report --attach).")
                         .font(theme.sized(Flat.text))
                         .foregroundStyle(theme.muted)
+                } else if shown.isEmpty {
+                    Text("Nothing matches.")
+                        .font(theme.sized(Flat.text))
+                        .foregroundStyle(theme.muted)
+                    Button("Show all files") {
+                        query = ""
+                        kind = nil
+                    }
+                    .font(theme.sized(Flat.text))
                 }
-                ForEach(LibraryPage.groups(files)) { g in
+                ForEach(LibraryPage.groups(shown)) { g in
                     VStack(alignment: .leading, spacing: 1) {
                         Text(g.title).font(theme.sized(12)).lines(1)
                         Text(g.detail).font(theme.monoSized(11))
@@ -168,6 +185,12 @@ struct LibraryScreen: View {
         .refreshable { await list() }
         .quickLookPreview($looking)
         .sheet(item: $sharing) { ShareSheet(url: $0.url).presentationDetents([.medium, .large]) }
+        // In the screen, under its title (T928, FilterField).
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if let files, LibraryPage.showsFilter(files, query: query) {
+                FilterField(prompt: LibraryPage.filterPrompt(files), text: $query)
+            }
+        }
         .pageBar("Library")
         .backdrop()
     }

@@ -61,6 +61,7 @@ extension Route {
         case .task(let s, let ref): "task \(s)/\(ref)"
         case .mods(let s): "mods \(s)"
         case .mod(let s, let id): "mod \(s)/\(id)"
+        case .designs(let s): "designs \(s)"
         case .design(let s, let name): "design \(s)/\(name)"
         case .search(let s): "search \(s)"
         case .searchHit(let s, let id): "searchHit \(s)/\(id)"

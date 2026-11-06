@@ -430,6 +430,10 @@ type Task struct {
 	Owner    string `json:"owner,omitempty"`
 	Created  string `json:"created,omitempty"`
 	Updated  string `json:"updated,omitempty"`
+	// DoneAt (app API 54) is when a done task finished: a UTC time
+	// (2026-11-06T09:10:44Z), or a day (2026-11-06) when only that is
+	// known; absent when nothing dates it, and from an older tm.
+	DoneAt string `json:"done_at,omitempty"`
 	// After (app API 44; task.get only) are the tasks it comes after,
 	// this board's and other projects', with another program member's
 	// dependency state while programs are on.
@@ -947,7 +951,7 @@ func projectOf(p server.SideProject) Project {
 
 func taskOf(t server.SideTask) Task {
 	out := Task{ID: t.ID, Ref: (&tasks.Task{ID: t.ID}).Ref(), Title: t.Title, Status: string(t.Status), Priority: string(t.Priority), Notes: t.Notes,
-		Thread: t.Thread, Owner: t.Owner, Created: t.Created, Updated: t.Updated}
+		Thread: t.Thread, Owner: t.Owner, Created: t.Created, Updated: t.Updated, DoneAt: t.DoneAt}
 	for _, s := range t.Steps {
 		out.Steps = append(out.Steps, Step{N: s.N, Text: s.Text, Done: s.Done})
 	}
@@ -1194,8 +1198,8 @@ func taskAddedOf(r proto.TaskAddResult) TaskAdded {
 	return TaskAdded{Task: r.Task, Existing: r.Existing}
 }
 
-// DoneTasks is task.done's result: the board's done tasks, in board
-// order, without their notes and steps.
+// DoneTasks is task.done's result: the board's done tasks, newest first
+// since app API 54 (board order before), without their notes and steps.
 type DoneTasks struct {
 	Tasks []Task `json:"tasks"`
 }
@@ -1648,12 +1652,15 @@ type Library struct {
 
 // LibraryFile is a file a thread's report attached (Thread, with its
 // Task, Title and State: running, stopped, resolved or archived), or
-// one linked project Peer sent with Message (State received). library.read
-// names it by Thread, else Message, and Name.
+// one linked project Peer sent with Message (State received). Repo is the
+// folder name of the thread's repository in a project with several (app
+// API 53; the Library's filter finds by it). library.read names it by
+// Thread, else Message, and Name.
 type LibraryFile struct {
 	Thread  string    `json:"thread,omitempty"`
 	Task    string    `json:"task,omitempty"`
 	Title   string    `json:"title"`
+	Repo    string    `json:"repo,omitempty"`
 	State   string    `json:"state"`
 	Name    string    `json:"name"`
 	Size    int64     `json:"size"`
@@ -1688,7 +1695,7 @@ func memoryTextOf(r proto.MemoryReadResult) MemoryText {
 func libraryOf(r proto.LibraryListResult) Library {
 	out := Library{Files: []LibraryFile{}}
 	for _, f := range r.Files {
-		out.Files = append(out.Files, LibraryFile{Thread: f.Thread, Task: f.Task, Title: f.Title, State: f.State,
+		out.Files = append(out.Files, LibraryFile{Thread: f.Thread, Task: f.Task, Title: f.Title, Repo: f.Repo, State: f.State,
 			Name: f.Name, Size: f.Size, Time: f.Time, Peer: f.Peer, Message: f.Message})
 	}
 	return out

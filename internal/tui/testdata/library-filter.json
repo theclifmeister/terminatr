@@ -1,0 +1,70 @@
+{
+  "kinds": {
+    "shot.png": "images", "SHOT.PNG": "images", "a.jpeg": "images", "a.svg": "images", "a.gif": "images",
+    "page.html": "pages", "page.htm": "pages", "spec.pdf": "pages",
+    "notes.md": "notes", "log.txt": "notes",
+    "data.json": "data", "data.csv": "data", "out.log": "data",
+    "src.tar.gz": "archives", "b.zip": "archives",
+    "clip.mp4": "video", "clip.mov": "video",
+    "main.go": "code", "App.swift": "code", "x.patch": "code",
+    "README": "other", "file.": "other", ".png": "other", "a.xyz": "other"
+  },
+  "libraries": {
+    "plain": [
+      {"thread": "t-0001", "task": "T1", "title": "Fix the build", "name": "shot-dark.png"},
+      {"thread": "t-0001", "task": "T1", "title": "Fix the build", "name": "shot-light.png"},
+      {"thread": "t-0002", "title": "No task here", "name": "notes.md"},
+      {"thread": "t-0003", "task": "T30", "title": "Ship the page", "name": "page.html"}
+    ],
+    "repos": [
+      {"thread": "t-0001", "task": "T1", "title": "Backend", "repo": "api", "name": "trace.json"},
+      {"thread": "t-0002", "task": "T2", "title": "Frontend", "repo": "site", "name": "home.png"},
+      {"thread": "t-0003", "task": "T3", "title": "Frontend too", "repo": "site", "name": "menu.png"}
+    ],
+    "linked": [
+      {"thread": "t-0001", "task": "T1", "title": "Mine", "name": "mine.md"},
+      {"title": "from studio/acme", "peer": "studio/acme", "message": "M-1", "name": "brief.pdf"}
+    ],
+    "none": [],
+    "one": [{"thread": "t-0001", "task": "T1", "title": "Only", "name": "one.png"}],
+    "notes": [
+      {"thread": "t-0001", "task": "T1", "title": "Plan", "name": "plan.md"},
+      {"thread": "t-0002", "task": "T2", "title": "Review", "name": "review.md"},
+      {"thread": "t-0002", "task": "T2", "title": "Review", "name": "more.txt"}
+    ]
+  },
+  "cases": [
+    {"library": "plain", "query": "", "kind": "", "names": ["shot-dark.png", "shot-light.png", "notes.md", "page.html"],
+     "chips": [["", 4], ["images", 2], ["pages", 1], ["notes", 1]]},
+    {"library": "plain", "query": "", "kind": "images", "names": ["shot-dark.png", "shot-light.png"],
+     "chips": [["", 4], ["images", 2], ["pages", 1], ["notes", 1]]},
+    {"library": "plain", "query": "DARK", "kind": "", "names": ["shot-dark.png"], "chips": []},
+    {"library": "plain", "query": "t30", "kind": "", "names": ["page.html"], "chips": []},
+    {"library": "plain", "query": "t-0002", "kind": "", "names": ["notes.md"], "chips": []},
+    {"library": "plain", "query": "build light", "kind": "", "names": ["shot-light.png"], "chips": []},
+    {"library": "plain", "query": "ship", "kind": "images", "names": [],
+     "chips": [["", 1], ["images", 0], ["pages", 1]]},
+    {"library": "plain", "query": "nothing like it", "kind": "", "names": [], "chips": []},
+    {"library": "repos", "query": "site", "kind": "", "names": ["home.png", "menu.png"], "chips": []},
+    {"library": "repos", "query": "api", "kind": "", "names": ["trace.json"], "chips": []},
+    {"library": "repos", "query": "", "kind": "data", "names": ["trace.json"],
+     "chips": [["", 3], ["images", 2], ["data", 1]]},
+    {"library": "linked", "query": "studio", "kind": "", "names": ["brief.pdf"], "chips": []},
+    {"library": "linked", "query": "", "kind": "pages", "names": ["brief.pdf"],
+     "chips": [["", 2], ["pages", 1], ["notes", 1]]},
+    {"library": "none", "query": "", "kind": "", "names": [], "chips": []},
+    {"library": "none", "query": "x", "kind": "images", "names": [], "chips": []},
+    {"library": "one", "query": "", "kind": "", "names": ["one.png"], "chips": []},
+    {"library": "one", "query": "", "kind": "images", "names": ["one.png"], "chips": []},
+    {"library": "notes", "query": "", "kind": "", "names": ["plan.md", "review.md", "more.txt"], "chips": []},
+    {"library": "notes", "query": "", "kind": "notes", "names": ["plan.md", "review.md", "more.txt"], "chips": []},
+    {"library": "notes", "query": "", "kind": "images", "names": ["plan.md", "review.md", "more.txt"], "chips": []}
+  ],
+  "filter": [
+    {"files": 0, "query": "", "shows": false},
+    {"files": 1, "query": "", "shows": false},
+    {"files": 6, "query": "", "shows": false},
+    {"files": 6, "query": "a", "shows": true},
+    {"files": 7, "query": "", "shows": true}
+  ]
+}
