@@ -1422,6 +1422,38 @@ final class AppModel {
         try await connected().call(AppAPI.Methods.taskDone, AppAPI.ProjectParams(project: project)).tasks
     }
 
+    /// Whether this tm answers a project's daily numbers (app API 58).
+    var readsHistory: Bool {
+        if case .connected(let h) = phase { return Compatibility.readsHistory(h) }
+        return false
+    }
+
+    /// Whether this tm asks a paired server for its numbers (app API 58).
+    var readsPeerHistory: Bool {
+        if case .connected(let h) = phase { return Compatibility.readsPeerHistory(h) }
+        return false
+    }
+
+    /// A project's daily numbers (project.history); none from an older
+    /// tm, so what draws them hides.
+    func history(_ project: String) async throws -> AppAPI.History? {
+        guard readsHistory else { return nil }
+        return try await connected().call(AppAPI.Methods.projectHistory, AppAPI.ProjectParams(project: project))
+    }
+
+    /// A paired server's project's daily numbers (peer.history); none
+    /// from an older tm on either side, or when it shares no pages.
+    func peerHistory(_ alias: String, _ project: String) async throws -> AppAPI.History? {
+        guard readsPeerHistory else { return nil }
+        do {
+            return try await connected().call(AppAPI.Methods.peerHistory, AppAPI.PeerPagesParams(alias: alias, project: project))
+        } catch {
+            let state: PeerPages.State<Int> = PeerPages.state(error)
+            if state == .notShared { return nil }
+            throw error
+        }
+    }
+
     /// The task templates of the mods that run in project
     /// (task.templates); none with an older tm.
     func templates(_ project: String) async throws -> [AppAPI.Template] {

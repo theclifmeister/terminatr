@@ -54,8 +54,9 @@ import (
 // NeedsOpen (an added field). 37: program.get, .route, .task.edit,
 // .send, .read, .answer, .umbrella.accept and .send-back, and
 // .delete (proto/programapp.go), and task.get's After. 38:
-// program.open, a program's director opened or started.
-const Protocol = 38
+// program.open, a program's director opened or started. 39:
+// project.history and peer.history, a project's daily numbers.
+const Protocol = 39
 
 // Kind is what a connection is for.
 type Kind string

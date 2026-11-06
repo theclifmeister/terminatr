@@ -120,6 +120,13 @@ func init() {
 		// its build in after order. This server's projects only.
 		unary(proto.MethodDesignList, false, designListParams, designsOf),
 
+		// A project's daily numbers (app API 58; the server's caps say
+		// history), and a paired server's (caps peer-history): done per
+		// day and the facts, from tm's records. Read again when the
+		// board's done count changes.
+		unary(proto.MethodProjectHistory, false, historyParams, historyOf),
+		unary(proto.MethodPeerHistory, false, peerPagesParams, historyOf),
+
 		// A project's history, as tm search asks it (app API 41; the
 		// server's caps say search): hits, a hit's timeline and the
 		// chunks' text, as the human sees them (the coordinator's notes
@@ -528,6 +535,10 @@ func taskGetParams(p TaskGetParams) proto.TaskGetParams {
 
 func taskAddParams(p TaskAddParams) proto.TaskAddParams {
 	return proto.TaskAddParams{Project: p.Project, Title: p.Title, Notes: p.Notes, Template: p.Template}
+}
+
+func historyParams(p ProjectParams) proto.HistoryParams {
+	return proto.HistoryParams{Project: p.Project}
 }
 
 func taskDoneParams(p ProjectParams) proto.TaskDoneParams {
