@@ -71,7 +71,7 @@ func (s *Server) libraryList(pp proto.ProjectFilesParams) (any, *proto.Error) {
 	slices.SortStableFunc(files, func(a, b thread.LibFile) int { return b.Time.Compare(a.Time) })
 	out := proto.LibraryListResult{Files: []proto.LibraryFile{}}
 	for _, f := range files {
-		out.Files = append(out.Files, proto.LibraryFile{Thread: f.Thread, Task: f.Task, Title: f.Title, Repo: f.Repo, State: f.State,
+		out.Files = append(out.Files, proto.LibraryFile{Thread: f.Thread, Task: f.Task, TaskStatus: f.TaskStatus, Title: f.Title, Repo: f.Repo, State: f.State,
 			Name: f.Name, Size: f.Size, Time: f.Time, Peer: f.Peer, Message: f.Message})
 	}
 	return out, nil

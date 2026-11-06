@@ -106,16 +106,17 @@ type MemoryReadResult struct {
 // Message (State received). Repo is the folder name of the thread's
 // repository in a project with several. It carries no path.
 type LibraryFile struct {
-	Thread  string    `json:"thread,omitempty"`
-	Task    string    `json:"task,omitempty"`
-	Title   string    `json:"title"`
-	Repo    string    `json:"repo,omitempty"`
-	State   string    `json:"state"`
-	Name    string    `json:"name"`
-	Size    int64     `json:"size"`
-	Time    time.Time `json:"time"`
-	Peer    string    `json:"peer,omitempty"`
-	Message string    `json:"message,omitempty"`
+	Thread     string    `json:"thread,omitempty"`
+	Task       string    `json:"task,omitempty"`
+	TaskStatus string    `json:"task_status,omitempty"`
+	Title      string    `json:"title"`
+	Repo       string    `json:"repo,omitempty"`
+	State      string    `json:"state"`
+	Name       string    `json:"name"`
+	Size       int64     `json:"size"`
+	Time       time.Time `json:"time"`
+	Peer       string    `json:"peer,omitempty"`
+	Message    string    `json:"message,omitempty"`
 }
 
 // LibraryListResult is a project's library, newest file first.
