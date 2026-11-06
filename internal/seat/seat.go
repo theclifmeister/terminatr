@@ -6,6 +6,13 @@
 // A seat says where and which, never what may be done: rights stay
 // explicit at each check (caller.IsAgent, Caller.DirectorOf, the task
 // store's refusals, the guard's floors, the server's scopes).
+//
+// project.Open fails on a director's slug, since a program is no project,
+// and often unseen, where the caller drops the error: use Open, Dir, Is,
+// Find and Settings here. A new function in internal/ that names a
+// coordinator and no director fails TestCoordinatorActionsDecided until it
+// handles the director or gives its reason in coordinatorOnly
+// (parity_test.go).
 package seat
 
 import (

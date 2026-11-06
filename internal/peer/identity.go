@@ -9,6 +9,12 @@
 // The transport is an interface (Transport), so a direct or tunnelled
 // address can carry the same link later: what a link trusts is the
 // pinned key, never the network.
+//
+// A hello's capabilities are in an order that counts: a link keeps only the
+// first maxCaps of them (Hello.clean), and an older tm keeps 16. So a new
+// capability goes last in Manager.caps, after session-upload, for an older
+// tm to cut only the newest. TestSessionUploadCap names the last one, and
+// changes with it.
 package peer
 
 import (

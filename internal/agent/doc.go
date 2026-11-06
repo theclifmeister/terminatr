@@ -14,5 +14,8 @@
 // Permission-rule globs built from paths (siblingGlobs): Claude's sandbox
 // on macOS matches paths case-insensitively and a glob takes no escapes,
 // so a path with a glob character gets no pattern (GlobSafe) and a
-// letter is left out of a bracket expression in both cases.
+// letter is left out of a bracket expression in both cases. Such a glob
+// deny blocks moves only above its first wildcard, by rules Claude's sandbox
+// adds (a Seatbelt regex alone blocks none of them): to keep a folder from
+// being moved, match the folder itself, not the files in it.
 package agent

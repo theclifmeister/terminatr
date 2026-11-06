@@ -15,6 +15,15 @@
 // starting no program on its behalf. A git-ignored path answers only
 // when asked for, and an answer git couldn't give refuses.
 //
+// A submodule's folder and its .git/config are the agent's to write, and
+// pinned git runs nothing for them: every status and diff passes
+// --ignore-submodules=dirty (gitx adds it), so the marks show a submodule
+// moved to another commit, never one dirty inside.
+//
+// Diff (files.diff) gives hunks only, for a console to lay over Read's text
+// (files.read): the two have to agree on the lines, so a console never
+// reflows text that has hunks, such as by indenting JSON.
+//
 // A scope OpenFar opened answers a paired server, and holds more back: text
 // only, never what is git-ignored, and no contents under a name that holds
 // secrets, in a nested checkout, of a file with other names or of a private
