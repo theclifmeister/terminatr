@@ -47,7 +47,9 @@ import (
 // under a link to the same place under the target (Resolve, faked). A
 // case with files has those paths (absolute, clean, where they land)
 // regular files, the rest not: a shell given input runs a script of the
-// worktree only where one is (File, faked). One case a line.
+// worktree only where one is (File, faked). A case with sources has those
+// files' text to read (Read, faked), the rest none: a source of one is
+// code the guard sees. One case a line.
 type vectors struct {
 	Tools map[string]Tool  `json:"tools"`
 	Rules map[string]Rules `json:"rules"`
@@ -68,6 +70,8 @@ type vectors struct {
 		// Files are the paths (absolute, clean, where they land) that are
 		// regular files (File, faked).
 		Files []string `json:"files"`
+		// Sources are the text of the files a source may run (Read, faked).
+		Sources map[string]string `json:"sources"`
 	} `json:"cases"`
 	Messages map[string]map[string]string `json:"messages"`
 }
@@ -125,6 +129,13 @@ func TestVectors(t *testing.T) {
 			}
 			resolve, files := r.Resolve, c.Files
 			r.File = func(p string) bool { return slices.Contains(files, path.Clean(resolve(p))) }
+		}
+		if c.Sources != nil {
+			sources := c.Sources
+			r.Read = func(p string) (string, bool) {
+				text, ok := sources[path.Clean(p)]
+				return text, ok
+			}
 		}
 		d := r.Judge(c.Tool, c.Input)
 		var got, want string
