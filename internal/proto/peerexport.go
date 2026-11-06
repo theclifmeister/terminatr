@@ -100,6 +100,9 @@ type PeerSession struct {
 	Queued        int       `json:"queued_prompts,omitempty"`
 	RemoteControl bool      `json:"remote_control,omitempty"`
 	Model         string    `json:"model,omitempty"`
+	// TurnSince (T1032) is when its agent's current turn began, on the
+	// peer's clock (PeerMirror.Offset); an older tm sends none.
+	TurnSince time.Time `json:"turn_since,omitzero"`
 	// Asking: a question menu is open in the agent (its text stays
 	// here).
 	Asking        bool  `json:"asking,omitempty"`
@@ -113,7 +116,7 @@ type PeerSession struct {
 func PeerSessionOf(s SessionInfo) PeerSession {
 	return PeerSession{ID: s.ID, Role: s.Role, Agent: s.Agent, Project: s.Project, Thread: s.Thread, Task: s.Task,
 		Created: s.Created, State: s.State, Reason: s.Reason, TodosDone: s.TodosDone, TodosTotal: s.TodosTotal,
-		Current: s.Current, Queued: s.Queued, RemoteControl: s.RemoteControl, Model: s.Model, Asking: s.Question != nil,
+		Current: s.Current, Queued: s.Queued, RemoteControl: s.RemoteControl, Model: s.Model, TurnSince: s.TurnSince, Asking: s.Question != nil,
 		Context: s.Context, ContextWindow: s.ContextWindow}
 }
 

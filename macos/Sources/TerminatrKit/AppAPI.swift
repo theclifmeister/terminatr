@@ -1896,8 +1896,10 @@ public enum AppAPI {
         public var conversations: String
         public var needs: String
         public var picks: Bool
+        public var version: String
+        public var rttMs: Double
 
-        public init(alias: String, name: String = "", id: String = "", state: String, reason: String = "", since: Date? = nil, projects: [PeerProject] = [], shareWaits: Int = 0, shareRequests: [ShareRequest] = [], pane: Bool = false, panes: String = "", transcript: Bool = false, conversations: String = "", needs: String = "", picks: Bool = false) {
+        public init(alias: String, name: String = "", id: String = "", state: String, reason: String = "", since: Date? = nil, projects: [PeerProject] = [], shareWaits: Int = 0, shareRequests: [ShareRequest] = [], pane: Bool = false, panes: String = "", transcript: Bool = false, conversations: String = "", needs: String = "", picks: Bool = false, version: String = "", rttMs: Double = 0) {
             self.alias = alias
             self.name = name
             self.id = id
@@ -1913,6 +1915,8 @@ public enum AppAPI {
             self.conversations = conversations
             self.needs = needs
             self.picks = picks
+            self.version = version
+            self.rttMs = rttMs
         }
 
         enum CodingKeys: String, CodingKey {
@@ -1931,6 +1935,8 @@ public enum AppAPI {
             case conversations
             case needs
             case picks
+            case version
+            case rttMs = "rtt_ms"
         }
     }
 
@@ -2259,8 +2265,9 @@ public enum AppAPI {
         public var asking: Bool
         public var context: Int
         public var contextWindow: Int
+        public var turnSince: Date?
 
-        public init(id: String, role: String, agent: String = "", project: String, thread: String = "", task: String = "", created: Date, state: String = "", reason: String = "", todosDone: Int = 0, todosTotal: Int = 0, current: String = "", queuedPrompts: Int = 0, remoteControl: Bool = false, model: String = "", asking: Bool = false, context: Int = 0, contextWindow: Int = 0) {
+        public init(id: String, role: String, agent: String = "", project: String, thread: String = "", task: String = "", created: Date, state: String = "", reason: String = "", todosDone: Int = 0, todosTotal: Int = 0, current: String = "", queuedPrompts: Int = 0, remoteControl: Bool = false, model: String = "", asking: Bool = false, context: Int = 0, contextWindow: Int = 0, turnSince: Date? = nil) {
             self.id = id
             self.role = role
             self.agent = agent
@@ -2279,6 +2286,7 @@ public enum AppAPI {
             self.asking = asking
             self.context = context
             self.contextWindow = contextWindow
+            self.turnSince = turnSince
         }
 
         enum CodingKeys: String, CodingKey {
@@ -2300,6 +2308,7 @@ public enum AppAPI {
             case asking
             case context
             case contextWindow = "context_window"
+            case turnSince = "turn_since"
         }
     }
 
@@ -5922,6 +5931,8 @@ extension AppAPI.Peer {
         self.conversations = try c.decodeIfPresent(String.self, forKey: .conversations) ?? ""
         self.needs = try c.decodeIfPresent(String.self, forKey: .needs) ?? ""
         self.picks = try c.decodeIfPresent(Bool.self, forKey: .picks) ?? false
+        self.version = try c.decodeIfPresent(String.self, forKey: .version) ?? ""
+        self.rttMs = try c.decodeIfPresent(Double.self, forKey: .rttMs) ?? 0
     }
 }
 
@@ -6078,6 +6089,7 @@ extension AppAPI.PeerSession {
         self.asking = try c.decodeIfPresent(Bool.self, forKey: .asking) ?? false
         self.context = try c.decodeIfPresent(Int.self, forKey: .context) ?? 0
         self.contextWindow = try c.decodeIfPresent(Int.self, forKey: .contextWindow) ?? 0
+        self.turnSince = try c.decodeIfPresent(Date.self, forKey: .turnSince)
     }
 }
 
