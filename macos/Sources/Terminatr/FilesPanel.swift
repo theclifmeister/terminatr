@@ -658,13 +658,20 @@ struct FileBody: View {
                 if let c = file.caution { line(c, icon: "exclamationmark.triangle", colour: theme.attention) }
                 if s?.deleted == true { line("Deleted from the worktree: this is what it held.", icon: "trash", colour: theme.attention) }
                 if let cut = FileText.cutNote(size: size, shown: shown) { line(cut, icon: "scissors", colour: theme.muted) }
-                if text.isEmpty {
+                change(s?.diff)
+                if s?.diff?.tooBig == true { line("Too big to mark its changes.", icon: "scissors", colour: theme.muted) }
+                if s?.diff?.truncated == true { line("More changes than are marked here.", icon: "scissors", colour: theme.muted) }
+                if let marks = s?.marks {
+                    CodeView(id: file.id, text: marks.text, marks: marks, points: points)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if text.isEmpty {
                     empty("It's empty.")
                 } else {
-                    CodeView(id: file.id, text: text, points: points)
+                    CodeView(id: file.id, text: text, marks: nil, points: points)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             case .binary(let size, _):
+                change(s?.diff)
                 empty("\(file.name) · \(Attachment.size(size)) has no text to show here. Space opens Quick Look, and Open uses its app.")
             case .gone:
                 empty("\(file.name) is no longer there.")
@@ -675,6 +682,38 @@ struct FileBody: View {
                     .controlSize(.small)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+        }
+    }
+
+    /// What changed in it since the base: nothing shows of a file with no
+    /// change.
+    @ViewBuilder private func change(_ diff: AppAPI.FilesDiff?) -> some View {
+        if let diff, let w = FileChange.words(diff) {
+            HStack(spacing: 6) {
+                if let lead = w.lead {
+                    Text(lead)
+                        .foregroundStyle(theme.ink)
+                        .truncationMode(.middle)
+                }
+                if let n = w.added {
+                    Text("+\(n)").foregroundStyle(theme.good)
+                }
+                if let n = w.deleted {
+                    Text("−\(n)").foregroundStyle(theme.attention)
+                }
+                if let since = w.since {
+                    Text(since)
+                        .foregroundStyle(theme.muted)
+                        .truncationMode(.middle)
+                }
+                Spacer(minLength: 0)
+            }
+            .font(theme.sized(12))
+            .lineLimit(1)
+            .padding(.horizontal, 13)
+            .padding(.vertical, 4)
+            .overlay(alignment: .bottom) { theme.lineSoft.frame(height: 1) }
+            .accessibilityElement(children: .combine)
         }
     }
 

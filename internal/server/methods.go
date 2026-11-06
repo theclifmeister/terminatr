@@ -324,6 +324,9 @@ func init() {
 		proto.MethodFilesRead: {gate: gateHuman, call: typed(func(s *Server, p proto.FilesReadParams, _ callCtx) (any, *proto.Error) {
 			return s.filesRead(p)
 		})},
+		proto.MethodFilesDiff: {gate: gateHuman, call: typed(func(s *Server, p proto.FilesDiffParams, _ callCtx) (any, *proto.Error) {
+			return s.filesDiff(p)
+		})},
 		proto.MethodFilesStamp: {gate: gateHuman, call: typed(func(s *Server, p proto.FilesStampParams, _ callCtx) (any, *proto.Error) {
 			return s.filesStamp(p)
 		})},

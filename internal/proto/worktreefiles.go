@@ -20,10 +20,14 @@ const (
 	// MethodFilesStamp says whether what files.list answered may have
 	// changed (FilesStampParams): a FilesStampResult.
 	MethodFilesStamp = "files.stamp"
+	// MethodFilesDiff says what changed in a file since the base
+	// (FilesDiffParams): a FilesDiffResult.
+	MethodFilesDiff = "files.diff"
 )
 
 // CapWorktreeFiles says the server answers files.list, files.read and
-// files.stamp.
+// files.stamp, and files.diff since app API 51: a server without it refuses
+// that one unknown-method, and its files show as plain text.
 const CapWorktreeFiles = "worktree-files"
 
 // Refusals of the files methods, besides ErrFileGone for what isn't
@@ -39,13 +43,15 @@ const (
 // Bounds of the files methods: a read gives the first MaxFilesRead bytes
 // of a file, LibraryChunk at a time, and says Truncated when the file is
 // longer; a folder lists MaxFilesEntries, a search MaxFilesFound; a stamp
-// looks at MaxFilesStamped folders.
+// looks at MaxFilesStamped folders; a diff looks at a file of MaxFilesDiff,
+// as much as a console shows, and says TooBig of a longer one.
 const (
 	MaxFilesRead    = MaxLibraryRead
 	MaxFilesEntries = 2000
 	MaxFilesFound   = 500
 	MaxFilesStamped = 256
 	MaxFilesQuery   = 200
+	MaxFilesDiff    = 1 << 20
 )
 
 // Kinds of a FileEntry; a link has the kind of what it leads to, and
@@ -147,4 +153,47 @@ type FilesStampParams struct {
 // inside a folder not named, and git-ignored, goes unseen.
 type FilesStampResult struct {
 	Stamp string `json:"stamp"`
+}
+
+// FilesDiffParams name a file of the session's, a deleted one too. Ignored
+// allows a git-ignored file.
+type FilesDiffParams struct {
+	Session string `json:"session"`
+	Path    string `json:"path"`
+	Ignored bool   `json:"ignored,omitempty"`
+}
+
+// FilesHunk is a place in a file that changed: Removed are the lines that
+// went, numbered from Old in the base's version, and they stand before line
+// New of the file; Added lines of the file from New are new. The lines added
+// don't come here: they are the file's, as files.read gives them.
+type FilesHunk struct {
+	Old     int      `json:"old"`
+	New     int      `json:"new"`
+	Added   int      `json:"added,omitempty"`
+	Removed []string `json:"removed,omitempty"`
+}
+
+// FilesDiffResult is a file's change against the thread's base, what its
+// mark in files.list counts from. Status is that mark: "" for none, M with
+// Hunks, A when all its lines are added (no Hunks), D when all the lines are
+// the Hunks' (Size is then its size at the base). From: it was renamed from
+// that path. Added and Deleted count its lines, whatever shows, 0 for a
+// file renamed away. Base names the ref it counts from. Binary: not text, no
+// Hunks. TooBig: it or its old version is over MaxFilesDiff, no Hunks.
+// Truncated: the Hunks stop short of the file's end.
+type FilesDiffResult struct {
+	Name      string      `json:"name"`
+	Path      string      `json:"path"`
+	Status    string      `json:"status,omitempty"`
+	From      string      `json:"from,omitempty"`
+	Base      string      `json:"base,omitempty"`
+	Size      int64       `json:"size,omitempty"`
+	MTime     time.Time   `json:"mtime,omitzero"`
+	Added     int         `json:"added,omitempty"`
+	Deleted   int         `json:"deleted,omitempty"`
+	Binary    bool        `json:"binary,omitempty"`
+	TooBig    bool        `json:"too_big,omitempty"`
+	Truncated bool        `json:"truncated,omitempty"`
+	Hunks     []FilesHunk `json:"hunks,omitempty"`
 }
