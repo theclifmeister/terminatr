@@ -5,7 +5,7 @@ id          = "default-templates"
 name        = "Default templates"
 version     = "1.0.0"
 api         = "1.0"
-description = "Task templates: bug, spike and chore."
+description = "Task templates: bug, spike, chore and week-in-review."
 authors     = ["terminatr"]
 
 [provides]
