@@ -26,7 +26,9 @@ import (
 // one in the popup, o opens one in this computer's viewer, an image shows
 // in half-blocks (imagepreview.go); X deletes the selected file and D the
 // files of its thread, each after y; / filters and t steps through the
-// kinds (libraryfilter.go). A file shows by name and size, never a path.
+// kinds (libraryfilter.go). A group's heading says its task's status, kinds
+// and size, and a long group folds (libraryheads.go). A file shows by name
+// and size, never a path.
 
 // libraryOrder are the library's files grouped by thread (or linked
 // project), the group with the newest file first and each group's files
@@ -60,8 +62,11 @@ func (pv *projectView) narrowLib(query, pick string) {
 	pv.libFilter, pv.libPick = query, pick
 	pv.sel[tabLibrary] = 0
 	if ok {
-		i := slices.IndexFunc(pv.libFiles(), func(f thread.LibFile) bool { return f.Group() == at.Group() && f.Name == at.Name })
-		pv.sel[tabLibrary] = max(i, 0)
+		same := func(f thread.LibFile) bool { return f.Group() == at.Group() && f.Name == at.Name }
+		if slices.IndexFunc(pv.libFiles(), same) >= 0 && pv.libRowOf(same) < 0 {
+			pv.setLibOpen(at.Group(), true) // the file is under its group's fold
+		}
+		pv.sel[tabLibrary] = max(pv.libRowOf(same), 0)
 	}
 }
 
@@ -189,11 +194,11 @@ func (pv *projectView) clickLibChip(w, line, col int) {
 	}
 }
 
-// selLib is the selected file, false for none.
+// selLib is the selected file, false for none (or a fold's row).
 func (pv *projectView) selLib() (thread.LibFile, bool) {
-	fs := pv.libFiles()
-	if i := pv.sel[tabLibrary]; i < len(fs) {
-		return fs[i], true
+	rows := pv.libRows()
+	if i := pv.sel[tabLibrary]; i < len(rows) && rows[i].isFile() {
+		return rows[i].f, true
 	}
 	return thread.LibFile{}, false
 }
@@ -217,15 +222,17 @@ func libGroup(f thread.LibFile, n, w int) string {
 	return th().Head.Render(ansi.Truncate(head, max(w-ansi.StringWidth(rest), 8), "…")) + th().Faint.Render(rest)
 }
 
-// sizeWords is a byte count in words: 812 B, 3.4 KB, 1.2 MB.
+// sizeWords is a byte count in words: 812 B, 3.4 KB, 1.2 MB, 1.44 GB.
 func sizeWords(n int64) string {
 	switch {
 	case n < 1000:
 		return fmt.Sprintf("%d B", n)
 	case n < 1_000_000:
 		return fmt.Sprintf("%.1f KB", float64(n)/1000)
+	case n < 1_000_000_000:
+		return fmt.Sprintf("%.1f MB", float64(n)/1_000_000)
 	}
-	return fmt.Sprintf("%.1f MB", float64(n)/1_000_000)
+	return fmt.Sprintf("%.2f GB", float64(n)/1_000_000_000)
 }
 
 // libraryLines are the tab's lines: its sel line and each line's file.
@@ -239,35 +246,38 @@ func (pv *projectView) libraryLines(w int) ([]string, int, []int) {
 	if len(pv.library) == 0 {
 		return []string{th().Faint.Render("no files: a thread's report attaches them (tm report --attach)")}, -1, nil
 	}
-	files := pv.libFiles()
-	if len(files) == 0 {
+	groups := pv.libShownGroups()
+	if len(groups) == 0 {
 		return []string{th().Faint.Render("nothing matches: esc clears")}, -1, nil
 	}
 	var out []string
 	var hits []int
 	sel := -1
-	group := ""
-	count := map[string]int{}
-	for _, f := range files {
-		count[f.Group()]++
-	}
-	for i, f := range files {
-		if f.Group() != group {
-			group = f.Group()
-			if len(out) > 0 {
-				out, hits = append(out, ""), append(hits, noHit)
+	i := 0
+	for _, g := range groups {
+		if len(out) > 0 {
+			out, hits = append(out, ""), append(hits, noHit)
+		}
+		title, meta := libHeading(g.files, w)
+		out, hits = append(out, title, meta), append(hits, noHit, noHit)
+		for _, r := range g.rows {
+			l := "  " + r.word()
+			if r.isFile() {
+				size := fmt.Sprintf("%9s", sizeWords(r.f.Size))
+				l = "  " + fit(oneLine(r.f.Name), max(w-len(size)-4, 4)) + "  " + size
 			}
-			out, hits = append(out, libGroup(f, count[group], w)), append(hits, noHit)
+			switch {
+			case i == pv.sel[tabLibrary]:
+				sel = len(out)
+				l = th().Sel.Render(fit(l, w))
+			case r.isFile():
+				l = fit(l, w) + reset
+			default:
+				l = th().Faint.Render(fit(l, w))
+			}
+			out, hits = append(out, l), append(hits, i)
+			i++
 		}
-		size := fmt.Sprintf("%9s", sizeWords(f.Size))
-		l := "  " + fit(oneLine(f.Name), max(w-len(size)-4, 4)) + "  " + size
-		if i == pv.sel[tabLibrary] {
-			sel = len(out)
-			l = th().Sel.Render(fit(l, w))
-		} else {
-			l = fit(l, w) + reset
-		}
-		out, hits = append(out, l), append(hits, i)
 	}
 	return out, sel, hits
 }
@@ -283,6 +293,9 @@ func (pv *projectView) libraryKey(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		if chips := libChips(pv.library, pv.libFilter, pv.libPick); chips != nil {
 			pv.narrowLib(pv.libFilter, libNextKind(chips, libPicked(pv.library, pv.libPick)))
 		}
+		return nil
+	}
+	if k.String() == "enter" && pv.toggleLibFold() {
 		return nil
 	}
 	f, ok := pv.selLib()

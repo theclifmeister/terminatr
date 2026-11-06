@@ -51,14 +51,17 @@ private struct LibraryFixture: Decodable {
     struct File: Decodable {
         var thread: String?
         var task: String?
+        var task_status: String?
         var title: String
         var repo: String?
+        var state: String?
         var peer: String?
         var message: String?
         var name: String
+        var size: Int?
 
         var file: AppAPI.LibraryFile {
-            AppAPI.LibraryFile(thread: thread ?? "", task: task ?? "", title: title, repo: repo ?? "", state: "running", name: name, size: 1,
+            AppAPI.LibraryFile(thread: thread ?? "", task: task ?? "", taskStatus: task_status ?? "", title: title, repo: repo ?? "", state: state ?? "running", name: name, size: size ?? 0,
                                time: Date(timeIntervalSince1970: 0), peer: peer ?? "", message: message ?? "")
         }
     }
@@ -98,6 +101,27 @@ private struct LibraryFixture: Decodable {
     let libraries: [String: [File]]
     let cases: [Case]
     let filter: [Filter]
+    let heads: [Head]
+    let fold: [Fold]
+
+    struct Head: Decodable {
+        let library: String
+        let group: String
+        let status: String
+        let `where`: [String]
+        let archived: Bool
+        let kinds: [String]
+        let bytes: Int
+    }
+
+    struct Fold: Decodable {
+        let files: Int
+        let open: Bool
+        let query: String
+        let rows: Int
+        let more: Int
+        let fewer: Bool
+    }
 }
 
 /// The file the TUI's test reads too (internal/tui/libraryfilter_test.go):
@@ -122,11 +146,63 @@ private struct LibraryFixture: Decodable {
             .map { LibraryFixture.Chip(kind: $0.kind?.rawValue.lowercased() ?? "", count: $0.count) }
         #expect(chips == c.chips, "\(c.library), \(c.query), \(c.kind)")
     }
+    #expect(fx.heads.count >= 6)
+    for c in fx.heads {
+        let g = LibraryPage.groups((fx.libraries[c.library] ?? []).map(\.file)).first { $0.id == c.group }
+        #expect(g?.status == c.status, "\(c.library)/\(c.group)")
+        #expect(g?.origin == c.where, "\(c.library)/\(c.group)")
+        #expect(g?.isArchived == c.archived, "\(c.library)/\(c.group)")
+        #expect(g?.kinds == c.kinds, "\(c.library)/\(c.group)")
+        #expect(g?.bytes == c.bytes, "\(c.library)/\(c.group)")
+    }
+    #expect(fx.fold.count >= 9)
+    for c in fx.fold {
+        let got = LibraryPage.fold(c.files, open: c.open, query: c.query)
+        #expect(got.rows == c.rows && got.more == c.more && got.fewer == c.fewer, "\(c)")
+    }
     for c in fx.filter {
         let files = (0..<c.files).map { lib("t-0001", "\($0).md", 1) }
         let shows = LibraryPage.showsFilter(files, query: c.query)
         #expect(shows == c.shows, "\(c.files) files, \(c.query)")
     }
+}
+
+/// A group's line under its title, its day pinned to one calendar.
+@Test func libraryHeadingSaysItsFacts() throws {
+    var utc = Calendar(identifier: .gregorian)
+    utc.timeZone = try #require(TimeZone(identifier: "UTC"))
+    let at = Date(timeIntervalSince1970: 1_780_000_000)
+    let now = at.addingTimeInterval(86400)
+    func file(_ name: String, repo: String = "", state: String = "running") -> AppAPI.LibraryFile {
+        AppAPI.LibraryFile(thread: "t-0003", task: "T3", taskStatus: "done", title: "Ship", repo: repo, state: state, name: name, size: 1500, time: at)
+    }
+    func facts(_ fs: [AppAPI.LibraryFile], now: Date) -> String {
+        LibraryPage.groups(fs).first?.facts(now: now, calendar: utc) ?? ""
+    }
+    let day = LibraryPage.day(at, now: now, calendar: utc)
+    #expect(!day.contains("2026"))
+    #expect(facts([file("a.png"), file("b.png")], now: now) == "t-0003 · \(day) · 2 images · 3 KB")
+    #expect(facts([file("a.png", repo: "api")], now: now) == "t-0003 · api · \(day) · 1 image · 2 KB")
+    #expect(facts([file("a.md", state: "archived")], now: now) == "t-0003 · \(day) · archived · 1 note · 2 KB")
+    let later = at.addingTimeInterval(400 * 86400)
+    #expect(LibraryPage.day(at, now: later, calendar: utc).contains("2026"))
+    let linked = AppAPI.LibraryFile(title: "from web", state: "received", name: "a.pdf", size: 1500, time: at, peer: "web", message: "M-1")
+    let g = try #require(LibraryPage.groups([linked]).first)
+    #expect(g.status.isEmpty && g.origin.isEmpty)
+    #expect(g.title == "from web")
+    #expect(g.facts(now: now, calendar: utc) == "\(day) · 1 page · 2 KB")
+}
+
+/// A group of 37: six rows and +31 more, until it's opened; a filter opens it.
+@Test func libraryGroupFolds() throws {
+    let fs = (0..<37).map { lib("t-0001", "\($0).png", 37 - $0) }
+    let g = try #require(LibraryPage.groups(fs).first)
+    let shut = g.listed(open: false, query: "")
+    #expect(shut.files.map(\.name) == (0..<6).map { "\($0).png" } && shut.more == 31 && !shut.fewer)
+    let open = g.listed(open: true, query: "")
+    #expect(open.files.count == 37 && open.more == 0 && open.fewer)
+    #expect(g.listed(open: false, query: "1").files.count == 37)
+    #expect(g.kinds == ["37 images"])
 }
 
 @Test func libraryFilterPromptNamesRepoOnlyWithOne() {
