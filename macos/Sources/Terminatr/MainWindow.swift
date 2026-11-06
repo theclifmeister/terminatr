@@ -30,6 +30,7 @@ struct MainWindow: View {
                         .sidebarText()
                         .opacity(app.lost ? Self.dimmed : 1)
                         .frame(width: CGFloat(s) - 1)
+                        .windowSection(.sidebar)
                     theme.line
                         .frame(width: 1)
                         .overlay {
@@ -56,6 +57,7 @@ struct MainWindow: View {
         .overlay { WindowEdge() }
         .background { WindowButtons() }
         .ignoresSafeArea()
+        .ownsSectionFocus(paused: app.palette)
         .tint(theme.action)
         .foregroundStyle(theme.ink)
         // VoiceOver's rotor (VO-U) lists what needs the user, from anywhere

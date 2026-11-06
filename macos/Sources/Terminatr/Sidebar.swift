@@ -28,6 +28,7 @@ struct Sidebar: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
     @Environment(\.density) private var density
+    @Environment(SectionFocusOwner.self) private var sections
     /// Where the window's needs rotor finds the need rows.
     let needsRotor: Namespace.ID
     @State private var typing = TypeSelect()
@@ -81,6 +82,9 @@ struct Sidebar: View {
         }
         .background(theme.chrome)
         .onChange(of: app.filterFocus) { filterOpen = true }
+        .onChange(of: sections.ask?.id) {
+            if sections.ask?.section == .sidebar { listFocused = true }
+        }
     }
 
     // MARK: the head
