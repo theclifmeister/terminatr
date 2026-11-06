@@ -218,6 +218,9 @@ func serverStop(e *Env, args []string) error {
 	if _, err := f.Parse(args); err != nil {
 		return srvFail("server stop", err)
 	}
+	if err := e.serverHuman(); err != nil {
+		return err
+	}
 	if *force {
 		p, err := client.ResolvePaths()
 		if err != nil {
