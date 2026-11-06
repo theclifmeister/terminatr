@@ -135,7 +135,11 @@ func (e *Env) serverHuman() error {
 // pid (docs/SPEC.md §11.1). It never starts a server: read-only task
 // commands work without one, and then only the environment decides.
 func identifyByServer() (caller.Caller, bool) {
-	c, _, err := connect(false)
+	p, err := client.ResolvePaths()
+	if err != nil {
+		return caller.Caller{}, false
+	}
+	c, err := client.ConnectRunning(p)
 	if err != nil {
 		return caller.Caller{}, false
 	}

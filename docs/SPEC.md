@@ -161,7 +161,7 @@ The dependency rule: `server`, `session`, `ticker`, `tui`, `project`, `thread` a
   - The peer pid is also used to tell **agent calls** from **human calls** (§11.1).
 - **Bind before spawn.** The server binds its socket before it starts any session. A bind failure must never leave an agent running that nobody can reach.
 - **Stale sockets.** A client that gets `ECONNREFUSED` or `ENOENT` tries the lock:
-  - If it can take `server.lock`, no server is running. It removes the leftover socket and pid file, then auto-starts a server.
+  - If it can take `server.lock`, no server is running. It removes the leftover socket and pid file, then auto-starts a server. Only asking the server who the caller is (§11.1) removes nothing, so `tm doctor --fix` still finds the leftovers and asks before removing them.
   - If the lock is held but the socket doesn't answer within 2 s, the server is hung. The client reports `server unresponsive (pid N); see ~/.terminatr/logs/server.log or run tm server stop --force`. `--force` sends `SIGKILL` to the pid recorded in `server.pid`, but only if that pid still holds the lock.
 
 ### 3.3 Protocol
