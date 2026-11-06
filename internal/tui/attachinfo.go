@@ -620,7 +620,9 @@ func (c *client) pollInfo(ic *infoCache, sessions []proto.SessionInfo, peers []p
 		return nil, nil
 	}
 	if remote != nil {
-		// A paired server's pane: the mirror's, and no mod sections.
+		// A paired server's pane: the mirror's, and no mod sections. Its
+		// Files view asks the other machine: not on this poll's time.
+		filesGo(c.filesPoll)
 		return loadRemoteInfo(peers, *remote), nil
 	}
 	var d *infoData

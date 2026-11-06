@@ -187,7 +187,7 @@ func (nv *networkView) sharePanel(r netRow, w int) []panelLine {
 	add("")
 	words := "Its user picks one of theirs to share with every server paired with it, or declines; nothing is shared without them. One request per server waits at a time."
 	if r.kind == netShareReq {
-		words = "A picks one of your active projects that isn't shared; the usual confirm shares it with every paired server, read-only, never its files. X declines: nothing is shared, and " + name + " hears of it."
+		words = "A picks one of your active projects that isn't shared; the usual confirm shares it with every paired server, read-only, not its files. X declines: nothing is shared, and " + name + " hears of it."
 	}
 	add(faintLines(words, w)...)
 	return out
@@ -298,7 +298,7 @@ func (nv *networkView) chooseShare(m *dash, name string, q proto.ShareRequest) {
 	var items []menuItem
 	for _, slug := range free {
 		items = append(items, menuItem{label: slug, run: func(m *dash) tea.Cmd {
-			ask := fmt.Sprintf("Share %s with every paired server? %s asked for a project (%s%s). They see its state read-only (what waits for you, the inbox, threads, tasks on deck), never its files.", slug, name, id, forWords(&q))
+			ask := fmt.Sprintf("Share %s with every paired server? %s asked for a project (%s%s). They see its state read-only (what waits for you, the inbox, threads, tasks on deck), not its files.", slug, name, id, forWords(&q))
 			m.confirmNo("Share "+slug, ask, "not shared; the request still waits", func() tea.Cmd {
 				src := m.src
 				return m.act(func() actionMsg {

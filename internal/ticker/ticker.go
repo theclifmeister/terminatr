@@ -526,6 +526,7 @@ func (t *Ticker) sweep() {
 		t.sweepProject(sum.Slug, cfg, sessions, now, prune, seen)
 	}
 	t.renderPeers(cfg, list)
+	t.sweepPeerFiles(cfg, list)
 	t.renderPrograms(cfg)
 	t.sweepDirectors(cfg, sessions, now)
 	t.sweepDeps(cfg)
