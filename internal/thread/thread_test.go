@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/theclifmeister/terminatr/internal/agent"
+	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/codehost"
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/project"
@@ -421,4 +422,69 @@ func TestBranchName(t *testing.T) {
 			t.Errorf("%q: %q (%d chars), %v", tmpl, got, len(got), err)
 		}
 	}
+}
+
+// TestStatusDoneUntilPrompt: tm done reads 100 % until a later prompt;
+// then follow-up steps show true progress, and tm done counts again (T1100).
+func TestStatusDoneUntilPrompt(t *testing.T) {
+	t.Setenv("TERMINATR_HOME", t.TempDir())
+	p, err := project.New(project.Options{Slug: "demo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	human := caller.Caller{Kind: caller.Human}
+	added, err := p.Tasks().Add(human, []tasks.NewTask{{Title: "Fix it"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err := Create(p, Record{Title: "Fix it", Task: added[0].ID, Agent: "claude", State: Running})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := r.TaskID()
+	step := func(check bool) {
+		t.Helper()
+		res, err := p.Tasks().StepAdd(human, id, "a step")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if check {
+			if _, err := p.Tasks().StepCheck(human, id, res.Task.Steps[len(res.Task.Steps)-1].N, true); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	want := func(pct int, src string) {
+		t.Helper()
+		st, err := UpdateStatus(p, r.ID, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if st.Percent != pct || st.PercentSource != src {
+			t.Fatalf("got %d%% %q, want %d%% %q", st.Percent, st.PercentSource, pct, src)
+		}
+		read, err := ReadStatus(p, r.ID)
+		if err != nil || read.Percent != pct {
+			t.Fatalf("stored %+v, %v", read, err)
+		}
+	}
+	at := time.Now().UTC()
+	step(true)
+	step(true)
+	want(95, "steps") // all ticked, no tm done
+	if _, err := Update(p, r.ID, func(x *Record) error { x.Done, x.DoneAt = true, at; return nil }); err != nil {
+		t.Fatal(err)
+	}
+	want(100, "done")
+	if _, err := Update(p, r.ID, func(x *Record) error { x.LastPrompt = at.Add(time.Second); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	want(95, "steps") // a later prompt, no new steps yet
+	step(false)
+	step(false)
+	want(50, "steps") // 2 of 4: the follow-up's steps count
+	if _, err := Update(p, r.ID, func(x *Record) error { x.DoneAt = at.Add(2 * time.Second); return nil }); err != nil {
+		t.Fatal(err)
+	}
+	want(100, "done")
 }

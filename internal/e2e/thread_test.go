@@ -410,6 +410,15 @@ func TestSmokeThreadLifecycle(t *testing.T) {
 	}
 	env.MustCLI("thread", "ack", "t-0001", "--project", "demo")
 
+	// A later prompt takes tm done back (T1100): its 100 % was for the work
+	// before it, and the status says so at once.
+	env.MustCLI("thread", "prompt", "t-0001", "one more thing", "--project", "demo")
+	list = nil
+	json.Unmarshal([]byte(env.MustCLI("thread", "list", "--json", "--project", "demo")), &list)
+	if len(list) != 1 || list[0].Done || list[0].Status.Percent != 75 {
+		t.Fatalf("thread list after a later prompt: %+v", list)
+	}
+
 	// Remove the worktree by hand: the report is still there, and
 	// resolve copes.
 	env.MustCLI("thread", "stop", "t-0001", "--project", "demo")

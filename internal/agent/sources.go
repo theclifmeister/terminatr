@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"path"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -324,6 +325,26 @@ type TailRule struct {
 	TextPrefix string            `toml:"text_prefix"` // optional
 	State      State             `toml:"state"`
 	Reason     string            `toml:"reason"`
+	// Counter, instead of a state, is "+name" or "-name" as a hook's;
+	// KeyPattern is a regular expression whose first group, in the text,
+	// is its key.
+	Counter    string `toml:"counter"`
+	KeyPattern string `toml:"key_pattern"`
+}
+
+// validateCounter checks a rule that counts instead of setting a state.
+func (r TailRule) validateCounter() error {
+	if len(r.Counter) < 2 || (r.Counter[0] != '+' && r.Counter[0] != '-') {
+		return errors.New("counter must be +name or -name")
+	}
+	re, err := regexp.Compile(r.KeyPattern)
+	if err != nil {
+		return fmt.Errorf("key_pattern: %w", err)
+	}
+	if r.KeyPattern == "" || re.NumSubexp() < 1 {
+		return errors.New("counter needs a key_pattern with a group")
+	}
+	return nil
 }
 
 // TailUsage is a manifest's [jsonl_tail.usage]: which lines report usage,
@@ -431,6 +452,14 @@ func (t *JSONLTail) Parse(line []byte) TailLine {
 			continue
 		}
 		out.Signal, out.HasSignal = Signal{Source: "jsonl_tail", State: r.State, Reason: r.Reason}, true
+		if r.Counter != "" {
+			m := regexp.MustCompile(r.KeyPattern).FindStringSubmatch(textOf(obj, r.TextField)) // validated
+			if m == nil {
+				out.HasSignal = false
+				continue
+			}
+			out.Signal = Signal{Source: "jsonl_tail", Counter: r.Counter, CounterKey: m[1]}
+		}
 		break
 	}
 	if t.Usage != nil {

@@ -760,7 +760,10 @@ func (e *Env) threadPrompt(p *project.Project, o promptOpts) error {
 	if err := thread.AppendFollowUp(p, id, sent, now); err != nil {
 		return err
 	}
-	if _, err := thread.Update(p, id, func(x *thread.Record) error { x.LastPrompt = now; return nil }); err != nil {
+	if _, err := thread.Update(p, id, func(x *thread.Record) error { x.LastPrompt, x.Done = now, false; return nil }); err != nil {
+		return err
+	}
+	if _, err := thread.UpdateStatus(p, id, nil); err != nil {
 		return err
 	}
 	action := "thread.prompt"
@@ -993,7 +996,10 @@ func (e *Env) threadRestart(p *project.Project, id string) error {
 	if r.Prompted && r.AgentSID != "" {
 		resume = r.AgentSID
 	}
-	if _, err := thread.Update(p, id, func(x *thread.Record) error { x.LastPrompt = time.Now().UTC(); return nil }); err != nil {
+	if _, err := thread.Update(p, id, func(x *thread.Record) error { x.LastPrompt, x.Done = time.Now().UTC(), false; return nil }); err != nil {
+		return err
+	}
+	if _, err := thread.UpdateStatus(p, id, nil); err != nil {
 		return err
 	}
 	info, err := e.launchThread(p, r, brief, resume)

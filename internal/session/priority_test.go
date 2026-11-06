@@ -482,3 +482,32 @@ func TestStopTurn(t *testing.T) {
 		return strings.Contains(screen(t, d), "^[") || strings.Contains(screen(t, k), "^[")
 	})
 }
+
+// TestPromptDeliveredDuringBackgroundRun: an agent whose background
+// command is all that works waits at its prompt: it reads as working, and
+// a queued prompt and --now are pasted all the same (T1100).
+func TestPromptDeliveredDuringBackgroundRun(t *testing.T) {
+	resolved := make(chan PromptResolution, 1)
+	s := startBox(t, claudeLike(t), "", time.Hour, resolved)
+	testwait.Eventually(t, "idle", func() bool {
+		st, _ := s.AgentState()
+		return st.State == agent.StateIdle
+	})
+	tr := s.agentRT().tr
+	tr.CountRuns()
+	tr.Hook(agent.HookEvent{Event: "PostToolUse"}, []agent.Signal{{Counter: "+run", CounterKey: "k"}})
+	if st, _ := s.AgentState(); st.State != agent.StateWorking || st.Reason != agent.ReasonBackgroundRun {
+		t.Fatalf("state: %+v", st)
+	}
+	if _, err := s.Prompt("queued-one"); err != nil {
+		t.Fatal(err)
+	}
+	testwait.Eventually(t, "the queued prompt's paste", func() bool { return strings.Contains(screen(t, s), "queued-one") })
+	via, why, err := s.PromptNow("now-one", false)
+	if err != nil || why == "" {
+		t.Fatalf("PromptNow: %q %q %v", via, why, err)
+	}
+	if strings.Contains(why, "working") {
+		t.Fatalf("treated as a running turn: %q %q", via, why)
+	}
+}

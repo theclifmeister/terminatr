@@ -521,6 +521,15 @@ turn = { type = "system", subtype = "turn_duration" }
 "claude-sonnet-5-5" = 1_000_000
 "claude-haiku-5-5" = 1_000_000
 
+# The end of a background command (the +run hook below); it's queued
+# whether the agent is idle or mid-turn.
+[[jsonl_tail.rules]]
+match = { type = "queue-operation", operation = "enqueue" }
+text_field = "content"
+text_prefix = "<task-notification>"
+counter = "-run"
+key_pattern = "<tool-use-id>([^<]+)</tool-use-id>"
+
 [[jsonl_tail.rules]]
 match = { type = "user" }
 text_field = "message.content"
@@ -802,6 +811,17 @@ event = "SubagentStop"
 match = { agent_type = "*" }
 counter = "-bg"
 counter_key = "agent_id"
+
+# A command in the background keeps working after Stop too (T1100, checked
+# on 2.1.319): PostToolUse has tool_response.backgroundTaskId, which covers
+# one moved there by hand or by its timeout as well, and its end is a
+# <task-notification> queued in the transcript, naming the call's id
+# ([jsonl_tail.rules]). Threads only (agent.Tracker.CountRuns).
+[[hooks]]
+event = "PostToolUse"
+match = { tool_name = "Bash", "tool_response.backgroundTaskId" = "*" }
+counter = "+run"
+counter_key = "tool_use_id"
 
 # /clear ends the session with reason=clear and starts a new one at once.
 [[hooks]]
