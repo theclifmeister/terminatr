@@ -1268,6 +1268,7 @@ public enum AppAPI {
     public struct LibraryFile: Codable, Sendable, Hashable {
         public var thread: String
         public var task: String
+        public var taskStatus: String
         public var title: String
         public var repo: String
         public var state: String
@@ -1277,9 +1278,10 @@ public enum AppAPI {
         public var peer: String
         public var message: String
 
-        public init(thread: String = "", task: String = "", title: String, repo: String = "", state: String, name: String, size: Int, time: Date, peer: String = "", message: String = "") {
+        public init(thread: String = "", task: String = "", taskStatus: String = "", title: String, repo: String = "", state: String, name: String, size: Int, time: Date, peer: String = "", message: String = "") {
             self.thread = thread
             self.task = task
+            self.taskStatus = taskStatus
             self.title = title
             self.repo = repo
             self.state = state
@@ -1293,6 +1295,7 @@ public enum AppAPI {
         enum CodingKeys: String, CodingKey {
             case thread
             case task
+            case taskStatus = "task_status"
             case title
             case repo
             case state
@@ -5728,6 +5731,7 @@ extension AppAPI.LibraryFile {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.thread = try c.decodeIfPresent(String.self, forKey: .thread) ?? ""
         self.task = try c.decodeIfPresent(String.self, forKey: .task) ?? ""
+        self.taskStatus = try c.decodeIfPresent(String.self, forKey: .taskStatus) ?? ""
         self.title = try c.decode(String.self, forKey: .title)
         self.repo = try c.decodeIfPresent(String.self, forKey: .repo) ?? ""
         self.state = try c.decode(String.self, forKey: .state)

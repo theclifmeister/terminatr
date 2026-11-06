@@ -7,9 +7,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
+	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
@@ -98,7 +100,10 @@ func TestLibraryListRepo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	th, err := thread.Create(pr, thread.Record{Title: "Report", State: thread.Running, Repo: site})
+	if _, err := pr.Tasks().Add(caller.Caller{Kind: caller.Human}, []tasks.NewTask{{Title: "Report", Status: "review"}}); err != nil {
+		t.Fatal(err)
+	}
+	th, err := thread.Create(pr, thread.Record{Title: "Report", Task: "T1", State: thread.Running, Repo: site})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +115,7 @@ func TestLibraryListRepo(t *testing.T) {
 	}
 	defer app.Close()
 	var lib proto.LibraryListResult
-	if err := app.Call(proto.MethodLibraryList, proto.ProjectFilesParams{Project: "web"}, &lib); err != nil || len(lib.Files) != 1 || lib.Files[0].Repo != "site" {
+	if err := app.Call(proto.MethodLibraryList, proto.ProjectFilesParams{Project: "web"}, &lib); err != nil || len(lib.Files) != 1 || lib.Files[0].Repo != "site" || lib.Files[0].TaskStatus != "review" {
 		t.Fatalf("library.list: %+v %v", lib, err)
 	}
 }

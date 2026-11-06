@@ -145,7 +145,7 @@ func TestLibraryLinkGroup(t *testing.T) {
 	feed(m, keyPress(m, "A"))
 	keyPress(m, "8")
 	out := screen(m)
-	if !strings.Contains(out, "from mini/api · 2 files") {
+	if !strings.Contains(out, "from mini/api") || !strings.Contains(out, "1 page · 1 note · 4.2 MB") {
 		t.Fatalf("no group:\n%s", out)
 	}
 	if a, b, c := strings.Index(out, "report.pdf"), strings.Index(out, "trace.txt"), strings.Index(out, "notes.md"); !(a < b && b < c) {

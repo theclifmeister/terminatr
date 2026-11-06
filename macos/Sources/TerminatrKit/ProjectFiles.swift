@@ -69,6 +69,64 @@ public enum LibraryPage {
             if !f.peer.isEmpty { return files.count == 1 ? "1 file" : "\(files.count) files" }
             return f.state == "archived" ? "\(f.thread) · archived" : f.thread
         }
+
+        /// Its task's status, "" for none: no task, a linked project's.
+        public var status: String {
+            guard let f = files.first, f.peer.isEmpty else { return "" }
+            return f.taskStatus
+        }
+
+        /// Its thread and, in a project with several, the repository; a
+        /// linked project's group has neither.
+        public var origin: [String] {
+            guard let f = files.first, f.peer.isEmpty else { return [] }
+            return f.repo.isEmpty ? [f.thread] : [f.thread, f.repo]
+        }
+
+        public var isArchived: Bool { files.first?.state == "archived" }
+
+        /// Its kinds, in the chips' order: "26 images", "2 data files".
+        public var kinds: [String] {
+            var count: [Kind: Int] = [:]
+            for f in files { count[LibraryPage.kind(f.name), default: 0] += 1 }
+            return Kind.allCases.compactMap { k in count[k].map { "\($0) \(k.noun)\($0 == 1 ? "" : "s")" } }
+        }
+
+        public var bytes: Int { files.reduce(0) { $0 + $1.size } }
+
+        /// The line under the title: "t-0003 · api · 6 Nov · archived ·
+        /// 2 images · 3.4 MB". Of the files the filter and kind leave.
+        public func facts(now: Date = Date(), calendar: Calendar = .current) -> String {
+            var out = origin
+            if let t = files.first?.time { out.append(LibraryPage.day(t, now: now, calendar: calendar)) }
+            if isArchived { out.append("archived") }
+            return (out + kinds + [Attachment.size(bytes)]).joined(separator: " · ")
+        }
+
+        /// How it lists: its rows, and its fold's row if any.
+        public func listed(open: Bool, query: String) -> (files: [AppAPI.LibraryFile], more: Int, fewer: Bool) {
+            let f = LibraryPage.fold(files.count, open: open, query: query)
+            return (Array(files.prefix(f.rows)), f.more, f.fewer)
+        }
+    }
+
+    /// How many rows a folded group shows.
+    public static let foldAt = 6
+
+    /// How a group of n files lists (T1055): how many rows, how many files
+    /// its fold hides, and whether it offers to fold again. Words in the
+    /// filter open every fold, so what they find shows. The TUI's libFold.
+    public static func fold(_ n: Int, open: Bool, query: String) -> (rows: Int, more: Int, fewer: Bool) {
+        if n <= foldAt || !words(query).isEmpty { return (n, 0, false) }
+        return open ? (n, 0, true) : (foldAt, n - foldAt, false)
+    }
+
+    /// A day as a heading says it: the year only when it isn't this one.
+    public static func day(_ d: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
+        var style = Date.FormatStyle.dateTime.month(.abbreviated).day()
+        style.timeZone = calendar.timeZone
+        if calendar.component(.year, from: d) != calendar.component(.year, from: now) { style = style.year() }
+        return d.formatted(style)
     }
 
     /// A file's group: its thread, or "@" and the linked project.
@@ -93,6 +151,20 @@ public enum LibraryPage {
     public enum Kind: String, CaseIterable, Sendable {
         case images = "Images", pages = "Pages", notes = "Notes", data = "Data"
         case archives = "Archives", video = "Video", code = "Code", other = "Other"
+
+        /// One file of it, in a heading.
+        var noun: String {
+            switch self {
+            case .images: "image"
+            case .pages: "page"
+            case .notes: "note"
+            case .data: "data file"
+            case .archives: "archive"
+            case .video: "video"
+            case .code: "code file"
+            case .other: "file"
+            }
+        }
     }
 
     private static let kindOf: [String: Kind] = {

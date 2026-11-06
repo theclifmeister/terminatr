@@ -129,8 +129,10 @@ struct MemoryPane: View {
 /// The project's library: the files threads attached to their reports
 /// (resolved and archived threads' too) and the files linked projects
 /// sent, grouped by thread, newest first, with a filter from 7 files and
-/// chips for its kinds (T1054). A file opens in Quick Look (space, or a
-/// double click), its app (Open), or is saved (Save As…).
+/// chips for its kinds (T1054). A heading says the group's task status,
+/// kinds and size, and a group over six files folds (T1055). A file opens
+/// in Quick Look (space, or a double click), its app (Open), or is saved
+/// (Save As…).
 struct LibraryPane: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
@@ -145,10 +147,27 @@ struct LibraryPane: View {
     @State private var busy = false
     @State private var query = ""
     @State private var kind: LibraryPage.Kind?
+    /// The groups opened past their fold.
+    @State private var opened: Set<String> = []
 
     /// The files the filter and the kind leave.
     private var shown: [AppAPI.LibraryFile] {
         LibraryPage.shown(files ?? [], query: query, kind: kind)
+    }
+
+    /// The groups the filter and the kind leave.
+    private var groups: [LibraryPage.Group] { LibraryPage.groups(shown) }
+
+    private func listed(_ g: LibraryPage.Group) -> (files: [AppAPI.LibraryFile], more: Int, fewer: Bool) {
+        g.listed(open: opened.contains(g.id), query: query)
+    }
+
+    /// The rows top to bottom, a fold's too: what ↑ and ↓ walk.
+    private var order: [String] {
+        groups.flatMap { g in
+            let l = listed(g)
+            return l.files.map(Self.key) + (l.more > 0 || l.fewer ? [Self.foldKey(g)] : [])
+        }
     }
 
     var body: some View {
@@ -181,24 +200,30 @@ struct LibraryPane: View {
                 .padding(.vertical, 22)
                 Spacer()
             } else {
-                let groups = LibraryPage.groups(shown)
-                PickList(selection: $picked, order: groups.flatMap { $0.files.map(Self.key) }, name: "Files") {
+                PickList(selection: $picked, order: order, name: "Files") {
                     ForEach(groups) { g in
-                        HStack(alignment: .firstTextBaseline) {
-                            PaneLabel(g.title).lineLimit(1)
-                            Spacer()
-                            Text(g.detail).font(theme.sized(Flat.label)).foregroundStyle(theme.muted)
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.top, 8)
-                        .padding(.bottom, 2)
-                        ForEach(g.files, id: \.self) { f in
+                        let l = listed(g)
+                        LibraryHeading(g)
+                            .padding(.horizontal, 8)
+                            .padding(.top, 10)
+                            .padding(.bottom, 3)
+                        ForEach(l.files, id: \.self) { f in
                             PickRow(id: Self.key(f), selection: $picked, open: { look(f) }) { LibraryFileRow(f) }
                                 .contextMenu { actions(f) }
+                        }
+                        if l.more > 0 || l.fewer {
+                            PickRow(id: Self.foldKey(g), selection: $picked, act: { toggle(g) }) {
+                                Text(l.fewer ? "Show fewer" : "+\(l.more) more").foregroundStyle(theme.muted)
+                            }
+                            .help(l.fewer ? "Folds this group to its six newest files" : "Shows the rest of this group")
                         }
                     }
                 }
                 .onKeyPress(.space) {
+                    if let g = groups.first(where: { Self.foldKey($0) == picked }) {
+                        toggle(g)
+                        return .handled
+                    }
                     guard let f = file(picked) else { return .ignored }
                     look(f)
                     return .handled
@@ -222,6 +247,18 @@ struct LibraryPane: View {
         .onChange(of: project) {
             query = ""
             kind = nil
+            opened = []
+        }
+    }
+
+    /// Opens or folds a group, from its fold's row. Opening moves the pick
+    /// to the first file that came out; folding leaves it on the row.
+    private func toggle(_ g: LibraryPage.Group) {
+        if listed(g).more > 0 {
+            opened.insert(g.id)
+            picked = g.files.dropFirst(LibraryPage.foldAt).first.map(Self.key)
+        } else {
+            opened.remove(g.id)
         }
     }
 
@@ -261,8 +298,16 @@ struct LibraryPane: View {
 
     static func key(_ f: AppAPI.LibraryFile) -> String { LibraryPage.id(f) + "/" + f.name }
 
+    /// A group's fold row in the list; no file's key, which has a name after
+    /// its slash.
+    static func foldKey(_ g: LibraryPage.Group) -> String { "fold:" + g.id }
+
+    /// The listed file of this key: one under a fold has no action bar.
     private func file(_ key: String?) -> AppAPI.LibraryFile? {
-        shown.first { Self.key($0) == key }
+        for g in groups {
+            if let f = listed(g).files.first(where: { Self.key($0) == key }) { return f }
+        }
+        return nil
     }
 
     private func list() async {
