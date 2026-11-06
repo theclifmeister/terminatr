@@ -1608,6 +1608,13 @@ type (
 		Name    string `json:"name"`
 		Offset  int64  `json:"offset,omitempty"`
 	}
+	// LibraryThumbnailParams are library.thumbnail's: the file of thread
+	// (or message) ID named Name.
+	LibraryThumbnailParams struct {
+		Project string `json:"project"`
+		ID      string `json:"id"`
+		Name    string `json:"name"`
+	}
 )
 
 // MemoryFiles are memory.list's result: CONTEXT.md and MEMORY.md when
@@ -1685,6 +1692,20 @@ func libraryOf(r proto.LibraryListResult) Library {
 			Name: f.Name, Size: f.Size, Time: f.Time, Peer: f.Peer, Message: f.Message})
 	}
 	return out
+}
+
+// LibraryThumbnail is library.thumbnail's result: a JPEG of Width by
+// Height pixels, at most 400 on its long side and 512 KiB. A file that
+// makes none is refused no-thumbnail: a console draws a row.
+type LibraryThumbnail struct {
+	Name   string `json:"name"`
+	Width  int    `json:"width"`
+	Height int    `json:"height"`
+	Data   []byte `json:"data"`
+}
+
+func libraryThumbnailOf(r proto.LibraryThumbnailResult) LibraryThumbnail {
+	return LibraryThumbnail{Name: r.Name, Width: r.Width, Height: r.Height, Data: r.Data}
 }
 
 func libraryChunkOf(r proto.LibraryReadResult) LibraryChunk {

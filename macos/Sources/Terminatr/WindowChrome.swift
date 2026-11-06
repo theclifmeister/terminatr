@@ -27,6 +27,10 @@ struct MainArea<Detail: View, Panel: View>: View {
     /// The panel's width, or nil while it hides.
     let panelWidth: Double?
     @Binding var panelWidthSaved: Double
+    /// The most a drag takes the panel to (WindowColumns.limit).
+    var panelLimit: Double = .greatestFiniteMagnitude
+    /// The panel was dragged: it's the last sized, so the last to give way.
+    var panelSized: () -> Void = {}
     @ViewBuilder var detail: Detail
     @ViewBuilder var panel: Panel
 
@@ -46,7 +50,7 @@ struct MainArea<Detail: View, Panel: View>: View {
                 .focusBorder(.main)
                 .padding(.leading, CGFloat(WindowColumns.gap))
                 if let panelWidth {
-                    SplitHandle(width: CGFloat(WindowColumns.gap), value: $panelWidthSaved, sign: -1, range: InspectorColumn.min...InspectorColumn.max, name: "Panel width")
+                    SplitHandle(width: CGFloat(WindowColumns.gap), value: $panelWidthSaved, shown: panelWidth, sign: -1, range: InspectorColumn.min...Swift.max(InspectorColumn.min, panelLimit), name: "Panel width", sized: panelSized)
                     Group {
                         if shownPanel == .files, let files, let place = app.filesPlace(selection) {
                             FilesPanel(model: files, place: place, own: own)
@@ -651,10 +655,15 @@ struct NeedsMenu: View {
 struct SplitHandle: View {
     let width: CGFloat
     @Binding var value: Double
+    /// The width on screen now: the drag starts from it, not from the
+    /// saved one, which a narrow window may have kept wider.
+    var shown: Double?
     /// -1 for a column to the handle's right.
     let sign: Double
     let range: ClosedRange<Double>
     let name: String
+    /// Called as a drag begins to change the width.
+    var sized: () -> Void = {}
     @State private var start: Double?
 
     var body: some View {
@@ -668,7 +677,8 @@ struct SplitHandle: View {
             .gesture(
                 DragGesture(minimumDistance: 1, coordinateSpace: .global)
                     .onChanged { d in
-                        let from = start ?? value
+                        let from = start ?? shown ?? value
+                        if start == nil { sized() }
                         start = from
                         value = min(range.upperBound, max(range.lowerBound, from + sign * d.translation.width)).rounded()
                     }

@@ -26,11 +26,34 @@ const (
 	// codes refuse a bad name or thread ("invalid-file", "unknown-thread",
 	// "unknown-file"), a file over MaxLibraryRead is refused ("too-large").
 	MethodLibraryRead = "library.read"
+	// MethodLibraryThumbnail is a library file's thumbnail, a small JPEG
+	// made on first view and cached (LibraryThumbnailParams): a
+	// LibraryThumbnailResult. A file that makes none (not PNG, JPEG or
+	// GIF, over the limits, unreadable) is refused ErrNoThumbnail, and a
+	// console shows it as a row. The server's hello lists
+	// CapLibraryThumbnails.
+	MethodLibraryThumbnail = "library.thumbnail"
 )
 
 // CapProjectFiles says the server answers memory.list, memory.read,
 // library.list and library.read.
 const CapProjectFiles = "project-files"
+
+// CapLibraryThumbnails says the server answers library.thumbnail and
+// peer.library-thumbnail.
+const CapLibraryThumbnails = "library-thumbnails"
+
+// ErrNoThumbnail refuses a thumbnail: the file has none to show, and a
+// console draws a plain row.
+const ErrNoThumbnail = "no-thumbnail"
+
+// ThumbnailSide and MaxThumbnail bound a thumbnail: its long side in
+// pixels, and its bytes, which in base64 stay under the 1 MiB a device's
+// link carries in a line.
+const (
+	ThumbnailSide = 400
+	MaxThumbnail  = 512 << 10
+)
 
 // Bounds of the project files: a memory file of at most MaxMemoryRead
 // bytes (project.MaxMemoryRead), a library file of at most
@@ -106,6 +129,21 @@ type LibraryReadParams struct {
 	ID      string `json:"id"`
 	Name    string `json:"name"`
 	Offset  int64  `json:"offset,omitempty"`
+}
+
+// LibraryThumbnailParams name a library file as LibraryReadParams do.
+type LibraryThumbnailParams struct {
+	Project string `json:"project"`
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+}
+
+// LibraryThumbnailResult is a JPEG of Width by Height pixels.
+type LibraryThumbnailResult struct {
+	Name   string `json:"name"`
+	Width  int    `json:"width"`
+	Height int    `json:"height"`
+	Data   []byte `json:"data"`
 }
 
 // LibraryReadResult is a library file's chunk: Data from Offset (at

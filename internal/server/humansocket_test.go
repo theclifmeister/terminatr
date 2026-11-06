@@ -30,10 +30,10 @@ var humanOnlyMethods = []string{
 	proto.MethodSearchRelated,
 	proto.MethodSessionStart, proto.MethodSessionStop, proto.MethodSessionKeys, proto.MethodSessionPrompt, proto.MethodSessionUpload, proto.MethodSessionApprove, proto.MethodTaskAsk,
 	proto.MethodTaskAccept, proto.MethodTaskSendBack, proto.MethodTaskDelegate, proto.MethodTaskAdd, proto.MethodTaskPriority, proto.MethodTaskGet, proto.MethodTaskDone, proto.MethodTaskTemplates, proto.MethodDesignList, proto.MethodProjectOpen,
-	proto.MethodMemoryList, proto.MethodMemoryRead, proto.MethodLibraryList, proto.MethodLibraryRead,
+	proto.MethodMemoryList, proto.MethodMemoryRead, proto.MethodLibraryList, proto.MethodLibraryRead, proto.MethodLibraryThumbnail,
 	proto.MethodFilesList, proto.MethodFilesRead, proto.MethodFilesStamp, proto.MethodFilesDiff, proto.MethodFilesRepos,
 	proto.MethodSessionAdopt, proto.MethodSessionAdoptAsk, proto.MethodSessionRemote, proto.MethodSessionModel, proto.MethodQuestionsOpen, proto.MethodCoordinatorClear,
-	proto.MethodServerStop, proto.MethodAgentReload, proto.MethodPeerReload, proto.MethodDeviceReload, proto.MethodAppReportAdd, proto.MethodPeerList, proto.MethodPeerPopupRead, proto.MethodPeerPagesRead, proto.MethodPeerLibraryList, proto.MethodPeerLibraryRead, proto.MethodPeerDesignList, proto.MethodPeerNeedAct, proto.MethodPeerShareAsk, proto.MethodPeerShareAnswer, proto.MethodLinkAct, proto.MethodProjectsWatch, proto.MethodSessionsWatch,
+	proto.MethodServerStop, proto.MethodAgentReload, proto.MethodPeerReload, proto.MethodDeviceReload, proto.MethodAppReportAdd, proto.MethodPeerList, proto.MethodPeerPopupRead, proto.MethodPeerPagesRead, proto.MethodPeerLibraryList, proto.MethodPeerLibraryRead, proto.MethodPeerLibraryThumbnail, proto.MethodPeerDesignList, proto.MethodPeerNeedAct, proto.MethodPeerShareAsk, proto.MethodPeerShareAnswer, proto.MethodLinkAct, proto.MethodProjectsWatch, proto.MethodSessionsWatch,
 	proto.MethodProjectPin, proto.MethodProjectNew, proto.MethodSessionAdoptRequest, proto.MethodLinkSend,
 	proto.MethodModsList, proto.MethodModsSet, proto.MethodModsSetting,
 	proto.MethodViewSubscribe, proto.MethodViewAttach, proto.MethodViewDashboard, proto.MethodViewProject,
@@ -82,7 +82,7 @@ var notControl = map[string]bool{
 	proto.MethodPeerPanes: true, proto.MethodPeerName: true, proto.MethodPeerMessage: true, proto.MethodPeerPopup: true,
 	proto.MethodPeerFileFetch: true, proto.MethodPeerTranscript: true,
 	proto.MethodPeerNeeds: true, proto.MethodPeerNonce: true, proto.MethodPeerAct: true,
-	proto.MethodPeerPages: true, proto.MethodPeerPagesLibrary: true, proto.MethodPeerPagesLibraryRead: true, proto.MethodPeerPagesDesigns: true,
+	proto.MethodPeerPages: true, proto.MethodPeerPagesLibrary: true, proto.MethodPeerPagesLibraryRead: true, proto.MethodPeerPagesLibraryThumbnail: true, proto.MethodPeerPagesDesigns: true,
 	proto.MethodPeerWorktreeRepos: true, proto.MethodPeerWorktreeList: true, proto.MethodPeerWorktreeRead: true, proto.MethodPeerWorktreeStamp: true, proto.MethodPeerWorktreeDiff: true,
 }
 
