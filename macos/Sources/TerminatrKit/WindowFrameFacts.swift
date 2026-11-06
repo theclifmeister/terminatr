@@ -55,21 +55,8 @@ public struct StatusFacts: Equatable, Sendable {
     /// Counts a thread as its row does (Busy), and a paired server's as
     /// its row does while that server is up and its listing fresh.
     public static func of(projects: [AppAPI.Project], sessions: [AppAPI.Session], peers: [AppAPI.Peer], needs: Int) -> StatusFacts {
-        var working = 0
-        for p in projects {
-            for t in p.threads where !t.record.session.isEmpty {
-                if Busy.of(thread: t, session: sessions.first { $0.id == t.record.session }) != nil { working += 1 }
-            }
-        }
-        for peer in peers where peer.state == "up" {
-            for p in peer.projects where !p.stale {
-                for s in p.sessions {
-                    guard let ref = SessionRef(s, of: peer.alias), !ref.isCoordinator, !ref.director else { continue }
-                    if Busy.of(peer: s) != nil { working += 1 }
-                }
-            }
-        }
-        return StatusFacts(servers: 1 + peers.count, working: working, needs: needs)
+        let working = WorkingList.of(projects: projects, sessions: sessions, peers: peers).threads
+        return StatusFacts(servers: 1 + peers.count, working: working.reduce(0) { $0 + $1.rows.count }, needs: needs)
     }
 
     public var server: String { servers > 1 ? "This Mac · \(servers) servers" : "This Mac" }

@@ -12,6 +12,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/server"
 	"github.com/theclifmeister/terminatr/internal/tasks"
+	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
@@ -694,6 +695,11 @@ type Peer struct {
 	// (PeerNeedActParams.Picks); without, such a question is answered
 	// in its pane there.
 	Picks bool `json:"picks,omitempty"`
+	// Version and RTT (T1032) are its tm's release, as far as known, and
+	// the link's last ping in milliseconds while up; a change of RTT
+	// alone doesn't change Gen.
+	Version string  `json:"version,omitempty"`
+	RTT     float64 `json:"rtt_ms,omitempty"`
 }
 
 // PeerProject is a project a paired server shares: its goal line,
@@ -818,6 +824,9 @@ type PeerSession struct {
 	Asking        bool      `json:"asking,omitempty"`
 	Context       int64     `json:"context,omitempty"`
 	ContextWindow int64     `json:"context_window,omitempty"`
+	// TurnSince (T1032) is when its agent's current turn began, on this
+	// server's clock; an older tm sends none.
+	TurnSince time.Time `json:"turn_since,omitzero"`
 }
 
 // The copies. Lists are never null.
@@ -1019,7 +1028,8 @@ func peerListOf(l proto.PeerList) PeerList {
 	for _, p := range l.Peers {
 		peer := Peer{Alias: p.Alias, Name: p.Name, ID: p.ID, State: p.State, Reason: p.Reason, Since: p.Since,
 			Projects: make([]PeerProject, 0, len(p.Projects)), ShareWaits: proto.ShareWaits([]proto.PeerMirror{p}),
-			Pane: p.Pane, Panes: p.Panes, Transcript: p.Transcript, Conversations: p.Conversations, Needs: p.Needs, Picks: p.NeedPicks}
+			Pane: p.Pane, Panes: p.Panes, Transcript: p.Transcript, Conversations: p.Conversations, Needs: p.Needs, Picks: p.NeedPicks,
+			Version: textsafe.Line(p.Version, 40), RTT: p.RTT}
 		for _, q := range p.Shares {
 			if !q.Out && q.Pending() {
 				peer.ShareRequests = append(peer.ShareRequests, shareRequestOf(q))
@@ -1092,10 +1102,14 @@ func peerNeedOf(alias string, offset time.Duration, n proto.PeerNeed) PeerNeed {
 // peerSessionOf is session s of the paired server alias, whose clock
 // is offset ahead of this server's.
 func peerSessionOf(alias string, offset time.Duration, s proto.PeerSession) PeerSession {
+	var turn time.Time
+	if !s.TurnSince.IsZero() {
+		turn = s.TurnSince.Add(-offset)
+	}
 	return PeerSession{ID: alias + "/" + s.ID, Role: s.Role, Agent: s.Agent, Project: s.Project, Thread: s.Thread,
 		Task: s.Task, Created: s.Created.Add(-offset), State: s.State, Reason: s.Reason, TodosDone: s.TodosDone,
 		TodosTotal: s.TodosTotal, Current: s.Current, Queued: s.Queued, RemoteControl: s.RemoteControl, Model: s.Model,
-		Asking: s.Asking, Context: s.Context, ContextWindow: s.ContextWindow}
+		Asking: s.Asking, Context: s.Context, ContextWindow: s.ContextWindow, TurnSince: turn}
 }
 
 // shareRequestOf is a paired server's share request that waits for the

@@ -78,7 +78,7 @@ public struct FilesPlace: Hashable, Sendable {
             : "This thread's agent isn't running, so tm can't read its worktree. \(keeps)"
         var why: String?
         if !server.isEmpty {
-            why = "\(server)'s worktrees stay on \(server). \(keeps)"
+            why = "\(server)'s worktrees can't be browsed from here. The Attached tab shows what \(whole ? "threads" : "this thread") attached, when \(server) shares the project's pages."
         } else if !readsWorktree {
             why = "This tm can't read a worktree: update it. \(keeps)"
         } else if sessionID == nil {
