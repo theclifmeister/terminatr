@@ -26,6 +26,8 @@ final class SectionFocusOwner {
     var paused = false
     /// A section asked to take the keyboard; its id changes with each ask.
     private(set) var ask: (section: WindowSection, id: Int)?
+    /// What had the keyboard when the palette took it.
+    @ObservationIgnored private var covered: KeyboardHolder?
     @ObservationIgnored fileprivate var marks: [WindowSection: WeakView] = [:]
     @ObservationIgnored fileprivate weak var window: NSWindow?
 
@@ -35,6 +37,28 @@ final class SectionFocusOwner {
 
     private func want(_ section: WindowSection) {
         ask = (section, (ask?.id ?? 0) + 1)
+    }
+
+    /// The palette is taking the keyboard: what has it gets it back when the
+    /// palette closes (T1076). The section alone wouldn't do: the terminal,
+    /// the composer and the transcript sit in the main pane beside its anchor.
+    func cover() {
+        covered = window.flatMap { KeyboardHolder(of: $0) }
+    }
+
+    /// The palette closes on something that takes the keyboard itself.
+    func forget() { covered = nil }
+
+    /// After the pass that takes the palette's field away. What has gone too
+    /// is left to rehome.
+    fileprivate func uncover() {
+        guard let held = covered else { return }
+        covered = nil
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated {
+                if let window = self?.window { held.giveBack(in: window) }
+            }
+        }
     }
 
     /// When what had the keyboard has gone and the window or its root view
@@ -56,7 +80,8 @@ final class SectionFocusOwner {
         guard !paused else { return }
         DispatchQueue.main.async { [weak self] in
             MainActor.assumeIsolated {
-                guard let self, self.focus.held != section, !self.responderIsIn(section) else { return }
+                // The click may have opened the palette by now.
+                guard let self, !self.paused, self.focus.held != section, !self.responderIsIn(section) else { return }
                 self.want(section)
             }
         }
@@ -125,6 +150,7 @@ private struct SectionFocusRoot: ViewModifier {
             }
             .onChange(of: paused, initial: true) { _, p in
                 owner.paused = p
+                if !p { owner.uncover() }
                 owner.rehome()
             }
     }

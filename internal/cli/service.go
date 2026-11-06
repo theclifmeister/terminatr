@@ -42,6 +42,9 @@ func serverService(e *Env, args []string) error {
 	if err != nil || len(pos) > 0 {
 		return srvUsage("server service", serviceUsage)
 	}
+	if err := e.serverHuman(); err != nil {
+		return err
+	}
 	print := *printArg || *dryRun
 	c, err := serviceConfig(e)
 	if err != nil {

@@ -130,6 +130,14 @@ final class AppModel {
     var filter = ""
     /// Whether the command palette (⌘K) shows.
     var palette = false
+    /// ⌘K and the buttons: opens or closes the palette. It lives on the main
+    /// window, which takes the keys for it: an ask from a session window
+    /// would leave its field with no keys until a click (T1076).
+    func togglePalette() {
+        palette.toggle()
+        if palette { showWindow?() }
+    }
+
     /// Whether the palette shows a session's cards or composer (its
     /// act): ⌘↩ is its cards' then, bumping paletteChoice.
     var paletteActing = false
@@ -1388,7 +1396,8 @@ final class AppModel {
         return false
     }
 
-    /// The done tasks of project's board, in board order (task.done).
+    /// The done tasks of project's board as task.done answers: newest
+    /// first, or board order from an older tm.
     func doneTasks(_ project: String) async throws -> [AppAPI.Task] {
         try await connected().call(AppAPI.Methods.taskDone, AppAPI.ProjectParams(project: project)).tasks
     }

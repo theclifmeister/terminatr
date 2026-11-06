@@ -524,13 +524,45 @@ private struct BoardRow: View {
                     }
                     .buttonStyle(.plain)
                     .help("Shows \(task.ref) in full: its steps and notes")
-                    PriorityTag(task.priority)
+                    if task.status == "done" {
+                        FinishedLabel(task: task)
+                    } else {
+                        PriorityTag(task.priority)
+                    }
                     TaskActs(project: project, task: task.ref, status: task.status)
+                }
+                let waits = Waits.words(task)
+                if !waits.isEmpty {
+                    Text(waits)
+                        .font(theme.sized(Flat.label))
+                        .foregroundStyle(theme.muted)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .help(Waits.spoken(task))
                 }
                 TaskOutcome(project: project, task: task.ref)
             }
         }
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// When a done task finished, at the end of its row; nothing when
+/// nothing dates it.
+struct FinishedLabel: View {
+    @Environment(\.theme) private var theme
+    let task: AppAPI.Task
+
+    var body: some View {
+        let label = Dashboard.finished(task.doneAt)
+        if !label.isEmpty {
+            Text(label)
+                .font(theme.mono(.caption2))
+                .foregroundStyle(theme.muted)
+                .lineLimit(1)
+                .fixedSize()
+                .accessibilityLabel("finished \(label)")
+        }
     }
 }
 

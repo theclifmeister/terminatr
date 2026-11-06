@@ -115,18 +115,33 @@ struct BoardScreen: View {
                 let line = typeSize.isAccessibilitySize
                     ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
                     : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: 8))
-                line {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        Text(t.ref)
-                            .font(theme.monoSized(12.5))
-                            .foregroundStyle(theme.muted)
-                            .frame(minWidth: 34 * theme.scale, alignment: .leading)
-                        PriorityTag(t.priority)
+                VStack(alignment: .leading, spacing: 2) {
+                    line {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text(t.ref)
+                                .font(theme.monoSized(12.5))
+                                .foregroundStyle(theme.muted)
+                                .frame(minWidth: 34 * theme.scale, alignment: .leading)
+                            if t.status == "done" {
+                                FinishedTag(task: t)
+                            } else {
+                                PriorityTag(t.priority)
+                            }
+                        }
+                        Text(t.title)
+                            .font(theme.sized(Flat.text))
+                            .foregroundStyle(theme.ink)
+                            .lines(2)
                     }
-                    Text(t.title)
-                        .font(theme.sized(Flat.text))
-                        .foregroundStyle(theme.ink)
-                        .lines(2)
+                    // Waits-for (T1049): muted while a link is unmet, and on
+                    // the task they wait for; nothing once it is met.
+                    let waits = Waits.words(t)
+                    if !waits.isEmpty {
+                        Text(waits)
+                            .font(theme.sized(Flat.label))
+                            .foregroundStyle(theme.muted)
+                            .lines(1)
+                    }
                 }
                 .accessibilityElement(children: .combine)
             }
@@ -269,6 +284,25 @@ struct TaskScreen: View {
         } catch {
             full = nil
             fetchError = Dashboard.words(error, task: ref)
+        }
+    }
+}
+
+/// When a done task finished, in a row where a live task has its priority
+/// tag; nothing when nothing dates it.
+struct FinishedTag: View {
+    @Environment(\.theme) private var theme
+    let task: AppAPI.Task
+
+    var body: some View {
+        let label = Dashboard.finished(task.doneAt)
+        if !label.isEmpty {
+            Text(label)
+                .font(theme.mono(.caption2))
+                .foregroundStyle(theme.muted)
+                .lineLimit(1)
+                .fixedSize()
+                .accessibilityLabel("finished \(label)")
         }
     }
 }

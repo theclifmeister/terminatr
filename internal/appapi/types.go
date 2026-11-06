@@ -430,10 +430,21 @@ type Task struct {
 	Owner    string `json:"owner,omitempty"`
 	Created  string `json:"created,omitempty"`
 	Updated  string `json:"updated,omitempty"`
+	// DoneAt (app API 56) is when a done task finished: a UTC time
+	// (2026-11-06T09:10:44Z), or a day (2026-11-06) when only that is
+	// known; absent when nothing dates it, and from an older tm.
+	DoneAt string `json:"done_at,omitempty"`
 	// After (app API 44; task.get only) are the tasks it comes after,
 	// this board's and other projects', with another program member's
 	// dependency state while programs are on.
 	After []TaskDep `json:"after,omitempty"`
+	// WaitsFor (app API 55; the board's tasks, projects.watch with
+	// detail) are the tasks it still comes after ("T10", or another
+	// project's "acme-api/T12"): none once they are done, dropped or
+	// archived. Waiters are the open tasks of the board that come after
+	// it. Both come from the after field.
+	WaitsFor []string `json:"waits_for,omitempty"`
+	Waiters  int      `json:"waiters,omitempty"`
 }
 
 // Step is one step of a task.
@@ -700,7 +711,7 @@ type Peer struct {
 	// alone doesn't change Gen.
 	Version string  `json:"version,omitempty"`
 	RTT     float64 `json:"rtt_ms,omitempty"`
-	// Worktree (app API 54): its tm can share its folders; a project's
+	// Worktree (app API 56): its tm can share its folders; a project's
 	// Files says whether it does with this server. Without, it runs an
 	// older tm, and is never asked.
 	Worktree bool `json:"worktree,omitempty"`
@@ -737,7 +748,7 @@ type PeerProject struct {
 	// board, overview and library read through peer.pages-read and
 	// peer.library-list.
 	Pages bool `json:"pages,omitempty"`
-	// Files (app API 54): that server's files switch for this one is on
+	// Files (app API 56): that server's files switch for this one is on
 	// for the project, as its last project list said: its sessions' folders
 	// read through the files methods, which ask it each time. Only a flag:
 	// a device reaches none of those methods.
@@ -956,7 +967,7 @@ func projectOf(p server.SideProject) Project {
 
 func taskOf(t server.SideTask) Task {
 	out := Task{ID: t.ID, Ref: (&tasks.Task{ID: t.ID}).Ref(), Title: t.Title, Status: string(t.Status), Priority: string(t.Priority), Notes: t.Notes,
-		Thread: t.Thread, Owner: t.Owner, Created: t.Created, Updated: t.Updated}
+		Thread: t.Thread, Owner: t.Owner, Created: t.Created, Updated: t.Updated, DoneAt: t.DoneAt, WaitsFor: t.WaitsFor, Waiters: t.Waiters}
 	for _, s := range t.Steps {
 		out.Steps = append(out.Steps, Step{N: s.N, Text: s.Text, Done: s.Done})
 	}
@@ -1203,8 +1214,8 @@ func taskAddedOf(r proto.TaskAddResult) TaskAdded {
 	return TaskAdded{Task: r.Task, Existing: r.Existing}
 }
 
-// DoneTasks is task.done's result: the board's done tasks, in board
-// order, without their notes and steps.
+// DoneTasks is task.done's result: the board's done tasks, newest first
+// since app API 54 (board order before), without their notes and steps.
 type DoneTasks struct {
 	Tasks []Task `json:"tasks"`
 }

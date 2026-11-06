@@ -54,6 +54,31 @@ public enum Dashboard {
         p.counts["done"] ?? 0
     }
 
+    /// What a done row says of its doneAt (app API 54), in the viewer's
+    /// time zone: the time alone today, the day and time before that, the
+    /// year too for another year's, no time when only the day is known;
+    /// empty when nothing dates it, as from an older tm. As the TUI's
+    /// (tasks.DoneLabel).
+    public static func finished(_ at: String, now: Date = .now, calendar: Calendar = .current) -> String {
+        func format(_ pattern: String, _ d: Date) -> String {
+            let f = DateFormatter()
+            f.locale = Locale(identifier: "en_US_POSIX")
+            f.calendar = calendar
+            f.timeZone = calendar.timeZone
+            f.dateFormat = pattern
+            return f.string(from: d)
+        }
+        if let t = try? Date(at, strategy: .iso8601), at.count > 10 {
+            if calendar.isDate(t, inSameDayAs: now) { return format("HH:mm", t) }
+            let sameYear = calendar.component(.year, from: t) == calendar.component(.year, from: now)
+            return format(sameYear ? "d MMM HH:mm" : "d MMM yyyy HH:mm", t)
+        }
+        let parts = at.split(separator: "-").map { Int($0) }
+        guard at.count == 10, parts.count == 3, let y = parts[0], let m = parts[1], let d = parts[2],
+              let day = calendar.date(from: DateComponents(year: y, month: m, day: d)) else { return "" }
+        return format(y == calendar.component(.year, from: now) ? "d MMM" : "d MMM yyyy", day)
+    }
+
     /// The tasks of ts that filter finds, in their order: each of its
     /// words is in the task's id or title, ignoring case and accents, as
     /// the TUI's Tasks tab filter (/) finds them. An empty filter finds

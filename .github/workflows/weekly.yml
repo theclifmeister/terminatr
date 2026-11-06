@@ -13,7 +13,7 @@ name: weekly
 # a hook field, or change the text tm matches (docs/SPEC.md §8.8). It
 # installs the latest of each and runs non-live checks only (no login,
 # no model calls), and opens or updates an "agent-drift" issue when one
-# fails.
+# fails. The other jobs share one weekly-failure issue (the alert job).
 
 on:
   schedule:
@@ -206,3 +206,39 @@ jobs:
           name: e2e-artifacts-race-${{ matrix.os }}-${{ strategy.job-index }}
           path: ${{ runner.temp }}/e2e-artifacts-race
           if-no-files-found: ignore
+
+  # One issue for the jobs above that failed (fuzz, e2e, e2e-race; the
+  # canary has its own). Public text: job names, failed test names and
+  # links only. Like the canary's, it comments while an issue is open and
+  # nothing closes it: close it by hand once fixed.
+  alert:
+    needs: [fuzz, e2e, e2e-race]
+    if: ${{ !cancelled() && contains(needs.*.result, 'failure') }}
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      issues: write
+    steps:
+      - name: Open or update the weekly-failure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          run="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          {
+            echo "The weekly run failed: $run"
+            echo
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?per_page=100" --jq '.jobs[] | select(.conclusion == "failure") | "- \(.name): \(.html_url)"' |
+              while IFS= read -r line; do
+                echo "$line"
+                id=$(printf '%s' "$line" | sed -E 's|.*/job/([0-9]+)$|\1|')
+                gh api "repos/$GITHUB_REPOSITORY/actions/jobs/$id/logs" 2>/dev/null |
+                  grep -oE -- '--- FAIL: [A-Za-z0-9_/]+' | sort -u | head -20 | sed 's/^/    /'
+              done
+          } > "$RUNNER_TEMP/issue.md"
+          gh label create weekly-failure --color d93f0b --description "A weekly job failed" 2>/dev/null || true
+          n=$(gh issue list --label weekly-failure --state open --json number --jq '.[0].number // ""')
+          if [ -n "$n" ]; then
+            gh issue comment "$n" --body-file "$RUNNER_TEMP/issue.md"
+          else
+            gh issue create --title "Weekly run failed" --label weekly-failure --body-file "$RUNNER_TEMP/issue.md"
+          fi

@@ -28,13 +28,24 @@ func (c *client) sideCurrent() string {
 	return c.v.Current
 }
 
+// sideMark is the project the tree marks as current: sideCurrent, but a
+// paired server's pane marks that server's project ("@alias/slug", as the
+// peer rows are folded), never a same-named local one. The band keeps
+// sideCurrent: its mod views are the local project's. c.mu held.
+func (c *client) sideMark() string {
+	if f := c.focus; f != nil && f.info.Project != "" && f.info.Server != "" {
+		return peerFold(f.info.Server, f.info.Project)
+	}
+	return c.sideCurrent()
+}
+
 // sideTree is the attach view's tree. c.mu held.
 func (c *client) sideTree() []treeRow {
 	focus := c.v.Focus
 	if c.focus != nil {
 		focus = c.focus.info.ID
 	}
-	rows := buildTree(c.side.projects, c.sideSessions(), treeIn{current: c.sideCurrent(), focus: focus, ctxHint: c.side.ctxHint, asleep: c.side.asleep,
+	rows := buildTree(c.side.projects, c.sideSessions(), treeIn{current: c.sideMark(), focus: focus, ctxHint: c.side.ctxHint, asleep: c.side.asleep,
 		tree: sideTree(c.side.projects, c.side.programs, c.v.Tree), cols: c.v.Columns, cells: c.cells, peers: c.side.peers, programs: c.side.programs})
 	rows = sideRows(rows, c.side.needsFirst)
 	if c.bandShows() {
@@ -92,7 +103,7 @@ func (c *client) band() bandIn {
 // sideFullTree is the attach view's whole tree, nothing folded and no
 // filter (W). c.mu held.
 func (c *client) sideFullTree() []treeRow {
-	rows := buildTree(c.side.projects, c.sideSessions(), treeIn{current: c.sideCurrent(), ctxHint: c.side.ctxHint, asleep: c.side.asleep, tree: unfoldedTree(c.side.projects, c.side.programs), cols: c.v.Columns, cells: c.cells, peers: c.side.peers, programs: c.side.programs})
+	rows := buildTree(c.side.projects, c.sideSessions(), treeIn{current: c.sideMark(), ctxHint: c.side.ctxHint, asleep: c.side.asleep, tree: unfoldedTree(c.side.projects, c.side.programs), cols: c.v.Columns, cells: c.cells, peers: c.side.peers, programs: c.side.programs})
 	if c.side.needsFirst {
 		rows = needsFirstOrder(rows)
 	}

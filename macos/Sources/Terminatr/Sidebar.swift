@@ -109,7 +109,7 @@ struct Sidebar: View {
                     .font(theme.sized(15, .medium))
                     .lineLimit(1)
                 Spacer(minLength: 4)
-                IconButton(symbol: "magnifyingglass", name: "Search", help: "Search projects, threads, tasks and needs (⌘K)") { app.palette.toggle() }
+                IconButton(symbol: "magnifyingglass", name: "Search", help: "Search projects, threads, tasks and needs (⌘K)") { app.togglePalette() }
                     .padding(.trailing, 5)
                 IconButton(symbol: "sidebar.left", name: "Hide the sidebar", help: "Hide the sidebar (⌃⌘S)") { app.toggleSidebar() }
                     .padding(.trailing, 16)
@@ -656,7 +656,9 @@ struct Sidebar: View {
         }
         .padding(.leading, CGFloat(SidebarGrid.inset) + indent)
         .padding(.trailing, 8)
-        .foregroundStyle(on || leads ? theme.ink : theme.muted)
+        // A working row reads one step brighter (muted to ink), no weight or
+        // size change, so nothing moves.
+        .foregroundStyle(on || leads || busy != nil ? theme.ink : theme.muted)
         .help(sleep == .asleep ? Sleep.words : "")
         // One element that says the row and its state: "T6 Network popup
         // polish, needs approval".

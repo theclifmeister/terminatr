@@ -337,28 +337,32 @@
     "result": {
      "tasks": [
       {
-       "id": 5,
-       "ref": "T5",
+       "done_at": "2026-10-27T08:40:00Z",
+       "id": 11,
+       "ref": "T11",
        "status": "done",
-       "title": "Set up the monorepo"
+       "title": "Dark mode colour tokens"
       },
       {
+       "done_at": "2026-10-26T16:05:00Z",
        "id": 8,
        "ref": "T8",
        "status": "done",
        "title": "Design tokens package"
       },
       {
+       "done_at": "2026-10-24",
        "id": 10,
        "ref": "T10",
        "status": "done",
        "title": "Header and footer components"
       },
       {
-       "id": 11,
-       "ref": "T11",
+       "done_at": "2026-10-20T11:20:00Z",
+       "id": 5,
+       "ref": "T5",
        "status": "done",
-       "title": "Dark mode colour tokens"
+       "title": "Set up the monorepo"
       }
      ]
     }
@@ -2777,7 +2781,7 @@
   }
  },
  "hello": {
-  "app_api": 54,
+  "app_api": 56,
   "build": "demo",
   "capabilities": [
    "read",
@@ -2862,7 +2866,8 @@
         "status": "ready",
         "priority": "must",
         "title": "Gift cards at checkout",
-        "updated": "2026-10-26"
+        "updated": "2026-10-26",
+        "waiters": 1
        },
        {
         "id": 17,
@@ -2870,7 +2875,10 @@
         "status": "ready",
         "priority": "should",
         "title": "Wishlist page",
-        "updated": "2026-10-26"
+        "updated": "2026-10-26",
+        "waits_for": [
+         "T18"
+        ]
        },
        {
         "id": 20,
@@ -2878,14 +2886,19 @@
         "status": "open",
         "priority": "should",
         "title": "Accessibility audit of the product page",
-        "updated": "2026-10-26"
+        "updated": "2026-10-26",
+        "waiters": 1
        },
        {
         "id": 19,
         "ref": "T19",
         "status": "open",
         "title": "Recently viewed strip on the product page",
-        "updated": "2026-10-26"
+        "updated": "2026-10-26",
+        "waits_for": [
+         "T20",
+         "acme-api/T12"
+        ]
        },
        {
         "id": 21,

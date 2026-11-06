@@ -47,13 +47,14 @@ func (e peerExport) Pages(c caller.Caller, slug string) (proto.PeerPages, error)
 	if err != nil {
 		return out, nil
 	}
-	out.Tasks, out.Truncated = peerPageTasks(b.Tasks, proto.PeerPagesBudget-len(out.Overview.Body)-len(out.Overview.Goal))
+	out.Tasks, out.Truncated = peerPageTasks(tasks.NewestDoneFirst(b.Tasks), proto.PeerPagesBudget-len(out.Overview.Body)-len(out.Overview.Goal))
 	return out, nil
 }
 
-// peerPageTasks are the board's tasks not archived, in board order, as
-// many as fit budget bytes of text: done and dropped ones go first when
-// they don't all fit. truncated says some were left out.
+// peerPageTasks are ts, the board's tasks not archived, in the order
+// given, as many as fit budget bytes of text: done and dropped ones go
+// first when they don't all fit, the last of them first, so with the
+// done tasks newest first the oldest stay home. truncated says some were left out.
 func peerPageTasks(ts []*tasks.Task, budget int) (out []proto.PeerPageTask, truncated bool) {
 	var live, closed []proto.PeerPageTask
 	for _, t := range ts {
@@ -95,7 +96,7 @@ func peerPageTasks(ts []*tasks.Task, budget int) (out []proto.PeerPageTask, trun
 
 // pageTaskBytes is about what pt's JSON takes.
 func pageTaskBytes(pt proto.PeerPageTask) int {
-	n := 96 + len(pt.Title) + len(pt.Status) + len(pt.Thread) + len(pt.Created) + len(pt.Updated)
+	n := 96 + len(pt.Title) + len(pt.Status) + len(pt.Thread) + len(pt.Created) + len(pt.Updated) + len(pt.DoneAt)
 	for _, s := range pt.Steps {
 		n += 24 + len(s.Text)
 	}
@@ -107,7 +108,7 @@ func pageTaskBytes(pt proto.PeerPageTask) int {
 // cut to proto.PeerPagesTitle and proto.PeerPagesStep runes.
 func peerPageTaskOf(t *tasks.Task) proto.PeerPageTask {
 	pt := proto.PeerPageTask{ID: t.ID, Title: cutRunes(t.Title, proto.PeerPagesTitle), Status: string(t.Status), Thread: t.Thread,
-		Created: t.Created, Updated: t.Updated}
+		Created: t.Created, Updated: t.Updated, DoneAt: t.DoneAt}
 	for i, s := range t.Steps {
 		if i == proto.PeerPagesMaxSteps {
 			break

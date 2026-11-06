@@ -69,6 +69,8 @@ type PeerTask struct {
 	StepsTotal int    `json:"steps_total,omitempty"`
 	Created    string `json:"created,omitempty"`
 	Updated    string `json:"updated,omitempty"`
+	// DoneAt is when a done task finished: absent from an older tm.
+	DoneAt string `json:"done_at,omitempty"`
 }
 
 // PeerPopupLink is the far project's link with a project of the asking

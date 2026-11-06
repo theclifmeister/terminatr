@@ -62,7 +62,6 @@ struct MainWindow: View {
         .overlay { WindowEdge() }
         .background { WindowButtons() }
         .ignoresSafeArea()
-        .ownsSectionFocus(paused: app.palette)
         .tint(theme.action)
         .foregroundStyle(theme.ink)
         // VoiceOver's rotor (VO-U) lists what needs the user, from anywhere
@@ -90,6 +89,9 @@ struct MainWindow: View {
                 }
             }
         }
+        // Outside the palette too: it hands the owner what it took the
+        // keyboard from.
+        .ownsSectionFocus(paused: app.palette)
         .sheet(isPresented: $app.shortcuts) { ShortcutsSheet() }
         .sheet(isPresented: $app.welcome) { FirstRunSheet() }
         .sheet(isPresented: $app.pairServer) { PairServerSheet() }

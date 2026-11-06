@@ -177,3 +177,29 @@ func TestDashPrefixCommand(t *testing.T) {
 		t.Fatalf("prefix+g over a session: %+v, sent %d", m.result, len(src.commands))
 	}
 }
+
+// TestSessionCommandPaired: a local project's mod commands neither show
+// in the menu nor run on a paired server's pane whose remote project has
+// the same slug.
+func TestSessionCommandPaired(t *testing.T) {
+	c, sent := commandClient()
+	c.focus.info.Server = "lab"
+	for _, it := range c.sessionItems() {
+		if strings.HasSuffix(it.label, " · lab") {
+			t.Fatalf("paired pane's menu has %q", it.label)
+		}
+	}
+	mc, ok := c.sessionCommand("g")
+	if !ok {
+		t.Fatal("no command on g")
+	}
+	c.runCommand(mc)
+	select {
+	case p := <-sent:
+		t.Fatalf("sent %+v for a paired pane", p)
+	case <-time.After(50 * time.Millisecond):
+	}
+	if !strings.Contains(c.flash, "paired") {
+		t.Fatalf("flash %q", c.flash)
+	}
+}
