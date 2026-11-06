@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 52
+    public static let version = 53
 
     public struct AdoptRequestParams: Codable, Sendable, Hashable {
         public var id: String
@@ -1224,6 +1224,7 @@ public enum AppAPI {
         public var thread: String
         public var task: String
         public var title: String
+        public var repo: String
         public var state: String
         public var name: String
         public var size: Int
@@ -1231,10 +1232,11 @@ public enum AppAPI {
         public var peer: String
         public var message: String
 
-        public init(thread: String = "", task: String = "", title: String, state: String, name: String, size: Int, time: Date, peer: String = "", message: String = "") {
+        public init(thread: String = "", task: String = "", title: String, repo: String = "", state: String, name: String, size: Int, time: Date, peer: String = "", message: String = "") {
             self.thread = thread
             self.task = task
             self.title = title
+            self.repo = repo
             self.state = state
             self.name = name
             self.size = size
@@ -1247,6 +1249,7 @@ public enum AppAPI {
             case thread
             case task
             case title
+            case repo
             case state
             case name
             case size
@@ -5538,6 +5541,7 @@ extension AppAPI.LibraryFile {
         self.thread = try c.decodeIfPresent(String.self, forKey: .thread) ?? ""
         self.task = try c.decodeIfPresent(String.self, forKey: .task) ?? ""
         self.title = try c.decode(String.self, forKey: .title)
+        self.repo = try c.decodeIfPresent(String.self, forKey: .repo) ?? ""
         self.state = try c.decode(String.self, forKey: .state)
         self.name = try c.decode(String.self, forKey: .name)
         self.size = try c.decode(Int.self, forKey: .size)

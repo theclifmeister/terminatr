@@ -127,8 +127,9 @@ struct MemoryPane: View {
 
 /// The project's library: the files threads attached to their reports
 /// (resolved and archived threads' too) and the files linked projects
-/// sent, grouped by thread, newest first. A file opens in Quick Look
-/// (space, or a double click), its app (Open), or is saved (Save As…).
+/// sent, grouped by thread, newest first, with a filter from 7 files and
+/// chips for its kinds (T1054). A file opens in Quick Look (space, or a
+/// double click), its app (Open), or is saved (Save As…).
 struct LibraryPane: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
@@ -141,6 +142,13 @@ struct LibraryPane: View {
     @State private var looking: URL?
     @State private var failure: String?
     @State private var busy = false
+    @State private var query = ""
+    @State private var kind: LibraryPage.Kind?
+
+    /// The files the filter and the kind leave.
+    private var shown: [AppAPI.LibraryFile] {
+        LibraryPage.shown(files ?? [], query: query, kind: kind)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -150,6 +158,7 @@ struct LibraryPane: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
             }
+            narrowing
             if files?.isEmpty == true {
                 Text("No files: a thread's report attaches them (tm report --attach).")
                     .font(theme.sized(Flat.text))
@@ -157,8 +166,21 @@ struct LibraryPane: View {
                     .padding(.horizontal, 24)
                     .padding(.vertical, 22)
                 Spacer()
+            } else if files != nil, shown.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Nothing matches.")
+                        .font(theme.sized(Flat.text))
+                        .foregroundStyle(theme.muted)
+                    Button("Show all files") {
+                        query = ""
+                        kind = nil
+                    }
+                }
+                .padding(.horizontal, 24)
+                .padding(.vertical, 22)
+                Spacer()
             } else {
-                let groups = LibraryPage.groups(files ?? [])
+                let groups = LibraryPage.groups(shown)
                 PickList(selection: $picked, order: groups.flatMap { $0.files.map(Self.key) }, name: "Files") {
                     ForEach(groups) { g in
                         HStack(alignment: .firstTextBaseline) {
@@ -195,6 +217,32 @@ struct LibraryPane: View {
         }
         .quickLookPreview($looking)
         .task(id: project) { await list() }
+        .onChange(of: project) {
+            query = ""
+            kind = nil
+        }
+    }
+
+    /// The filter and the chips above the list, each when it has a use.
+    @ViewBuilder
+    private var narrowing: some View {
+        let all = files ?? []
+        let chips = LibraryPage.chips(all, query: query, kind: kind)
+        let filters = LibraryPage.showsFilter(all, query: query)
+        if filters || !chips.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                if filters {
+                    PaneFilter(prompt: LibraryPage.filterPrompt(all), label: "Filter the library",
+                               help: "Shows the files whose name, task, thread or repository has these words", text: $query)
+                }
+                if !chips.isEmpty {
+                    LibraryChips(chips, kind: Binding { LibraryPage.picked(all, kind) } set: { kind = $0 })
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
+            .padding(.bottom, 4)
+        }
     }
 
     @ViewBuilder
@@ -212,7 +260,7 @@ struct LibraryPane: View {
     static func key(_ f: AppAPI.LibraryFile) -> String { LibraryPage.id(f) + "/" + f.name }
 
     private func file(_ key: String?) -> AppAPI.LibraryFile? {
-        files?.first { Self.key($0) == key }
+        shown.first { Self.key($0) == key }
     }
 
     private func list() async {

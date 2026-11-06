@@ -102,6 +102,52 @@ public struct MemoryFileRow: View {
     }
 }
 
+/// The Library page's kinds (T1054): a chip with its count for all and
+/// for each kind that has files. They scroll sideways when they don't fit.
+public struct LibraryChips: View {
+    @Environment(\.theme) private var theme
+    let chips: [LibraryPage.Chip]
+    @Binding var kind: LibraryPage.Kind?
+
+    public init(_ chips: [LibraryPage.Chip], kind: Binding<LibraryPage.Kind?>) {
+        self.chips = chips
+        _kind = kind
+    }
+
+    public var body: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 5) {
+                ForEach(chips) { c in
+                    let on = c.kind == kind
+                    Button {
+                        kind = c.kind
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(c.word)
+                            Text(String(c.count)).opacity(on ? 0.72 : 1).foregroundStyle(on ? theme.pane : theme.muted)
+                        }
+                        .font(theme.sized(Flat.label))
+                        .foregroundStyle(on ? theme.pane : theme.ink)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 3)
+                        .background(on ? theme.ink : .clear, in: RoundedRectangle(cornerRadius: 5))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 5)
+                                .strokeBorder(on ? theme.ink : theme.line, lineWidth: theme.contrast ? 1.5 : 1)
+                        }
+                        .contentShape(RoundedRectangle(cornerRadius: 5))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("\(c.word), \(c.count)")
+                    .accessibilityAddTraits(on ? [.isButton, .isSelected] : .isButton)
+                }
+            }
+        }
+        .scrollIndicators(.hidden)
+    }
+}
+
 /// A library file in the Library page: its name, size and date.
 public struct LibraryFileRow: View {
     @Environment(\.theme) private var theme

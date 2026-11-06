@@ -51,7 +51,8 @@ struct ProjectDashboard: View {
         let deck = Dashboard.onDeck(project), backlog = Dashboard.backlog(project)
         let doneCount = app.listsDone ? Dashboard.doneCount(project) : 0
         if !deck.isEmpty || !backlog.isEmpty || doneCount > 0 {
-            BoardFilter(text: $filter)
+            PaneFilter(prompt: "Filter tasks", label: "Filter the board's tasks",
+                       help: "Shows the tasks whose id or title has these words, the done ones too", text: $filter)
             boardGroups(deck: deck, backlog: backlog, doneCount: doneCount)
         } else {
             Text("Nothing on the board yet: + adds a task.")
@@ -467,8 +468,11 @@ struct StartButton: View {
 
 /// The board's filter field: words that a task's id or title has (the
 /// TUI's / on the Tasks tab); esc clears it.
-private struct BoardFilter: View {
+struct PaneFilter: View {
     @Environment(\.theme) private var theme
+    let prompt: String
+    let label: String
+    let help: String
     @Binding var text: String
 
     var body: some View {
@@ -476,10 +480,10 @@ private struct BoardFilter: View {
             Image(systemName: "line.3.horizontal.decrease")
                 .foregroundStyle(theme.muted)
                 .accessibilityHidden(true)
-            TextField("Filter tasks", text: $text)
+            TextField(prompt, text: $text)
                 .textFieldStyle(.plain)
                 .onExitCommand { text = "" }
-                .accessibilityLabel("Filter the board's tasks")
+                .accessibilityLabel(label)
             if !text.isEmpty {
                 Button { text = "" } label: { Image(systemName: "xmark.circle.fill") }
                     .buttonStyle(.borderless)
@@ -492,7 +496,7 @@ private struct BoardFilter: View {
         .padding(.horizontal, 11)
         .frame(maxWidth: 320, minHeight: 34)
         .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(theme.line, lineWidth: theme.contrast ? 1.5 : 1))
-        .help("Shows the tasks whose id or title has these words, the done ones too")
+        .help(help)
     }
 }
 
