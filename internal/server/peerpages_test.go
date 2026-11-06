@@ -56,7 +56,7 @@ func TestPeerPagesAllowlist(t *testing.T) {
 	if z := zeroFields(reflect.ValueOf(pf)); len(z) > 0 {
 		t.Errorf("library file fields not copied: %v", z)
 	}
-	if want := []string{"DocTitle", "Message", "Name", "Peer", "Published", "Repo", "Size", "State", "Task", "TaskStatus", "Thread", "Time", "Title"}; !slices.Equal(fieldNames(reflect.TypeFor[thread.LibFile]()), want) {
+	if want := []string{"DocTitle", "Message", "Name", "Peer", "Project", "Published", "Repo", "Server", "Size", "State", "Task", "TaskStatus", "Thread", "Time", "Title"}; !slices.Equal(fieldNames(reflect.TypeFor[thread.LibFile]()), want) {
 		t.Errorf("thread.LibFile has %v: decide what a paired server's library sees (peerLibraryFileOf)", fieldNames(reflect.TypeFor[thread.LibFile]()))
 	}
 

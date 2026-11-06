@@ -1232,6 +1232,42 @@ func doneTasksOf(r server.TaskDone) DoneTasks {
 	return out
 }
 
+// History is project.history's and peer.history's result: a project's
+// daily numbers, from tm's records alone, its days in the answering
+// server's time zone. Typical and TypicalSeconds come from 10 timed
+// tasks; Truncated says a paired server left out its oldest days.
+type History struct {
+	FirstRecord    string       `json:"first_record,omitempty"`
+	Done           int          `json:"done"`
+	Open           int          `json:"open"`
+	Dropped        int          `json:"dropped"`
+	Days           []HistoryDay `json:"days"`
+	BestDay        *HistoryDay  `json:"best_day,omitempty"`
+	Timed          int          `json:"timed"`
+	TypicalSeconds int64        `json:"typical_seconds,omitempty"`
+	Typical        string       `json:"typical,omitempty"`
+	Truncated      bool         `json:"truncated,omitempty"`
+}
+
+// HistoryDay is a day with work (2026-11-06) and how many tasks finished
+// on it.
+type HistoryDay struct {
+	Day  string `json:"day"`
+	Done int    `json:"done"`
+}
+
+func historyOf(r proto.History) History {
+	out := History{FirstRecord: r.FirstRecord, Done: r.Done, Open: r.Open, Dropped: r.Dropped, Days: make([]HistoryDay, 0, len(r.Days)),
+		Timed: r.Timed, TypicalSeconds: r.TypicalSeconds, Typical: r.Typical, Truncated: r.Truncated}
+	for _, d := range r.Days {
+		out.Days = append(out.Days, HistoryDay{Day: d.Day, Done: d.Done})
+	}
+	if r.BestDay != nil {
+		out.BestDay = &HistoryDay{Day: r.BestDay.Day, Done: r.BestDay.Done}
+	}
+	return out
+}
+
 // Templates is task.templates' result: the task templates of the mods
 // that run in the project, by mod and name.
 type Templates struct {
@@ -1624,22 +1660,46 @@ type (
 		Project string `json:"project"`
 		Path    string `json:"path"`
 	}
-	// LibraryReadParams are library.read's: the file of thread (or
-	// message) ID named Name, the chunk from Offset.
-	LibraryReadParams struct {
-		Project string `json:"project"`
-		ID      string `json:"id"`
-		Name    string `json:"name"`
-		Offset  int64  `json:"offset,omitempty"`
+	// LibraryProgram names a program in library.list, library.read and
+	// library.thumbnail (app API 59), in place of a project; absent
+	// from an app that doesn't ask, so a tm that doesn't know it isn't
+	// sent it. A tagged struct because a bare field would go out empty.
+	LibraryProgram struct {
+		Slug string `json:"slug"`
 	}
-	// LibraryThumbnailParams are library.thumbnail's: the file of thread
-	// (or message) ID named Name.
+	// LibraryListParams are library.list's: a project's library, or
+	// Program's: its director's own files, then its members'.
+	LibraryListParams struct {
+		Project string          `json:"project"`
+		Program *LibraryProgram `json:"program,omitempty"`
+	}
+	// LibraryReadParams are library.read's: the file of thread (or
+	// message, or SeatID for the seat's own) ID named Name, the chunk from
+	// Offset. Program for its director's own file.
+	LibraryReadParams struct {
+		Project string          `json:"project"`
+		Program *LibraryProgram `json:"program,omitempty"`
+		ID      string          `json:"id"`
+		Name    string          `json:"name"`
+		Offset  int64           `json:"offset,omitempty"`
+	}
+	// LibraryThumbnailParams are library.thumbnail's: the file library.read
+	// would name.
 	LibraryThumbnailParams struct {
-		Project string `json:"project"`
-		ID      string `json:"id"`
-		Name    string `json:"name"`
+		Project string          `json:"project"`
+		Program *LibraryProgram `json:"program,omitempty"`
+		ID      string          `json:"id"`
+		Name    string          `json:"name"`
 	}
 )
+
+// slug is the program named, "" for none.
+func (p *LibraryProgram) slug() string {
+	if p == nil {
+		return ""
+	}
+	return p.Slug
+}
 
 // MemoryFiles are memory.list's result: CONTEXT.md and MEMORY.md when
 // they are there, then the notes by title.
@@ -1665,9 +1725,12 @@ type MemoryText struct {
 	Truncated bool   `json:"truncated,omitempty"`
 }
 
-// Library is library.list's result, newest file first.
+// Library is library.list's result, newest file first; a program's in its
+// order (the director's own, then each member's), with what it leaves out
+// for now in Note (app API 59).
 type Library struct {
 	Files []LibraryFile `json:"files"`
+	Note  string        `json:"note,omitempty"`
 }
 
 // LibraryFile is a file a thread's report attached (Thread, with its
@@ -1680,7 +1743,10 @@ type Library struct {
 // heading, "" for none (app API 64; the row shows it with the name, and the
 // filter finds by it). Published is the https page the designs list has for
 // a page of its design task, "" for none, and always on a paired server's
-// (app API 64). library.read names it by Thread, else Message, and Name.
+// (app API 64). A coordinator's or director's own file has "seat" for its
+// Thread (app API 59). In a program's listing Project is the member it is in
+// and Server that member's paired server, both empty for the director's own.
+// library.read names it by Thread, else Message, and Name.
 type LibraryFile struct {
 	Thread     string    `json:"thread,omitempty"`
 	Task       string    `json:"task,omitempty"`
@@ -1695,6 +1761,8 @@ type LibraryFile struct {
 	Time       time.Time `json:"time"`
 	Peer       string    `json:"peer,omitempty"`
 	Message    string    `json:"message,omitempty"`
+	Project    string    `json:"project,omitempty"`
+	Server     string    `json:"server,omitempty"`
 }
 
 // LibraryChunk is library.read's result: Data from Offset (at most
@@ -1721,10 +1789,10 @@ func memoryTextOf(r proto.MemoryReadResult) MemoryText {
 }
 
 func libraryOf(r proto.LibraryListResult) Library {
-	out := Library{Files: []LibraryFile{}}
+	out := Library{Files: []LibraryFile{}, Note: r.Note}
 	for _, f := range r.Files {
 		out.Files = append(out.Files, LibraryFile{Thread: f.Thread, Task: f.Task, TaskStatus: f.TaskStatus, Title: f.Title, Repo: f.Repo, State: f.State,
-			Name: f.Name, DocTitle: f.DocTitle, Published: f.Published, Size: f.Size, Time: f.Time, Peer: f.Peer, Message: f.Message})
+			Name: f.Name, DocTitle: f.DocTitle, Published: f.Published, Size: f.Size, Time: f.Time, Peer: f.Peer, Message: f.Message, Project: f.Project, Server: f.Server})
 	}
 	return out
 }

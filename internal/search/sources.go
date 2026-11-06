@@ -41,6 +41,8 @@ const (
 	fileReport   = "report"   // threads/<id>/REPORT.md, reports/<n>.md
 	fileLibrary  = "library"  // threads/<id>/library/<name>
 	fileLibName  = "libname"  // a library file not read as text: found by its name
+	fileSeatLib  = "seatlib"  // library/<name>: a coordinator's or director's own
+	fileSeatName = "seatname" // one not read as text: found by its name
 	fileInbox    = "inbox"    // inbox/<name>.md, inbox/done/<name>.md
 	fileJournal  = "journal"  // JOURNAL.md
 	fileJournalZ = "journalz" // journal/<yyyy-mm>.md.gz
@@ -57,6 +59,10 @@ type source struct {
 	Size  int64
 	MTime int64 // UnixNano
 }
+
+// seatLibraryID is a seat's own library files' id (thread.SeatID) in a
+// chunk's: lib:seat/<name>.
+const seatLibraryID = "seat"
 
 // libraryExts are the library files the index reads, as text.
 var libraryExts = []string{".md", ".txt", ".html", ".htm", ".json", ".csv"}
@@ -102,6 +108,13 @@ func walk(dir string, kind project.Kind) ([]source, error) {
 	w.each("designs", nil, func(name string, fi fs.FileInfo) {
 		if strings.HasSuffix(name, ".md") {
 			w.add("designs/"+name, "designs", fileDesign, fi)
+		}
+	})
+	w.each("library", nil, func(name string, fi fs.FileInfo) {
+		if libraryFile(name) && fi.Size() <= MaxFile {
+			w.add("library/"+name, "library", fileSeatLib, fi)
+		} else {
+			w.add("library/"+name, "library", fileSeatName, fi)
 		}
 	})
 	w.add("JOURNAL.md", "journal", fileJournal, w.lstat("JOURNAL.md"))
@@ -358,7 +371,7 @@ func parseThreadMeta(data []byte) threadMeta {
 // parse reads a source into its chunks, each with the text it is in;
 // it answers the source's bytes too.
 func parse(dir string, s source) ([]piece, []byte, error) {
-	if s.File == fileLibName {
+	if s.File == fileLibName || s.File == fileSeatName {
 		ps, err := parseText(dir, s, "")
 		return ps, nil, err
 	}
@@ -497,11 +510,17 @@ func parseText(dir string, s source, text string) ([]piece, error) {
 			}
 		}
 		c.Thread, c.Task = id, meta.Task
-		if s.File == fileLibName {
+		if s.File == fileLibName || s.File == fileSeatName {
 			name := strings.TrimPrefix(rest, "library/")
 			return withText(libraryName(id, name, meta, c), name), nil
 		}
 		return threadFile(s.File, id, rest, text, meta, reports, c), nil
+	case fileSeatLib, fileSeatName:
+		name := path.Base(s.Rel)
+		if s.File == fileSeatName {
+			return withText(libraryName(seatLibraryID, name, threadMeta{}, c), name), nil
+		}
+		return threadFile(fileLibrary, seatLibraryID, "library/"+name, text, threadMeta{}, nil, c), nil
 	case fileInbox:
 		return inboxItem(path.Base(s.Rel), text, c), nil
 	case fileJournal, fileJournalZ:

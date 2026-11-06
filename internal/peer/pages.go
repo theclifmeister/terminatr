@@ -294,7 +294,7 @@ func cleanLibrary(lib proto.PeerLibrary) proto.PeerLibrary {
 		if len(fs) == proto.PeerPagesMaxFiles {
 			break
 		}
-		if !peerThread.MatchString(f.Thread) || f.Name == "" {
+		if !peerLibraryID.MatchString(f.Thread) || f.Name == "" {
 			continue
 		}
 		f.Name = textsafe.Line(f.Name, 200)

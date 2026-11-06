@@ -371,3 +371,17 @@ func TestLibraryDocTitleAndPublished(t *testing.T) {
 		t.Errorf("archived: %+v", f)
 	}
 }
+
+// TestSeatLibraryDocTitle: a coordinator's own file has its title too, and
+// no link: it has no task.
+func TestSeatLibraryDocTitle(t *testing.T) {
+	p := libFixture(t)
+	os.MkdirAll(p.Path("library"), 0o755)
+	if err := os.WriteFile(p.Path("library", "plan.md"), []byte("# The plan\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := SeatLibrary(&p.Folder)
+	if len(got) != 1 || got[0].DocTitle != "The plan" || got[0].Published != "" {
+		t.Errorf("seat file: %+v", got)
+	}
+}

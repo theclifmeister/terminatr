@@ -142,8 +142,9 @@ func (e peerExport) Library(c caller.Caller, slug string) (proto.PeerLibrary, er
 		return proto.PeerLibrary{}, err
 	}
 	out := proto.PeerLibrary{Files: []proto.PeerLibraryFile{}}
-	// The threads' files only: a linked project's (link.LibraryFiles)
-	// came from another server, not this one's to pass on.
+	// The threads' and the coordinator's own files only: a linked
+	// project's (link.LibraryFiles) came from another server, not this
+	// one's to pass on.
 	files, err := thread.Library(p)
 	if err != nil {
 		return out, nil
@@ -172,9 +173,9 @@ func (e peerExport) LibraryRead(c caller.Caller, pp proto.PeerLibraryReadParams)
 	if err != nil {
 		return proto.LibraryReadResult{}, err
 	}
-	// A thread's library file only, never one a link brought (those
-	// are named by a message id, which ValidID refuses here).
-	if !thread.ValidID(pp.Thread) {
+	// A thread's or the coordinator's own library file, never one a link
+	// brought (those are named by a message id, refused here).
+	if !thread.ValidLibraryID(pp.Thread) {
 		return proto.LibraryReadResult{}, proto.Errorf("unknown-thread", "%q is not a thread id like t-0003", pp.Thread)
 	}
 	data, size, mod, err := thread.ReadLibraryChunk(p, pp.Thread, pp.Name, pp.Offset, proto.PeerLibraryChunk)
@@ -246,7 +247,7 @@ func (s *Server) readPeerLibrary(p proto.PeerLibraryReadReadParams, _ callCtx) (
 	if perr := checkPeerRead(proto.MethodPeerLibraryRead, p.Alias, p.Project); perr != nil {
 		return nil, perr
 	}
-	if !thread.ValidID(p.Thread) || p.Name == "" || p.Offset < 0 {
+	if !thread.ValidLibraryID(p.Thread) || p.Name == "" || p.Offset < 0 {
 		return nil, proto.Errorf(proto.ErrBadParams, "peer.library-read needs a thread, a file name and an offset")
 	}
 	r, err := s.peers.LibraryRead(context.Background(), p.Alias,
@@ -264,7 +265,7 @@ func (s *Server) readPeerThumbnail(p proto.PeerLibraryThumbnailReadParams, _ cal
 	if perr := checkPeerRead(proto.MethodPeerLibraryThumbnail, p.Alias, p.Project); perr != nil {
 		return nil, perr
 	}
-	if !thread.ValidID(p.Thread) || p.Name == "" {
+	if !thread.ValidLibraryID(p.Thread) || p.Name == "" {
 		return nil, proto.Errorf(proto.ErrBadParams, "peer.library-thumbnail needs a thread and a file name")
 	}
 	r, err := s.peers.LibraryThumbnail(context.Background(), p.Alias,

@@ -89,7 +89,7 @@ func demoBridge() async throws -> Bridge {
         #expect(m.path == f.path && m.text.utf8.count == f.bytes)
     }
 
-    let library = try await b.call(AppAPI.Methods.libraryList, AppAPI.ProjectParams(project: "acme-web")).files
+    let library = try await b.call(AppAPI.Methods.libraryList, AppAPI.LibraryListParams(project: "acme-web")).files
     #expect(LibraryPage.groups(library).map(\.id) == ["t-0103", "t-0105", "@billing-api", "t-0098"])
     for f in library {
         let read = await LibraryPage.read({ p in try await b.call(AppAPI.Methods.libraryRead, p) }, project: "acme-web", file: f)
@@ -101,7 +101,7 @@ func demoBridge() async throws -> Bridge {
     }
 
     #expect(try await b.call(AppAPI.Methods.memoryList, AppAPI.ProjectParams(project: "billing-api")).files.isEmpty)
-    #expect(try await b.call(AppAPI.Methods.libraryList, AppAPI.ProjectParams(project: "docs-site")).files.isEmpty)
+    #expect(try await b.call(AppAPI.Methods.libraryList, AppAPI.LibraryListParams(project: "docs-site")).files.isEmpty)
 }
 
 /// A recording's answers go by the request's params: the first that
@@ -122,7 +122,7 @@ func demoBridge() async throws -> Bridge {
     #expect(try await read("b", "MEMORY.md") == "b's")
     #expect(try await read("a", "MEMORY.md") == "fallback")
     await #expect(throws: AppAPI.Error.self) {
-        _ = try await b.call(AppAPI.Methods.libraryList, AppAPI.ProjectParams(project: "a"))
+        _ = try await b.call(AppAPI.Methods.libraryList, AppAPI.LibraryListParams(project: "a"))
     }
 }
 

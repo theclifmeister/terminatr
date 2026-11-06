@@ -18,7 +18,7 @@ const (
 	// (PeerPagesParams): a PeerPages.
 	MethodPeerPages = "peer.pages"
 	// MethodPeerPagesLibrary lists its library (PeerPagesParams): a
-	// PeerLibrary, its threads' files only.
+	// PeerLibrary, its coordinator's and its threads' files only.
 	MethodPeerPagesLibrary = "peer.pages.library"
 	// MethodPeerPagesLibraryRead reads one of those files a chunk at a
 	// time (PeerLibraryReadParams): a LibraryReadResult of at most
