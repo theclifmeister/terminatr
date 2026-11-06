@@ -43,6 +43,7 @@ func statusLine(s proto.SessionInfo, ts *thread.Status, pending bool, cols int, 
 // settings file under the test's TERMINATR_HOME, and Load reads them
 // back once one was set.
 type fakeSource struct {
+	archived *tasks.Task
 	// pneeds are program.needs' answers by program; panswers the
 	// AnswerProgram calls (slug/Q2=labels); newPrograms NewProgram's.
 	pneeds      map[string]proto.ProgramNeedsResult
@@ -219,6 +220,13 @@ func (f *fakeSource) Load() Data {
 	}
 	return f.data
 }
+func (f *fakeSource) ArchivedTask(_, ref string) *tasks.Task {
+	if f.archived != nil && f.archived.Ref() == ref {
+		return f.archived
+	}
+	return nil
+}
+
 func (f *fakeSource) Board(string) (*tasks.Board, error) {
 	if f.board != nil {
 		return f.board, nil

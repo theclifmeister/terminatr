@@ -102,7 +102,7 @@ type Action struct {
 // "not available" when pressed.
 var Actions = []Action{
 	{ID: "task.show", Label: "show", Key: "enter", On: OnTask,
-		Precondition: "the task is on the project's board"},
+		Precondition: "the task is on the project's board or in its archive"},
 	{ID: "task.delegate", Label: "delegate", Key: "D", On: OnTask, Confirm: true,
 		Precondition: "the task is open, ready or blocked, and nothing already asks the coordinator about it"},
 	{ID: "task.accept", Label: "accept", Key: "A", On: OnTask, Confirm: true,
@@ -149,6 +149,9 @@ type State interface {
 	Project(slug string) bool
 	// Task is slug's task ref ("T12"), nil when the board has none.
 	Task(slug, ref string) *tasks.Task
+	// ArchivedTask is slug's task ref in its archive, nil when it has
+	// none: what task.show still opens, and no other action reaches.
+	ArchivedTask(slug, ref string) *tasks.Task
 	// Asked is the kind of the unhandled item that asks slug's
 	// coordinator about task ref, "" for none (project.TaskAsked).
 	Asked(slug, ref string) string
@@ -207,6 +210,9 @@ func Why(id string, st State, t Target) string {
 		return ""
 	}
 	task := st.Task(t.Project, t.Task)
+	if task == nil && id == "task.show" {
+		task = st.ArchivedTask(t.Project, t.Task)
+	}
 	if task == nil {
 		return t.Project + " has no task " + t.Task
 	}

@@ -729,3 +729,46 @@ func TestLibraryStackKeysAndClicks(t *testing.T) {
 		t.Fatalf("v's hint on a plain row:\n%s", out)
 	}
 }
+
+// TestLibraryStripsFixture: the tiles' table is the Mac's (the TUI has no
+// strip), and what it counts is the TUI's rows: a stack is one here too.
+func TestLibraryStripsFixture(t *testing.T) {
+	raw, err := os.ReadFile("testdata/library-filter.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fx struct {
+		Strips []struct {
+			Why   string   `json:"why"`
+			Names []string `json:"names"`
+			Strip []string `json:"strip"`
+			Rows  []string `json:"rows"`
+			More  int      `json:"more"`
+		} `json:"strips"`
+	}
+	if err := json.Unmarshal(raw, &fx); err != nil {
+		t.Fatal(err)
+	}
+	if len(fx.Strips) < 6 {
+		t.Fatalf("%d cases", len(fx.Strips))
+	}
+	for _, c := range fx.Strips {
+		var files []thread.LibFile
+		for _, n := range c.Names {
+			files = append(files, thread.LibFile{Thread: "t-0001", Name: n})
+		}
+		var got []string
+		for _, e := range libEntries(files) {
+			got = append(got, e.title)
+		}
+		want := append(append([]string{}, c.Strip...), c.Rows...)
+		if len(got) != len(want)+c.More {
+			t.Errorf("%s: %d rows %v, want %d", c.Why, len(got), got, len(want)+c.More)
+		}
+		for _, w := range want {
+			if !slices.Contains(got, w) {
+				t.Errorf("%s: no %s in %v", c.Why, w, got)
+			}
+		}
+	}
+}

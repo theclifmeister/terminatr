@@ -16,7 +16,9 @@ type state struct {
 	menus    map[string][]MenuQuestion
 }
 
-func (s state) Project(slug string) bool { return slug == "alpha" }
+func (s state) Project(slug string) bool                  { return slug == "alpha" }
+func (s state) ArchivedTask(slug, ref string) *tasks.Task { return nil }
+
 func (s state) Task(slug, ref string) *tasks.Task {
 	if slug != "alpha" {
 		return nil
@@ -178,5 +180,32 @@ func TestTaskRef(t *testing.T) {
 		if TaskRef(s) != want {
 			t.Errorf("TaskRef(%q) = %v", s, !want)
 		}
+	}
+}
+
+// archivedState has T9 in its archive.
+type archivedState struct{ state }
+
+func (archivedState) ArchivedTask(slug, ref string) *tasks.Task {
+	if ref == "T9" {
+		return &tasks.Task{ID: 9, Status: tasks.Done, Archived: true}
+	}
+	return nil
+}
+
+// TestWhyArchived: task.show reaches an archived task; nothing else does.
+func TestWhyArchived(t *testing.T) {
+	st := archivedState{}
+	target := Target{Project: "alpha", Task: "T9"}
+	if why := Why("task.show", st, target); why != "" {
+		t.Errorf("task.show of an archived task: %s", why)
+	}
+	for _, id := range []string{"task.send-back", "task.priority", "task.delegate"} {
+		if why := Why(id, st, target); why == "" {
+			t.Errorf("%s reached an archived task", id)
+		}
+	}
+	if why := Why("task.show", st, Target{Project: "alpha", Task: "T8"}); why == "" {
+		t.Error("task.show of no task")
 	}
 }

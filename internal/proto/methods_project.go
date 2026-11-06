@@ -130,8 +130,8 @@ const MethodTaskGet = "task.get"
 // newest first (tasks.NewestDoneFirst), without their notes and steps
 // (since protocol 24):
 // what projects.watch leaves out, for a console's board when the user
-// shows the done tasks. Params TaskDoneParams, result {tasks}
-// (server.TaskDone). The human's.
+// shows the done tasks. Params TaskDoneParams, result server.TaskDone:
+// a range and a page of them, or their groups. The human's.
 const MethodTaskDone = "task.done"
 
 // MethodTaskTemplates lists the task templates of the enabled mods that
@@ -141,9 +141,21 @@ const MethodTaskDone = "task.done"
 const MethodTaskTemplates = "task.templates"
 
 // TaskDoneParams are the params of task.done and task.templates: the
-// project.
+// project. For task.done, with nothing else: the board's done tasks.
+// Groups asks for Done's headings instead (tasks.GroupDone), the
+// archive's tasks counted and each open heading's rows with it. From and
+// To narrow the list to days, both inclusive; Archived reads the archive
+// too; Offset and Limit take a page (Limit 0: all). The days are TZ's, an
+// IANA zone name, the server's own when empty or unknown.
 type TaskDoneParams struct {
-	Project string `json:"project"`
+	Project  string `json:"project"`
+	Groups   bool   `json:"groups,omitempty"`
+	From     string `json:"from,omitempty"`
+	To       string `json:"to,omitempty"`
+	Archived bool   `json:"archived,omitempty"`
+	Offset   int    `json:"offset,omitempty"`
+	Limit    int    `json:"limit,omitempty"`
+	TZ       string `json:"tz,omitempty"`
 }
 
 // TaskTemplate is a task template: Ref is how task.add names it

@@ -131,18 +131,30 @@ public enum LibraryPage {
         /// Its files as rows: a stack's two are one (T1057).
         public var rows: [Row] { LibraryPage.rows(files) }
 
-        /// How it lists: its rows, and its fold's row if any.
-        public func listed(open: Bool, query: String) -> (rows: [Row], more: Int, fewer: Bool) {
-            let rows = rows
-            let f = LibraryPage.fold(rows.count, open: open, query: query)
-            return (Array(rows.prefix(f.rows)), f.more, f.fewer)
+        /// How it lists (T1055, T1059): the rows tiles says draw as thumbnails
+        /// go in its strip, the rest stay rows; a stack is one of either, a
+        /// tile only when both its files draw. Folded, four of the one and six
+        /// of the other, and +N for what's left of both; a group with no tiles
+        /// folds as it always did. Words in the filter open it, so what they
+        /// find shows.
+        public func listed(open: Bool, query: String, tiles: (AppAPI.LibraryFile) -> Bool = { _ in false }) -> Listing {
+            let all = self.rows
+            let strip = all.filter { $0.files.allSatisfy(tiles) }, rows = all.filter { !$0.files.allSatisfy(tiles) }
+            if strip.isEmpty {
+                let f = LibraryPage.fold(rows.count, open: open, query: query)
+                return Listing(strip: [], rows: Array(rows.prefix(f.rows)), more: f.more, fewer: f.fewer)
+            }
+            let more = max(0, strip.count - LibraryPage.stripAt) + max(0, rows.count - LibraryPage.foldAt)
+            if !LibraryPage.words(query).isEmpty || more == 0 { return Listing(strip: strip, rows: rows, more: 0, fewer: false) }
+            if open { return Listing(strip: strip, rows: rows, more: 0, fewer: true) }
+            return Listing(strip: Array(strip.prefix(LibraryPage.stripAt)), rows: Array(rows.prefix(LibraryPage.foldAt)), more: more, fewer: false)
         }
     }
 
     /// A row of a group: one file, or a stack's two, the same picture twice
     /// (T1057), which the row's switch goes between. A wrong pair costs
     /// little: the switch shows both and the heading counts both.
-    public struct Row: Identifiable, Sendable, Equatable {
+    public struct Row: Identifiable, Sendable, Hashable {
         /// One file, or a stack's two in the list's order.
         public let files: [AppAPI.LibraryFile]
         /// A stack's words, one per file: "dark", "light".
@@ -242,6 +254,33 @@ public enum LibraryPage {
         return files.indices.filter { !second.contains($0) }.map { i in
             stacks[i] ?? Row(files: [files[i]], words: [], title: files[i].name)
         }
+    }
+
+    /// A group as it lists: its strip, its rows, and its fold if any.
+    public struct Listing: Sendable, Equatable {
+        public let strip: [Row]
+        public let rows: [Row]
+        /// How many tiles and rows its fold hides: a stack is one.
+        public let more: Int
+        /// Whether it offers to fold again.
+        public let fewer: Bool
+
+        /// What it shows, top to bottom.
+        public var all: [Row] { strip + rows }
+        public var folds: Bool { more > 0 || fewer }
+    }
+
+    /// How many thumbnails a folded group shows.
+    public static let stripAt = 4
+
+    /// How many thumbnails go across a list this wide: four, or two where
+    /// four would be too small to tell apart.
+    public static func stripColumns(width: Double) -> Int { width < 480 ? 2 : 4 }
+
+    /// A list's rows of thumbnails: each its own row of a lazy list, so a
+    /// long group's tiles load only when they come into view.
+    public static func stripRows<T>(_ strip: [T], columns: Int) -> [[T]] {
+        stride(from: 0, to: strip.count, by: max(1, columns)).map { Array(strip[$0..<min($0 + max(1, columns), strip.count)]) }
     }
 
     /// How many rows a folded group shows.
@@ -430,6 +469,13 @@ public enum LibraryPage {
         return [".png", ".jpg", ".jpeg", ".gif"].contains { name.hasSuffix($0) }
     }
 
+    /// A thumbnail decoded to draw: within FileImage's bounds, as what a
+    /// server sends is data. Nil for a plain row.
+    public static func drawn(_ t: AppAPI.LibraryThumbnail) async -> FileImage.Drawn? {
+        guard case .drawn(let d)? = await FileImageDecoder.shared.decode(t.data) else { return nil }
+        return d
+    }
+
     /// The file's thumbnail, or nil for a plain row: a file that isn't an
     /// image, without asking; one that makes none, a server too old, a
     /// link down, whatever the answer was.
@@ -473,6 +519,45 @@ public enum LibraryPage {
             }
         }
         return .unavailable("the file kept changing while it was read")
+    }
+}
+
+/// The thumbnails a Library holds on to, the latest used while they fit: a
+/// long scroll would otherwise keep every one it passed. Enough for what
+/// shows on any screen; one that went is asked for again, from the server's
+/// cache.
+public struct LibraryThumbs: Sendable {
+    /// About 400 KB each, drawn.
+    public static let budget = 120
+
+    private var images: [String: FileImage.Drawn] = [:]
+    private var order: [String] = []
+    private let budget: Int
+
+    public init(budget: Int = budget) {
+        self.budget = budget
+    }
+
+    /// The image of key.
+    public subscript(key: String) -> FileImage.Drawn? { images[key] }
+
+    /// Notes key was just shown, so it stays longest.
+    public mutating func touch(_ key: String) {
+        guard images[key] != nil else { return }
+        order.removeAll { $0 == key }
+        order.append(key)
+    }
+
+    public mutating func add(_ key: String, _ image: FileImage.Drawn) {
+        order.removeAll { $0 == key }
+        order.append(key)
+        images[key] = image
+        while order.count > budget { images[order.removeFirst()] = nil }
+    }
+
+    public mutating func removeAll() {
+        images = [:]
+        order = []
     }
 }
 

@@ -205,6 +205,114 @@ public struct LibraryHeading: View {
     }
 }
 
+/// A thumbnail in a Library group's strip (T1059): the picture, or its
+/// ground until it comes, with the file's name under it. A landscape picture
+/// fills the frame from its top, where a screenshot's title is; a tall one
+/// fits inside it, whole. A stack (T1057) is one tile of the file it shows,
+/// by the stack's name, with a badge that is its switch: "dark · light".
+public struct LibraryTile: View {
+    @Environment(\.theme) private var theme
+    let file: AppAPI.LibraryFile
+    let image: FileImage.Drawn?
+    let stack: LibraryPage.Row?
+    let pick: (AppAPI.LibraryFile) -> Void
+
+    public init(_ file: AppAPI.LibraryFile, image: FileImage.Drawn?, stack: LibraryPage.Row? = nil,
+                pick: @escaping (AppAPI.LibraryFile) -> Void = { _ in }) {
+        self.file = file
+        self.image = image
+        self.stack = stack
+        self.pick = pick
+    }
+
+    public var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 5)
+        VStack(alignment: .leading, spacing: 3) {
+            Color.clear
+                .aspectRatio(300.0 / 190.0, contentMode: .fit)
+                .background(theme.selection)
+                .overlay(alignment: .top) {
+                    if let image {
+                        Image(decorative: image.image, scale: 1)
+                            .resizable()
+                            .interpolation(.high)
+                            .aspectRatio(contentMode: image.height > image.width ? .fit : .fill)
+                    }
+                }
+                .clipShape(shape)
+                .overlay { shape.strokeBorder(theme.line, lineWidth: theme.contrast ? 1.5 : 1) }
+                .overlay(alignment: .topTrailing) {
+                    if let stack { badge(stack) }
+                }
+            Text(stack?.title ?? file.name)
+                .font(theme.sized(Flat.label))
+                .foregroundStyle(theme.muted)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(stack.map { "\($0.title), \($0.words.joined(separator: " and ")), showing \(file.name), \(Attachment.size(file.size))" }
+            ?? "\(file.name), \(Attachment.size(file.size))")
+        .accessibilityAddTraits(.isImage)
+        .accessibilityActions {
+            if let stack {
+                ForEach(Array(zip(stack.words, stack.files)), id: \.0) { word, f in
+                    Button("Show \(word)") { pick(f) }
+                }
+            }
+        }
+    }
+
+    /// The stack's words on the picture, the showing one lit; a click on the
+    /// other goes to it.
+    private func badge(_ stack: LibraryPage.Row) -> some View {
+        HStack(spacing: 3) {
+            ForEach(Array(zip(stack.words, stack.files).enumerated()), id: \.offset) { i, pair in
+                if i > 0 {
+                    Text("·").foregroundStyle(theme.muted)
+                }
+                Button {
+                    pick(pair.1)
+                } label: {
+                    Text(pair.0)
+                        .fontWeight(pair.1.name == file.name ? .semibold : .regular)
+                        .foregroundStyle(pair.1.name == file.name ? theme.ink : theme.muted)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Shows \(pair.1.name)")
+            }
+        }
+        .font(theme.body(.caption2))
+        .lineLimit(1)
+        .padding(.horizontal, 5)
+        .background(theme.pane, in: RoundedRectangle(cornerRadius: 3))
+        .overlay { RoundedRectangle(cornerRadius: 3).strokeBorder(theme.line, lineWidth: theme.contrast ? 1.5 : 1) }
+        .padding(4)
+    }
+}
+
+/// The +N at the end of a Library group's strip, beside the tiles.
+public struct LibraryStripFold: View {
+    @Environment(\.theme) private var theme
+    let more: Int
+    /// Its width beside the tiles.
+    public static let width = 62.0
+
+    public init(more: Int) {
+        self.more = more
+    }
+
+    public var body: some View {
+        Text("+\(more)")
+            .font(theme.sized(Flat.text, .semibold))
+            .foregroundStyle(theme.action)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .accessibilityLabel("\(more) more")
+    }
+}
+
 /// A library file in the Library page: its name, size and date.
 public struct LibraryFileRow: View {
     @Environment(\.theme) private var theme

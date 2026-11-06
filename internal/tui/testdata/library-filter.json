@@ -188,6 +188,21 @@
     {"why": "a linked project's files come from no thread", "library": "stacks-linked",
      "rows": [["logo-dark.png"], ["logo-light.png"]]}
   ],
+  "strips": [
+    {"why": "a stack is one tile", "names": ["logo-dark.png", "logo-light.png"], "strip": ["logo.png"], "rows": [], "more": 0},
+    {"why": "eight files in four stacks fill the strip", "names": ["s0-dark.png", "s0-light.png", "s1-dark.png", "s1-light.png", "s2-dark.png", "s2-light.png", "s3-dark.png", "s3-light.png"],
+     "strip": ["s0.png", "s1.png", "s2.png", "s3.png"], "rows": [], "more": 0},
+    {"why": "ten files in five stacks: +1, not +6", "names": ["s0-dark.png", "s0-light.png", "s1-dark.png", "s1-light.png", "s2-dark.png", "s2-light.png", "s3-dark.png", "s3-light.png", "s4-dark.png", "s4-light.png"],
+     "strip": ["s0.png", "s1.png", "s2.png", "s3.png"], "rows": [], "more": 1},
+    {"why": "the design's 26 files in 16: +12", "names": ["s0-dark.png", "s0-light.png", "s1-dark.png", "s1-light.png", "s2-dark.png", "s2-light.png", "s3-dark.png", "s3-light.png", "s4-dark.png", "s4-light.png", "s5-dark.png", "s5-light.png", "s6-dark.png", "s6-light.png", "s7-dark.png", "s7-light.png", "s8-dark.png", "s8-light.png", "s9-dark.png", "s9-light.png", "o0.png", "o1.png", "o2.png", "o3.png", "o4.png", "o5.png"],
+     "strip": ["s0.png", "s1.png", "s2.png", "s3.png"], "rows": [], "more": 12},
+    {"why": "beside a file of its own and a note", "names": ["a-before.png", "a-after.png", "solo.png", "notes.md"],
+     "strip": ["a.png", "solo.png"], "rows": ["notes.md"], "more": 0},
+    {"why": "a stack with no thumbnail is a row", "names": ["icon-dark.svg", "icon-light.svg", "x.png"],
+     "strip": ["x.png"], "rows": ["icon.svg"], "more": 0},
+    {"why": "hard names are two tiles", "names": ["dark-matter.png", "light-matter.png"],
+     "strip": ["dark-matter.png", "light-matter.png"], "rows": [], "more": 0}
+  ],
   "fold": [
     {"files": 1, "open": false, "query": "", "rows": 1, "more": 0, "fewer": false},
     {"files": 6, "open": false, "query": "", "rows": 6, "more": 0, "fewer": false},
