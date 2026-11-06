@@ -1075,6 +1075,22 @@ final class AppModel {
         return await LibraryPage.read({ p in try await b.call(AppAPI.Methods.libraryRead, p) }, project: project, file: f)
     }
 
+    /// Whether a Library draws thumbnails: this server's, or a paired
+    /// server's (which may still answer no-thumbnail, and then has rows).
+    func drawsThumbnails(peer: String?) -> Bool {
+        guard case .connected(let h) = phase else { return false }
+        return peer == nil ? Compatibility.readsThumbnails(h) : Compatibility.readsPeerThumbnails(h)
+    }
+
+    /// A library file's thumbnail, nil for a plain row.
+    func libraryThumbnail(_ project: String, peer: String?, _ f: AppAPI.LibraryFile) async -> AppAPI.LibraryThumbnail? {
+        guard let b = bridge else { return nil }
+        if let peer {
+            return await PeerPages.thumbnail({ p in try await b.call(AppAPI.Methods.peerLibraryThumbnail, p) }, alias: peer, project: project, file: f)
+        }
+        return await LibraryPage.thumbnail({ p in try await b.call(AppAPI.Methods.libraryThumbnail, p) }, project: project, file: f)
+    }
+
     /// Whether this tm reads a paired server's project pages
     /// (peer.pages-read, app API 35).
     var readsPeerPages: Bool {
