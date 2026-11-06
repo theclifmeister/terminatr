@@ -3,11 +3,11 @@
  └─ co╭─ demo ───────────────────────────────────────────────────────────────────────────────────────────────────╮
       │ 1 overview 2 inbox 3 tasks 4 settings 5 access 6 keys 7 memory 8 library 9 messages 0 designs mods       │
       │                                                                                                          │──────
+      │  all 2    notes 1    data 1   t kinds                                                                    │
+      │                                                                                                          │
       │ T1  Research the options · t-0001 · 2026-10-07                                                           │
       │   data.json                                                                                         11 B │
       │   options.md                                                                                        30 B │
-      │                                                                                                          │
-      │                                                                                                          │
       │                                                                                                          │
       │                                                                                                          │
       │                                                                                                          │
