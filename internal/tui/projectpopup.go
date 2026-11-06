@@ -80,6 +80,8 @@ type projectView struct {
 	// filter's words and the kind ("" for all); libTyping says the keyboard
 	// is in the filter.
 	libFilter string
+	// libOpen are the groups opened past their fold (libraryheads.go).
+	libOpen   map[string]bool
 	libPick   string
 	libTyping bool
 	// msgs are the Messages tab's messages, newest first.
@@ -415,7 +417,7 @@ func (pv *projectView) count(m *dash) int {
 	case tabInbox:
 		return len(project.Rows(pv.data(m).Items))
 	case tabLibrary:
-		return len(pv.libFiles())
+		return len(pv.libRows())
 	case tabMessages:
 		needs, es := pv.messages(m)
 		return len(needs) + min(len(es), msgShown)
@@ -525,6 +527,8 @@ func (pv *projectView) box(m *dash) box {
 		switch {
 		case pv.libTyping:
 			keys = "filter ▸ type a name, task, thread or repo · enter keep · esc clear"
+		case pv.onLibFold():
+			keys = "enter open or fold the group · " + keys
 		case len(pv.libFiles()) > 0:
 			keys = "enter read · X delete · D delete the thread's · " + keys
 		}
@@ -650,6 +654,9 @@ func (pv *projectView) click(m *dash, item, col int, double bool) tea.Cmd {
 		return l.click(m, item, col)
 	}
 	pv.sel[pv.tab] = item
+	if pv.tab == tabLibrary && pv.toggleLibFold() {
+		return nil
+	}
 	if pv.tab == tabMessages {
 		// A click opens a message, as enter does.
 		return pv.messagesKey(m, "enter")

@@ -46,12 +46,17 @@ struct PickRow<ID: Hashable, Label: View>: View {
     @Binding var selection: ID?
     /// A double click's act: Quick Look, in the Library.
     var open: (() -> Void)?
+    /// A click's act besides the pick: a Library fold opens.
+    var act: (() -> Void)?
     @ViewBuilder var label: Label
 
     var body: some View {
         let on = selection == id
         let shape = RoundedRectangle(cornerRadius: 6)
-        Button { selection = id } label: {
+        Button {
+            selection = id
+            act?()
+        } label: {
             label
                 .font(theme.sized(Flat.text))
                 .padding(.horizontal, 8)

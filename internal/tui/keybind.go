@@ -451,7 +451,7 @@ var coreActions = []struct {
 	{"popup", bindable{id: "tasks.done", keys: []string{"b"}, fixed: true, help: "list the done tasks, or collapse them"}},
 	{"popup", bindable{id: "library.filter", keys: []string{"/"}, fixed: true, help: "filter the library by file name, task, thread or repository (from 7 files; esc clears)"}},
 	{"popup", bindable{id: "library.kinds", keys: []string{"t"}, fixed: true, help: "step through the library's kinds: images, pages, notes and so on (with two kinds or more)"}},
-	{"popup", bindable{id: "library.read", keys: []string{"enter"}, fixed: true, help: "read the library file"}},
+	{"popup", bindable{id: "library.read", keys: []string{"enter"}, fixed: true, help: "read the library file, or open or fold its group on +N more"}},
 	{"popup", bindable{id: "library.delete", keys: []string{"X"}, fixed: true, help: "delete the library file (asks first)"}},
 	{"popup", bindable{id: "library.delete-thread", keys: []string{"D"}, fixed: true, help: "delete all of the thread's library files (asks first)"}},
 	{"popup", bindable{id: "message.open-file", keys: []string{"o"}, fixed: true, help: "open a file of the message in your viewer, from a copy (the message's dialog; a menu when it has several)"}},

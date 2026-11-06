@@ -56,7 +56,7 @@ func TestPeerPagesAllowlist(t *testing.T) {
 	if z := zeroFields(reflect.ValueOf(pf)); len(z) > 0 {
 		t.Errorf("library file fields not copied: %v", z)
 	}
-	if want := []string{"Message", "Name", "Peer", "Repo", "Size", "State", "Task", "Thread", "Time", "Title"}; !slices.Equal(fieldNames(reflect.TypeFor[thread.LibFile]()), want) {
+	if want := []string{"Message", "Name", "Peer", "Repo", "Size", "State", "Task", "TaskStatus", "Thread", "Time", "Title"}; !slices.Equal(fieldNames(reflect.TypeFor[thread.LibFile]()), want) {
 		t.Errorf("thread.LibFile has %v: decide what a paired server's library sees (peerLibraryFileOf)", fieldNames(reflect.TypeFor[thread.LibFile]()))
 	}
 
@@ -66,7 +66,7 @@ func TestPeerPagesAllowlist(t *testing.T) {
 		reflect.TypeFor[proto.PeerPageTask]():    {"Created", "ID", "Status", "Steps", "Thread", "Title", "Updated"},
 		reflect.TypeFor[proto.PeerStep]():        {"Done", "Text"},
 		reflect.TypeFor[proto.PeerLibrary]():     {"Files"},
-		reflect.TypeFor[proto.PeerLibraryFile](): {"Name", "Size", "State", "Task", "Thread", "Time", "Title"},
+		reflect.TypeFor[proto.PeerLibraryFile](): {"Name", "Size", "State", "Task", "TaskStatus", "Thread", "Time", "Title"},
 	} {
 		if got := fieldNames(typ); !slices.Equal(got, want) {
 			t.Errorf("%s crosses %v, decided %v: a field added to the pages is a decision (§16.17)", typ, got, want)

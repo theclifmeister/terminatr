@@ -5,10 +5,10 @@
       │                                                                                                          │──────
       │  all 2    notes 1    data 1   t kinds                                                                    │
       │                                                                                                          │
-      │ T1  Research the options · t-0001 · 2026-10-07                                                           │
+      │ T1  Research the options  ● started                                                                      │
+      │   t-0001 · 7 Oct · 1 note · 1 data file · 41 B                                                           │
       │   data.json                                                                                         11 B │
       │   options.md                                                                                        30 B │
-      │                                                                                                          │
       │                                                                                                          │
       │                                                                                                          │
       │                                                                                                          │
