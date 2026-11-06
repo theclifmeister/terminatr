@@ -25,6 +25,11 @@ const (
 	// PeerLibraryChunk bytes. A file peer.pages.library doesn't list is
 	// refused.
 	MethodPeerPagesLibraryRead = "peer.pages.library.read"
+	// MethodPeerPagesLibraryThumbnail is the thumbnail of one of those
+	// files (PeerLibraryThumbnailParams): a LibraryThumbnailResult, made
+	// and cached on the server the file is on. A tm older than it answers
+	// unknown-method.
+	MethodPeerPagesLibraryThumbnail = "peer.pages.library.thumbnail"
 )
 
 // Control methods: a console's way to a paired server's pages, through
@@ -40,6 +45,11 @@ const (
 	// MethodPeerLibraryRead is peer.pages.library.read of the paired
 	// server Alias (PeerLibraryReadReadParams): a LibraryReadResult.
 	MethodPeerLibraryRead = "peer.library-read"
+	// MethodPeerLibraryThumbnail is peer.pages.library.thumbnail of the
+	// paired server Alias (PeerLibraryThumbnailReadParams): a
+	// LibraryThumbnailResult. A paired tm that has none, or doesn't serve
+	// them yet, is ErrNoThumbnail: the console draws rows.
+	MethodPeerLibraryThumbnail = "peer.library-thumbnail"
 )
 
 // CapPeerPages says the server answers peer.pages-read,
@@ -159,6 +169,23 @@ type PeerLibraryReadReadParams struct {
 	Thread  string `json:"thread"`
 	Name    string `json:"name"`
 	Offset  int64  `json:"offset,omitempty"`
+}
+
+// PeerLibraryThumbnailParams name a file of peer.pages.library by its
+// thread and name.
+type PeerLibraryThumbnailParams struct {
+	Project string `json:"project"`
+	Thread  string `json:"thread"`
+	Name    string `json:"name"`
+}
+
+// PeerLibraryThumbnailReadParams are a console's: the paired server's
+// alias and peer.pages.library.thumbnail's params.
+type PeerLibraryThumbnailReadParams struct {
+	Alias   string `json:"alias"`
+	Project string `json:"project"`
+	Thread  string `json:"thread"`
+	Name    string `json:"name"`
 }
 
 // A shared project's designs (T888), under the same project pages

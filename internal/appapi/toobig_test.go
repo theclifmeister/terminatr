@@ -101,9 +101,11 @@ func TestFitText(t *testing.T) {
 func TestChunksFit(t *testing.T) {
 	name := strings.Repeat("n", 255)
 	for what, res := range map[string]any{
-		"session.file":      sessionFileOf(proto.SessionFileResult{Name: name, Type: "image/png", Size: proto.MaxSentFile, Sendable: true, Offset: proto.MaxSentFile - proto.SentFileChunk, Data: make([]byte, proto.SentFileChunk)}),
-		"library.read":      libraryChunkOf(proto.LibraryReadResult{Name: name, Size: proto.MaxLibraryRead, Offset: proto.MaxLibraryRead - proto.LibraryChunk, Data: make([]byte, proto.LibraryChunk)}),
-		"peer.library-read": libraryChunkOf(proto.LibraryReadResult{Name: name, Size: proto.PeerLibraryMaxRead, Data: make([]byte, proto.PeerLibraryChunk)}),
+		"session.file":           sessionFileOf(proto.SessionFileResult{Name: name, Type: "image/png", Size: proto.MaxSentFile, Sendable: true, Offset: proto.MaxSentFile - proto.SentFileChunk, Data: make([]byte, proto.SentFileChunk)}),
+		"library.read":           libraryChunkOf(proto.LibraryReadResult{Name: name, Size: proto.MaxLibraryRead, Offset: proto.MaxLibraryRead - proto.LibraryChunk, Data: make([]byte, proto.LibraryChunk)}),
+		"library.thumbnail":      libraryThumbnailOf(proto.LibraryThumbnailResult{Name: name, Width: proto.ThumbnailSide, Height: proto.ThumbnailSide, Data: make([]byte, proto.MaxThumbnail)}),
+		"peer.library-thumbnail": libraryThumbnailOf(proto.LibraryThumbnailResult{Name: name, Width: proto.ThumbnailSide, Height: proto.ThumbnailSide, Data: make([]byte, proto.MaxThumbnail)}),
+		"peer.library-read":      libraryChunkOf(proto.LibraryReadResult{Name: name, Size: proto.PeerLibraryMaxRead, Data: make([]byte, proto.PeerLibraryChunk)}),
 	} {
 		raw, err := json.Marshal(safe(res))
 		if err != nil {

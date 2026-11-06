@@ -135,6 +135,25 @@ public enum Compatibility: Equatable, Sendable {
             && hello.methods.contains(AppAPI.Methods.libraryRead.name) && (hello.server?.caps ?? []).contains("project-files")
     }
 
+    /// The app API that has library.thumbnail and peer.library-thumbnail:
+    /// a Library's thumbnails need it.
+    public static let thumbnailsAPI = 53
+
+    /// Whether hello's tm makes a library's thumbnails, its server too
+    /// (caps library-thumbnails): else every file is a plain row.
+    public static func readsThumbnails(_ hello: AppAPI.Hello) -> Bool {
+        hello.appApi >= thumbnailsAPI && hello.methods.contains(AppAPI.Methods.libraryThumbnail.name)
+            && (hello.server?.caps ?? []).contains("library-thumbnails")
+    }
+
+    /// Whether hello's tm asks a paired server for its library's
+    /// thumbnails. That server may still be too old: it answers
+    /// no-thumbnail, and its files are rows.
+    public static func readsPeerThumbnails(_ hello: AppAPI.Hello) -> Bool {
+        readsThumbnails(hello) && hello.methods.contains(AppAPI.Methods.peerLibraryThumbnail.name)
+            && readsPeerPages(hello)
+    }
+
     /// Whether hello's tm adds tasks from the app (task.add).
     public static func addsTasks(_ hello: AppAPI.Hello) -> Bool {
         hello.appApi >= taskAddAPI && hello.methods.contains(AppAPI.Methods.taskAdd.name)
