@@ -47,9 +47,33 @@ public enum MemoryPage {
 }
 
 /// The Library page's files grouped as the TUI's Library tab groups
-/// them: by thread, or by the linked project that sent them, the group
-/// with the newest file first and each group's files newest first.
+/// them: by thread, or by the linked project that sent them, the seat's own
+/// group first, then the group with the newest file first and each group's
+/// files newest first. A program's list keeps its projects in the order they
+/// came, each ordered so (sections).
 public enum LibraryPage {
+    /// The id of a coordinator's or director's own files, where a thread's
+    /// goes (thread.SeatID, app API 59).
+    public static let seatID = "seat"
+
+    /// Whether f is a coordinator's or director's own.
+    public static func isSeat(_ f: AppAPI.LibraryFile) -> Bool { f.thread == seatID }
+
+    /// A project's groups in a program's list: the director's own have no
+    /// title, each member's its name and its paired server's.
+    public struct Section: Identifiable, Sendable, Equatable {
+        public let id: String
+        public let project: String
+        public let server: String
+        public let groups: [Group]
+
+        /// The heading over a member's files, "" for the director's own or a
+        /// project's own list.
+        public var title: String {
+            server.isEmpty ? project : "\(project) on \(server)"
+        }
+    }
+
     public struct Group: Identifiable, Sendable, Equatable {
         /// The thread's id, or "@" and the linked project's.
         public let id: String
@@ -59,6 +83,7 @@ public enum LibraryPage {
         public var title: String {
             guard let f = files.first else { return id }
             if !f.peer.isEmpty { return "from \(f.peer)" }
+            if LibraryPage.isSeat(f) { return f.title }
             return [f.task, f.title].filter { !$0.isEmpty }.joined(separator: " · ")
         }
 
@@ -66,7 +91,7 @@ public enum LibraryPage {
         /// linked project sent.
         public var detail: String {
             guard let f = files.first else { return "" }
-            if !f.peer.isEmpty { return files.count == 1 ? "1 file" : "\(files.count) files" }
+            if !f.peer.isEmpty || LibraryPage.isSeat(f) { return files.count == 1 ? "1 file" : "\(files.count) files" }
             return f.state == "archived" ? "\(f.thread) · archived" : f.thread
         }
 
@@ -77,9 +102,9 @@ public enum LibraryPage {
         }
 
         /// Its thread and, in a project with several, the repository; a
-        /// linked project's group has neither.
+        /// linked project's group has neither, nor a seat's own.
         public var origin: [String] {
-            guard let f = files.first, f.peer.isEmpty else { return [] }
+            guard let f = files.first, f.peer.isEmpty, !LibraryPage.isSeat(f) else { return [] }
             return f.repo.isEmpty ? [f.thread] : [f.thread, f.repo]
         }
 
@@ -167,20 +192,47 @@ public enum LibraryPage {
         return d.formatted(style)
     }
 
-    /// A file's group: its thread, or "@" and the linked project.
+    /// A file's group: its thread, or "@" and the linked project, in its
+    /// project in a program's list.
     public static func key(_ f: AppAPI.LibraryFile) -> String {
-        f.peer.isEmpty ? f.thread : "@" + f.peer
+        place(f) + (f.peer.isEmpty ? f.thread : "@" + f.peer)
+    }
+
+    /// What tells a member's file from another member's in a program's list,
+    /// "" for the director's own or in a project's own list.
+    public static func place(_ f: AppAPI.LibraryFile) -> String {
+        f.project.isEmpty ? "" : f.server + "/" + f.project + "/"
     }
 
     public static func groups(_ files: [AppAPI.LibraryFile]) -> [Group] {
-        var order: [String] = []
-        var by: [String: [AppAPI.LibraryFile]] = [:]
-        for f in files.sorted(by: { $0.time > $1.time }) {
-            let k = key(f)
-            if by[k] == nil { order.append(k) }
-            by[k, default: []].append(f)
+        sections(files).flatMap(\.groups)
+    }
+
+    /// The files by project, in the order the projects came, each project's
+    /// groups as groups orders them.
+    public static func sections(_ files: [AppAPI.LibraryFile]) -> [Section] {
+        var places: [String] = []
+        var byPlace: [String: [AppAPI.LibraryFile]] = [:]
+        for f in files {
+            let p = place(f)
+            if byPlace[p] == nil { places.append(p) }
+            byPlace[p, default: []].append(f)
         }
-        return order.map { Group(id: $0, files: by[$0] ?? []) }
+        return places.map { p in
+            let inPlace = byPlace[p] ?? []
+            var order: [String] = []
+            var by: [String: [AppAPI.LibraryFile]] = [:]
+            for f in inPlace.sorted(by: { $0.time > $1.time }) {
+                let k = key(f)
+                if by[k] == nil { order.append(k) }
+                by[k, default: []].append(f)
+            }
+            let own = order.filter { by[$0]?.first.map(isSeat) == true }
+            let rest = order.filter { by[$0]?.first.map(isSeat) != true }
+            let first = inPlace.first
+            return Section(id: p, project: first?.project ?? "", server: first?.server ?? "",
+                           groups: (own + rest).map { Group(id: $0, files: by[$0] ?? []) })
+        }
     }
 
     /// A file's kind, from its name's extension (T1054). The TUI's
@@ -241,10 +293,10 @@ public enum LibraryPage {
     }
 
     /// Whether every word is in the file's name, task, title, thread,
-    /// repository or linked project.
+    /// repository or linked project, or a program's member and its server.
     private static func matches(_ f: AppAPI.LibraryFile, _ words: [String]) -> Bool {
         if words.isEmpty { return true }
-        let hay = [f.name, f.task, f.title, f.thread, f.repo, f.peer].joined(separator: "\n").lowercased()
+        let hay = [f.name, f.task, f.title, f.thread, f.repo, f.peer, f.project, f.server].joined(separator: "\n").lowercased()
         return words.allSatisfy(hay.contains)
     }
 
@@ -289,7 +341,8 @@ public enum LibraryPage {
 
     /// The filter field's words: the repository only where a file names one.
     public static func filterPrompt(_ files: [AppAPI.LibraryFile]) -> String {
-        files.contains { !$0.repo.isEmpty } ? "Filter by name, task, thread or repo" : "Filter by name, task or thread"
+        if files.contains(where: { !$0.project.isEmpty }) { return "Filter by name, task, thread or project" }
+        return files.contains { !$0.repo.isEmpty } ? "Filter by name, task, thread or repo" : "Filter by name, task or thread"
     }
 
     /// What library.read names a file by: its thread, else the message a
@@ -327,8 +380,10 @@ public enum LibraryPage {
 
     /// The file's bytes, a chunk at a time; again from the start, once,
     /// when it changed between chunks.
-    public static func read(_ fetch: Fetch, project: String, file f: AppAPI.LibraryFile) async -> FileOutcome {
-        let params = { (off: Int) in AppAPI.LibraryReadParams(project: project, id: id(f), name: f.name, offset: off) }
+    /// With program, a director's own file of that program.
+    public static func read(_ fetch: Fetch, project: String, program: String? = nil, file f: AppAPI.LibraryFile) async -> FileOutcome {
+        let ref = program.map { AppAPI.LibraryProgram(slug: $0) }
+        let params = { (off: Int) in AppAPI.LibraryReadParams(project: project, program: ref, id: id(f), name: f.name, offset: off) }
         for _ in 0..<2 {
             var out = Data()
             var size = -1

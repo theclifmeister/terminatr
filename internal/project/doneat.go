@@ -22,6 +22,39 @@ import (
 // as "human (app)", a word and its bracket.
 var journalStatus = regexp.MustCompile(`^(\S+) (?:\S+ \([^)]*\)|\S+) (task\.status|task\.done) T([0-9]+)(?: (.*))?$`)
 
+// StatusLine is a journal line that moves a task.
+type StatusLine struct {
+	At   time.Time
+	Task int
+	// Status is the status it moved to: "done" for a ticker's task.done.
+	Status string
+}
+
+// ParseStatusLine reads a journal line that moves a task.
+func ParseStatusLine(l string) (StatusLine, bool) {
+	if !strings.Contains(l, " task.") {
+		return StatusLine{}, false // most lines; the expression is slower
+	}
+	m := journalStatus.FindStringSubmatch(strings.TrimRight(l, "\r\n"))
+	if m == nil {
+		return StatusLine{}, false
+	}
+	at, err := time.Parse(time.RFC3339, m[1])
+	if err != nil {
+		return StatusLine{}, false
+	}
+	id, err := strconv.Atoi(m[3])
+	if err != nil {
+		return StatusLine{}, false
+	}
+	status := string(tasks.Done)
+	if m[2] == "task.status" {
+		word, _, _ := strings.Cut(m[4], " ")
+		status = strings.TrimSuffix(word, ":")
+	}
+	return StatusLine{At: at, Task: id, Status: status}, true
+}
+
 // doneTimes reads the journal, the month archives first, and answers
 // when each task last became done: the first done line after any other
 // status, so a later note on a done task doesn't move it. A task that
@@ -29,24 +62,16 @@ var journalStatus = regexp.MustCompile(`^(\S+) (?:\S+ \([^)]*\)|\S+) (task\.stat
 func (p *Folder) doneTimes() (map[int]string, error) {
 	out := map[int]string{}
 	line := func(l string) {
-		m := journalStatus.FindStringSubmatch(strings.TrimRight(l, "\r\n"))
-		if m == nil {
+		s, ok := ParseStatusLine(l)
+		if !ok {
 			return
 		}
-		at, err := time.Parse(time.RFC3339, m[1])
-		if err != nil {
+		if s.Status != string(tasks.Done) {
+			delete(out, s.Task)
 			return
 		}
-		id, err := strconv.Atoi(m[3])
-		if err != nil {
-			return
-		}
-		if m[2] == "task.status" && !detailSaysDone(m[4]) {
-			delete(out, id)
-			return
-		}
-		if _, ok := out[id]; !ok {
-			out[id] = at.UTC().Format(time.RFC3339)
+		if _, ok := out[s.Task]; !ok {
+			out[s.Task] = s.At.UTC().Format(time.RFC3339)
 		}
 	}
 	names, err := filepath.Glob(p.Path("journal", "*.md.gz"))
@@ -55,7 +80,7 @@ func (p *Folder) doneTimes() (map[int]string, error) {
 	}
 	slices.Sort(names)
 	for _, name := range names {
-		if err := readGzipLines(name, line); err != nil {
+		if err := ReadJournalArchive(name, line); err != nil {
 			return nil, err
 		}
 	}
@@ -70,14 +95,9 @@ func (p *Folder) doneTimes() (map[int]string, error) {
 	return out, readLines(f, line)
 }
 
-// detailSaysDone reads a task.status line's detail, "done", "done: why"
-// or "done (approved by the user)".
-func detailSaysDone(detail string) bool {
-	word, _, _ := strings.Cut(detail, " ")
-	return strings.TrimSuffix(word, ":") == string(tasks.Done)
-}
-
-func readGzipLines(name string, line func(string)) error {
+// ReadJournalArchive calls line for each line of a month archive
+// (journal/<yyyy-mm>.md.gz). What it read before an error stays read.
+func ReadJournalArchive(name string, line func(string)) error {
 	f, err := os.Open(name)
 	if err != nil {
 		return err

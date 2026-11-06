@@ -368,6 +368,8 @@ var coordinatorRules = []struct {
 }{
 	// Read-only: they change nothing.
 	{[]string{"tm context", "tm inbox list", "tm task list", "tm task show", "tm thread list", "tm thread show", "tm thread read", "tm library list", "tm memory find", "tm memory show", "tm memory list", "tm memory check", "tm search", "tm access show", "tm access explain", "tm skill"}, "", nil},
+	// Into its own library, a copy of a file it may read, and nothing else.
+	{[]string{"tm library add"}, "", nil},
 	// Its own project's rules within the level (accessedit.go accessFor).
 	{[]string{"tm access add", "tm access rm", "tm access edit", "tm access drop", "tm access undrop", "tm access set local-ports"}, "coordinator_access", func(s config.Safety) bool { return s.CoordinatorAccess }},
 	{[]string{"tm thread start", "tm task delegate"}, "start_threads", func(s config.Safety) bool { return s.StartThreads == config.StartAuto }},
@@ -394,6 +396,8 @@ var directorRules = []struct {
 	{[]string{"tm program context", "tm program list", "tm program show", "tm program needs", "tm program search", "tm program task show",
 		"tm context", "tm task list", "tm task show", "tm thread list", "tm thread show", "tm search", "tm skill"}, nil},
 	{[]string{"tm program route", "tm program task edit", "tm program send", "tm program ask", "tm program recommend", "tm program wake"}, nil},
+	// Its own library: a copy of a file it may read, and the list.
+	{[]string{"tm library add", "tm library list"}, nil},
 	{[]string{"tm program start"}, func(p config.Program) bool { return p.Authority == config.AuthorityDelegate }},
 }
 

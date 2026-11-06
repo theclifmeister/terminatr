@@ -17,7 +17,7 @@ import (
 // parityCommands are the tm commands that act on a seat's folder: what a
 // coordinator runs for its project (the forwarded commands, tm access,
 // search, skill and vault).
-var parityCommands = []string{"access", "ask", "clear", "context", "design", "done", "inbox", "library", "link", "memory", "project", "report", "search", "skill", "status", "task", "thread", "vault"}
+var parityCommands = []string{"access", "ask", "clear", "context", "design", "done", "history", "inbox", "library", "link", "memory", "project", "report", "search", "skill", "status", "task", "thread", "vault"}
 
 // parityNoise are words usageActions takes for actions: the first word of
 // a line of prose.
@@ -51,8 +51,9 @@ var seatActions = []struct {
 	{"inbox list", []string{"inbox", "list"}, sameAsCoordinator, ""},
 	{"inbox read", []string{"inbox", "read", "x"}, sameAsCoordinator, ""},
 	{"inbox done", []string{"inbox", "done", "x"}, sameAsCoordinator, ""},
-	{"library list", []string{"library", "list"}, "unknown-project", "a thread's library; a program has no threads"},
-	{"library rm", []string{"library", "rm", "t-0001", "x"}, "unknown-project", "same"},
+	{"library add", []string{"library", "add", "x"}, sameAsCoordinator, ""},
+	{"library list", []string{"library", "list"}, sameAsCoordinator, ""},
+	{"library rm", []string{"library", "rm", "t-0001", "x"}, "human-only", "a program's own files are the user's alone to delete"},
 	{"memory list", []string{"memory", "list"}, sameAsCoordinator, ""},
 	{"memory find", []string{"memory", "find", "word"}, sameAsCoordinator, ""},
 	{"memory new", []string{"memory", "new", "n", "--file", "-"}, sameAsCoordinator, ""},
@@ -70,6 +71,7 @@ var seatActions = []struct {
 	{"design list", []string{"design", "list"}, "unknown-project", "a project's designs; a program's tasks name a member's with tm program task"},
 	{"design set", []string{"design", "set", "x"}, "unknown-project", "same"},
 	{"design archive", []string{"design", "archive", "x"}, "unknown-project", "same"},
+	{"history", []string{"history"}, "unknown-project", "a project's numbers; a program has no board of its own"},
 	{"clear", []string{"clear"}, sameAsCoordinator, ""},
 	{"link list", []string{"link", "list"}, "unknown-project", "a project's links; the program channel is tm program send and read"},
 	{"link send", []string{"link", "send", "other", "hi"}, "unknown-project", "same"},

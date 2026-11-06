@@ -159,6 +159,10 @@ final class AppModel {
     var newTask: String?
     /// The task the task view shows (TaskSheet), nil for none.
     var taskShown: TaskShown?
+    /// A paired server's task the window shows, read only.
+    var peerTaskShown: PeerTaskShown?
+    /// The paired boards the command palette searches.
+    var paletteBoards = PaletteBoards()
     /// What the bridge did: Settings › Advanced shows it.
     private(set) var log = BridgeLog()
     /// The need ⌥⌘↓ or ⌥⌘↑ showed last (Need.step).
@@ -441,6 +445,7 @@ final class AppModel {
             if l.gen != gen || !loaded.peers {
                 gen = l.gen
                 peers = l.peers
+                paletteBoards.prune(peers: peers, reads: readsPeerPages)
                 loaded.peers = true
                 changed()
             }
@@ -919,7 +924,14 @@ final class AppModel {
             break
         }
         return FilesPlace.of(selection, sessionID: session, threadDone: done, task: task,
-                             readsWorktree: caps.contains("worktree-files"), hasLibrary: projectTabs.contains(.library))
+                             readsWorktree: caps.contains("worktree-files"), hasLibrary: projectTabs.contains(.library),
+                             readsProgramLibrary: readsProgramLibrary)
+    }
+
+    /// Whether this tm lists a program's library: a director's Files view.
+    var readsProgramLibrary: Bool {
+        if case .connected(let h) = phase { return Compatibility.readsProgramLibrary(h) }
+        return false
     }
 
     /// What the right panel shows for selection.
@@ -1038,7 +1050,23 @@ final class AppModel {
 
     /// The project's library, newest first (library.list).
     func library(_ project: String) async throws -> [AppAPI.LibraryFile] {
-        try await connected().call(AppAPI.Methods.libraryList, AppAPI.ProjectParams(project: project)).files
+        try await connected().call(AppAPI.Methods.libraryList, AppAPI.LibraryListParams(project: project)).files
+    }
+
+    /// Program slug's library: its director's own files, then its members'
+    /// (library.list's program form).
+    func programLibrary(_ slug: String) async throws -> AppAPI.Library {
+        try await connected().call(AppAPI.Methods.libraryList, AppAPI.LibraryListParams(project: "", program: AppAPI.LibraryProgram(slug: slug)))
+    }
+
+    /// The bytes of a file of program slug's library: a paired member's over
+    /// the link, a member's as any file of its project, the director's own by
+    /// the program.
+    func programLibraryData(_ slug: String, _ f: AppAPI.LibraryFile) async -> FileOutcome {
+        if !f.server.isEmpty { return await peerLibraryData(f.server, f.project, f) }
+        if !f.project.isEmpty { return await libraryData(f.project, f) }
+        guard let b = bridge else { return .unavailable("tm isn't connected") }
+        return await LibraryPage.read({ p in try await b.call(AppAPI.Methods.libraryRead, p) }, project: "", program: slug, file: f)
     }
 
     /// A library file's bytes (library.read, a chunk at a time).
@@ -1068,6 +1096,20 @@ final class AppModel {
     var readsPeerPages: Bool {
         if case .connected(let h) = phase { return Compatibility.readsPeerPages(h) }
         return false
+    }
+
+    /// Reads the paired boards due (PaletteBoards), each on its own so a
+    /// slow server holds up only its own rows.
+    func readPaletteBoards() {
+        for key in paletteBoards.due(peers: peers, reads: readsPeerPages, now: Date()) {
+            Task {
+                do {
+                    paletteBoards.store(try await peerPages(key.alias, key.project), for: key)
+                } catch {
+                    paletteBoards.failed(key)
+                }
+            }
+        }
     }
 
     /// A paired server's project's board and overview (peer.pages-read):
@@ -1417,6 +1459,38 @@ final class AppModel {
     /// first, or board order from an older tm.
     func doneTasks(_ project: String) async throws -> [AppAPI.Task] {
         try await connected().call(AppAPI.Methods.taskDone, AppAPI.ProjectParams(project: project)).tasks
+    }
+
+    /// Whether this tm answers a project's daily numbers (app API 58).
+    var readsHistory: Bool {
+        if case .connected(let h) = phase { return Compatibility.readsHistory(h) }
+        return false
+    }
+
+    /// Whether this tm asks a paired server for its numbers (app API 58).
+    var readsPeerHistory: Bool {
+        if case .connected(let h) = phase { return Compatibility.readsPeerHistory(h) }
+        return false
+    }
+
+    /// A project's daily numbers (project.history); none from an older
+    /// tm, so what draws them hides.
+    func history(_ project: String) async throws -> AppAPI.History? {
+        guard readsHistory else { return nil }
+        return try await connected().call(AppAPI.Methods.projectHistory, AppAPI.ProjectParams(project: project))
+    }
+
+    /// A paired server's project's daily numbers (peer.history); none
+    /// from an older tm on either side, or when it shares no pages.
+    func peerHistory(_ alias: String, _ project: String) async throws -> AppAPI.History? {
+        guard readsPeerHistory else { return nil }
+        do {
+            return try await connected().call(AppAPI.Methods.peerHistory, AppAPI.PeerPagesParams(alias: alias, project: project))
+        } catch {
+            let state: PeerPages.State<Int> = PeerPages.state(error)
+            if state == .notShared { return nil }
+            throw error
+        }
     }
 
     /// The task templates of the mods that run in project

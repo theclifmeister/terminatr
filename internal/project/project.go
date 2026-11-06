@@ -338,7 +338,7 @@ func New(o Options) (*Project, error) {
 // is, edits CONTEXT.md, MEMORY.md, memory/ and PROJECT.md and leaves
 // these to tm, which writes and appends to them outside its sandbox.
 func (p *Project) Owned() (dirs, files []string) {
-	for _, d := range []string{"threads", "inbox", "journal", "messages", "uploads"} {
+	for _, d := range []string{"threads", "inbox", "journal", "messages", "uploads", "library"} {
 		dirs = append(dirs, p.Path(d))
 	}
 	for _, f := range []string{"JOURNAL.md", questionsFile, designsFile, "AGENTS.md", "CLAUDE.md"} {

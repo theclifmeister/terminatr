@@ -645,6 +645,7 @@ func TestAccessCoordinatorCommands(t *testing.T) {
 	}
 	readOnly := []string{"tm context", "tm inbox list", "tm task list", "tm task show", "tm thread list", "tm thread show", "tm thread read", "tm library list", "tm memory find", "tm memory show", "tm memory list", "tm memory check", "tm search", "tm access show", "tm access explain", "tm skill"}
 	access := []string{"tm access add", "tm access rm", "tm access edit", "tm access drop", "tm access undrop", "tm access set local-ports"}
+	readOnly = append(readOnly, "tm library add") // its own library, a copy
 	with := func(c ...string) []string { return append(slices.Clone(readOnly), c...) }
 	own := "[projects." + p.Slug + "]\n"
 	for _, c := range []struct {
@@ -700,7 +701,7 @@ func TestAccessCoordinatorOwned(t *testing.T) {
 		t.Fatal(err)
 	}
 	dir := realPath(p.Dir)
-	for _, n := range []string{"threads", "inbox", "tasks", "journal", "messages", "uploads"} {
+	for _, n := range []string{"threads", "inbox", "tasks", "journal", "messages", "uploads", "library"} {
 		d := filepath.Join(dir, n)
 		if !slices.Contains(a.NoWrite, d) {
 			t.Errorf("%s not in no-write %q", n, a.NoWrite)

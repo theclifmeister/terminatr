@@ -56,36 +56,56 @@ func (s *Server) memoryRead(pp proto.MemoryReadParams) (any, *proto.Error) {
 	return proto.MemoryReadResult{Path: pp.Path, Text: text}, nil
 }
 
-// libraryList is the threads' library files and the files the
-// project's links brought, newest first.
+// libraryList is the seat's and the threads' library files and the files
+// the project's links brought, newest first; for a program, its director's
+// and its members' (programlibrary.go).
 func (s *Server) libraryList(pp proto.ProjectFilesParams) (any, *proto.Error) {
+	if pp.Program != "" {
+		return s.programLibrary(pp)
+	}
 	p, perr := openProject(pp.Project)
 	if perr != nil {
 		return nil, perr
 	}
-	files, err := thread.Library(p)
+	files, err := projectLibrary(p)
 	if err != nil {
 		return nil, proto.Errorf(proto.ErrInternal, "%v", err)
 	}
-	files = append(files, link.LibraryFiles(p)...)
-	slices.SortStableFunc(files, func(a, b thread.LibFile) int { return b.Time.Compare(a.Time) })
 	out := proto.LibraryListResult{Files: []proto.LibraryFile{}}
 	for _, f := range files {
-		out.Files = append(out.Files, proto.LibraryFile{Thread: f.Thread, Task: f.Task, TaskStatus: f.TaskStatus, Title: f.Title, Repo: f.Repo, State: f.State,
-			Name: f.Name, Size: f.Size, Time: f.Time, Peer: f.Peer, Message: f.Message})
+		out.Files = append(out.Files, libraryFileOf(f))
 	}
 	return out, nil
+}
+
+// projectLibrary is project p's whole library, newest first.
+func projectLibrary(p *project.Project) ([]thread.LibFile, error) {
+	files, err := thread.Library(p)
+	if err != nil {
+		return nil, err
+	}
+	files = append(files, link.LibraryFiles(p)...)
+	slices.SortStableFunc(files, func(a, b thread.LibFile) int { return b.Time.Compare(a.Time) })
+	return files, nil
+}
+
+func libraryFileOf(f thread.LibFile) proto.LibraryFile {
+	return proto.LibraryFile{Thread: f.Thread, Task: f.Task, TaskStatus: f.TaskStatus, Title: f.Title, Repo: f.Repo, State: f.State,
+		Name: f.Name, Size: f.Size, Time: f.Time, Peer: f.Peer, Message: f.Message, Project: f.Project, Server: f.Server}
 }
 
 // libraryRead is a chunk of a thread's library file, or, for ID a
 // message's, of the file it brought.
 func (s *Server) libraryRead(pp proto.LibraryReadParams) (any, *proto.Error) {
+	if pp.Offset < 0 {
+		return nil, proto.Errorf(proto.ErrBadParams, "library.read: offset %d", pp.Offset)
+	}
+	if pp.Program != "" {
+		return s.programLibraryRead(pp)
+	}
 	p, perr := openProject(pp.Project)
 	if perr != nil {
 		return nil, perr
-	}
-	if pp.Offset < 0 {
-		return nil, proto.Errorf(proto.ErrBadParams, "library.read: offset %d", pp.Offset)
 	}
 	read := thread.ReadLibraryChunk
 	if link.ValidID(pp.ID) {
@@ -104,6 +124,9 @@ func (s *Server) libraryRead(pp proto.LibraryReadParams) (any, *proto.Error) {
 // libraryThumbnail is library.thumbnail: for ID a message, of the file it
 // brought, else of a thread's library file, packed or not.
 func (s *Server) libraryThumbnail(pp proto.LibraryThumbnailParams) (any, *proto.Error) {
+	if pp.Program != "" {
+		return s.programLibraryThumbnail(pp)
+	}
 	p, perr := openProject(pp.Project)
 	if perr != nil {
 		return nil, perr
