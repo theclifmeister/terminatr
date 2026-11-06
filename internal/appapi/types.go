@@ -430,7 +430,7 @@ type Task struct {
 	Owner    string `json:"owner,omitempty"`
 	Created  string `json:"created,omitempty"`
 	Updated  string `json:"updated,omitempty"`
-	// DoneAt (app API 56) is when a done task finished: a UTC time
+	// DoneAt (app API 54) is when a done task finished: a UTC time
 	// (2026-11-06T09:10:44Z), or a day (2026-11-06) when only that is
 	// known; absent when nothing dates it, and from an older tm.
 	DoneAt string `json:"done_at,omitempty"`
