@@ -67,6 +67,10 @@ type PeerMirror struct {
 	// projects can be invited into a program here (the programs design
 	// §9.1).
 	Program bool `json:"program,omitempty"`
+	// Worktree: the peer can share its folders (its hello lists worktree):
+	// a project's Files then says whether it does, with this server. A tm
+	// without it can't, and is never asked.
+	Worktree bool `json:"worktree,omitempty"`
 	// Uploads: the peer's sessions take files for a prompt (its hello lists
 	// session-upload), while Panes is write.
 	Uploads bool `json:"uploads,omitempty"`
