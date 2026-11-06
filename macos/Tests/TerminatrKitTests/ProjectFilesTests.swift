@@ -113,6 +113,21 @@ private struct LibraryFixture: Decodable {
     let order: [Order]
     let heads: [Head]
     let fold: [Fold]
+    let biggest: [Biggest]
+    let sort: [Sort]
+
+    struct Biggest: Decodable {
+        let library: String
+        let query: String
+        let kind: String
+        let names: [String]
+    }
+
+    struct Sort: Decodable {
+        let files: Int
+        let shows: Bool
+    }
+
     let stacks: [Stack]
     let strips: [Strip]
 
@@ -192,11 +207,66 @@ private struct LibraryFixture: Decodable {
         let got = LibraryPage.fold(c.files, open: c.open, query: c.query)
         #expect(got.rows == c.rows && got.more == c.more && got.fewer == c.fewer, "\(c)")
     }
+    #expect(fx.biggest.count >= 7)
+    for c in fx.biggest {
+        let files = (fx.libraries[c.library] ?? []).map(\.file)
+        let names = LibraryPage.biggestFirst(LibraryPage.shown(files, query: c.query, kind: kind(c.kind))).map(\.name)
+        #expect(names == c.names, "\(c.library), \(c.query), \(c.kind)")
+    }
+    #expect(fx.sort.count >= 4)
+    for c in fx.sort {
+        let files = (0..<c.files).map { lib("t-0001", "\($0).md", 1) }
+        #expect(LibraryPage.showsSort(files) == c.shows, "\(c.files) files")
+    }
     for c in fx.filter {
         let files = (0..<c.files).map { lib("t-0001", "\($0).md", 1) }
         let shows = LibraryPage.showsFilter(files, query: c.query)
         #expect(shows == c.shows, "\(c.files) files, \(c.query)")
     }
+}
+
+/// Biggest first says what a file came with, however little it has; equal
+/// sizes stay in the list's order however many there are; and a sort only
+/// holds while there is something to sort.
+@Test func libraryBiggestFirst() {
+    let linked = AppAPI.LibraryFile(thread: "", task: "", title: "from web", state: "received", name: "b.zip", size: 3, time: Date(), peer: "web", message: "M-1")
+    #expect(LibraryPage.source(linked) == "from web")
+    #expect(LibraryPage.source(lib("t-0002", "a.png", 1)) == "T1 · Fix")
+    let bare = AppAPI.LibraryFile(thread: "t-0002", title: "", state: "stopped", name: "a.png", size: 1, time: Date())
+    #expect(LibraryPage.source(bare) == "t-0002")
+    let many = (0..<200).map { i -> AppAPI.LibraryFile in
+        var f = lib("t-0001", "\(i).png", 1)
+        f.size = i % 2 == 0 ? 5 : 9
+        return f
+    }
+    let names = LibraryPage.biggestFirst(many).map(\.name)
+    let want = many.filter { $0.size == 9 }.map(\.name) + many.filter { $0.size == 5 }.map(\.name)
+    #expect(names == want)
+    #expect(!LibraryPage.isFlat([lib("t-0001", "a.png", 1)], .biggest))
+    #expect(!LibraryPage.isFlat(many, .newest))
+    #expect(LibraryPage.isFlat(many, .biggest))
+}
+
+/// A stack comes apart in the flat list, each half its own row and rank, and
+/// either half finds its way back to the stack's row: what the switch carries
+/// the pick by.
+@Test func libraryBiggestRowsPartAStack() {
+    var dark = lib("t-0001", "site-dark.png", 1), light = lib("t-0001", "site-light.png", 1)
+    var between = lib("t-0002", "x.png", 1)
+    dark.size = 900
+    between.size = 500
+    light.size = 200
+    let rows = LibraryPage.biggestRows([dark, light, between])
+    #expect(rows.map(\.files) == [[dark], [between], [light]])
+    #expect(rows.allSatisfy { !$0.isStack && $0.title == $0.files[0].name })
+    #expect(Set(rows.map(\.id)).count == 3)
+    let g = LibraryPage.Group(id: "t-0001", files: [dark, light])
+    let l = g.listed(open: false, query: "")
+    let stack = l.row(of: light)
+    #expect(stack?.isStack == true)
+    #expect(stack?.id == l.row(of: dark)?.id)
+    #expect(stack?.id == rows[0].id)
+    #expect(l.row(of: between) == nil)
 }
 
 /// A group's line under its title, its day pinned to one calendar.

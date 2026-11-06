@@ -205,6 +205,43 @@ public struct LibraryHeading: View {
     }
 }
 
+/// The Library page's sort (T1056): Newest, by group, or Biggest, flat.
+public struct LibrarySortSwitch: View {
+    @Environment(\.theme) private var theme
+    @Binding var sort: LibraryPage.Sort
+
+    public init(_ sort: Binding<LibraryPage.Sort>) {
+        _sort = sort
+    }
+
+    public var body: some View {
+        HStack(spacing: 0) {
+            ForEach(LibraryPage.Sort.allCases, id: \.self) { s in
+                let on = s == sort
+                Button {
+                    sort = s
+                } label: {
+                    Text(s.rawValue)
+                        .font(theme.sized(Flat.label))
+                        .foregroundStyle(on ? theme.ink : theme.muted)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 2)
+                        .background(on ? theme.pane : .clear, in: RoundedRectangle(cornerRadius: 3))
+                        .contentShape(RoundedRectangle(cornerRadius: 3))
+                }
+                .buttonStyle(.plain)
+                .help(s == .newest ? "Lists the files by thread, newest first" : "Lists every file by size, biggest first, with its task")
+                .accessibilityAddTraits(on ? .isSelected : [])
+            }
+        }
+        .padding(2)
+        .background(theme.line, in: RoundedRectangle(cornerRadius: 5))
+        .fixedSize()
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Sort the library")
+    }
+}
+
 /// A thumbnail in a Library group's strip (T1059): the picture, or its
 /// ground until it comes, with the file's name under it. A landscape picture
 /// fills the frame from its top, where a screenshot's title is; a tall one
@@ -314,13 +351,16 @@ public struct LibraryStripFold: View {
 }
 
 /// A library file in the Library page: on the Mac its own title, when it
-/// has one, over its name (T1061); its size and date.
+/// has one, over its name (T1061); its size and date, and in the flat list
+/// its task.
 public struct LibraryFileRow: View {
     @Environment(\.theme) private var theme
     let file: AppAPI.LibraryFile
+    let source: String?
 
-    public init(_ file: AppAPI.LibraryFile) {
+    public init(_ file: AppAPI.LibraryFile, source: String? = nil) {
         self.file = file
+        self.source = source
     }
 
     public var body: some View {
@@ -337,16 +377,25 @@ public struct LibraryFileRow: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
+                .layoutPriority(1)
             } else {
                 Text(file.name)
                     .lineLimit(1)
                     .truncationMode(.middle)
+                    .layoutPriority(1)
             }
             #else
             Text(file.name)
                 .lineLimit(1)
                 .truncationMode(.middle)
+                .layoutPriority(1)
             #endif
+            if let source {
+                Text(source)
+                    .font(theme.sized(Flat.label))
+                    .foregroundStyle(theme.muted)
+                    .lineLimit(1)
+            }
             Spacer(minLength: 8)
             Text(Attachment.size(file.size))
                 .font(theme.mono(.caption))

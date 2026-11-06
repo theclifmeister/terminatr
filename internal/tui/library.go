@@ -30,7 +30,8 @@ import (
 // files of its thread, each after y; / filters and t steps through the
 // kinds (libraryfilter.go). A group's heading says its task's status, kinds
 // and size, and a long group folds (libraryheads.go). Two images that are one
-// picture twice list as one row, and v switches it (librarystack.go). A file
+// picture twice list as one row, and v switches it (librarystack.go); s lists
+// the files flat, biggest first, a stack's two apart (librarysort.go). A file
 // shows by its own title, when it has one, with its name beside it
 // (libFileLabel) and its size, never a path.
 
@@ -74,7 +75,11 @@ func libraryOrder(files []thread.LibFile) []thread.LibFile {
 // libFiles are the Library tab's files the filter and kind leave, in the
 // order they are listed.
 func (pv *projectView) libFiles() []thread.LibFile {
-	return libraryOrder(libShown(pv.library, pv.libFilter, pv.libPick))
+	shown := libShown(pv.library, pv.libFilter, pv.libPick)
+	if pv.libFlat() {
+		return libBiggestFirst(shown)
+	}
+	return libraryOrder(shown)
 }
 
 // narrowLib sets the filter and the kind; the selection stays on its file
@@ -83,13 +88,25 @@ func (pv *projectView) libFiles() []thread.LibFile {
 func (pv *projectView) narrowLib(query, pick string) {
 	at, ok := pv.selLib()
 	pv.libFilter, pv.libPick = query, pick
+	pv.keepLibSel(at, ok)
+}
+
+// keepLibSel puts the selection back on file at (if ok) after the list
+// changed, opening its group's fold if it went under one and making a stack's
+// row show it, else on the first.
+func (pv *projectView) keepLibSel(at thread.LibFile, ok bool) {
 	pv.sel[tabLibrary] = 0
 	if ok {
-		same := func(f thread.LibFile) bool { return f.Group() == at.Group() && f.Name == at.Name }
+		same := func(f thread.LibFile) bool { return libFileID(f) == libFileID(at) && f.Name == at.Name }
 		if slices.IndexFunc(pv.libFiles(), same) >= 0 && pv.libRowOf(same) < 0 {
 			pv.setLibOpen(at.Group(), true) // the file is under its group's fold
 		}
-		pv.sel[tabLibrary] = max(pv.libRowOf(same), 0)
+		if i := pv.libRowOf(same); i >= 0 {
+			pv.sel[tabLibrary] = i
+			if r := pv.libRows()[i]; r.stack != nil && !same(r.f) {
+				pv.switchLib(r) // the row shows the file that was selected
+			}
+		}
 	}
 }
 
@@ -192,14 +209,8 @@ func (pv *projectView) libraryHead(w int) ([]string, []int) {
 	for i, l := range pv.libChipLines(w) {
 		head, hits = append(head, l.text), append(hits, libChipHit-i)
 	}
-	switch {
-	case pv.libTyping:
-		head = append(head, th().Accent.Render("/")+" "+oneLine(pv.libFilter)+th().Accent.Render("▏"))
-	case pv.libFilter != "":
-		n := len(libShown(pv.library, pv.libFilter, ""))
-		head = append(head, th().Faint.Render("/ ")+oneLine(pv.libFilter)+th().Faint.Render(fmt.Sprintf(" · %d of %d · esc clears", n, len(pv.library))))
-	case libShowsFilter(pv.library, pv.libFilter):
-		head = append(head, th().Faint.Render("/ filter"))
+	if line, _ := pv.libFilterLine(w); line != "" {
+		head = append(head, line)
 	}
 	if len(head) > len(hits) {
 		hits = append(hits, libFilterHit)
@@ -287,28 +298,37 @@ func (pv *projectView) libraryLines(w int) ([]string, int, []int) {
 	var hits []int
 	sel := -1
 	i := 0
+	flat := pv.libFlat()
 	for _, g := range groups {
-		if len(out) > 0 {
-			out, hits = append(out, ""), append(hits, noHit)
+		if !flat {
+			if len(out) > 0 {
+				out, hits = append(out, ""), append(hits, noHit)
+			}
+			title, meta := libHeading(g.files, w)
+			out, hits = append(out, title, meta), append(hits, noHit, noHit)
 		}
-		title, meta := libHeading(g.files, w)
-		out, hits = append(out, title, meta), append(hits, noHit, noHit)
+		nameW := libFlatName(g.rows, w)
 		for _, r := range g.rows {
 			l := "  " + r.word()
-			if r.isFile() {
-				size := fmt.Sprintf("%*s", libSizeCols, sizeWords(r.f.Size))
-				room := max(w-len(size)-4, 4)
-				l = "  " + fit(libFileLabel(r.f, room, i != pv.sel[tabLibrary]), room) + "  " + size
+			on := i == pv.sel[tabLibrary]
+			switch {
+			case flat:
+				l = libFlatRow(r.f, nameW, w, on)
+			case r.isFile():
+				room := max(libRowRoom(w), 4)
+				l = "  " + fit(libFileLabel(r.f, room, !on), room) + "  " + libSizeWords(r.f.Size)
 			}
 			switch {
 			case r.stack != nil:
-				if i == pv.sel[tabLibrary] {
+				if on {
 					sel = len(out)
 				}
-				l = libStackLine(r, w, i == pv.sel[tabLibrary])
-			case i == pv.sel[tabLibrary]:
+				l = libStackLine(r, w, on)
+			case on:
 				sel = len(out)
 				l = th().Sel.Render(fit(l, w))
+			case flat:
+				l += reset
 			case r.isFile():
 				l = fit(l, w) + reset
 			default:
@@ -321,9 +341,9 @@ func (pv *projectView) libraryLines(w int) ([]string, int, []int) {
 	return out, sel, hits
 }
 
-// libraryKey: / filters and t steps through the kinds; v switches a stack;
-// enter reads the selected file, X deletes it and D its thread's files, each
-// after y.
+// libraryKey: / filters, t steps through the kinds and s turns the sort; v
+// switches a stack; enter reads the selected file, X deletes it and D its
+// thread's files, each after y.
 func (pv *projectView) libraryKey(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	switch k.String() {
 	case "/":
@@ -332,6 +352,11 @@ func (pv *projectView) libraryKey(m *dash, k tea.KeyPressMsg) tea.Cmd {
 	case "t":
 		if chips := libChips(pv.library, pv.libFilter, pv.libPick); chips != nil {
 			pv.narrowLib(pv.libFilter, libNextKind(chips, libPicked(pv.library, pv.libPick)))
+		}
+		return nil
+	case "s":
+		if libShowsSort(pv.library) {
+			pv.sortLib(!pv.libFlat())
 		}
 		return nil
 	case "v":

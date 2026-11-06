@@ -112,3 +112,17 @@ func TestLibraryTitleFilter(t *testing.T) {
 		t.Errorf("by address: %+v", got)
 	}
 }
+
+// TestLibFlatRowTitle: biggest first, a file's own title comes before what
+// it came with; without one the row is as it was.
+func TestLibFlatRowTitle(t *testing.T) {
+	f := thread.LibFile{Thread: "t-0001", Task: "T1", Title: "A design", Name: "design.html", DocTitle: "Who May Run tm", Size: 57000}
+	got := ansi.Strip(libFlatRow(f, 12, 90, true))
+	if !strings.Contains(got, "design.html") || !strings.Contains(got, "Who May Run tm · T1") {
+		t.Errorf("titled: %q", got)
+	}
+	f.DocTitle = ""
+	if got := ansi.Strip(libFlatRow(f, 12, 90, true)); strings.Contains(got, "·") {
+		t.Errorf("untitled: %q", got)
+	}
+}

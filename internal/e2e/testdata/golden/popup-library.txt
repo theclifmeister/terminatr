@@ -4,12 +4,12 @@
       │ 1 overview 2 inbox 3 tasks 4 settings 5 access 6 keys 7 memory 8 library 9 messages 0 designs mods       │
       │                                                                                                          │──────
       │  all 2    notes 1    data 1   t kinds                                                                    │
+      │ 41 B · s biggest first                                                                                   │
       │                                                                                                          │
       │ T1  Research the options  ● started                                                                      │
       │   t-0001 · 7 Oct · 1 note · 1 data file · 41 B                                                           │
       │   data.json                                                                                         11 B │
       │   Options  options.md                                                                               30 B │
-      │                                                                                                          │
       │                                                                                                          │
       │                                                                                                          │
       │                                                                                                          │
