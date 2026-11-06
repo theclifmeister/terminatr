@@ -43,6 +43,7 @@ func loadIcons() string {
 
 // resetConsole forgets the filter, the places and the tooltip (tests).
 func resetConsole() {
+	sideBoards.reset()
 	thisConsole.Lock()
 	defer thisConsole.Unlock()
 	thisConsole.filter, thisConsole.now, thisConsole.last = sideFilterState{}, place{}, place{}

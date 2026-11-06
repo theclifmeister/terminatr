@@ -115,9 +115,11 @@ func sideLines(all []treeRow, w, h int, head sideHeadIn, foot []string, right bo
 	if l, ok := sideFilterLine(cw - gap); ok {
 		out = append(out, edge(l+strings.Repeat(" ", gap)+reset))
 	}
-	if n == 0 {
+	// Under a filter a paired match can be all there is: no note over it.
+	filtering := sideFilterNow().text != ""
+	if n == 0 && (!filtering || !slices.ContainsFunc(all, func(r treeRow) bool { return r.kind != treeSection })) {
 		note := " no projects"
-		if sideFilterNow().text != "" {
+		if filtering {
 			note = " no match"
 		}
 		if slim {

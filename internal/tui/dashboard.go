@@ -549,7 +549,9 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.setData(msg.data)
 	case tickMsg:
-		return m, tea.Batch(m.load(), m.reloadBoards(), m.pollModViews(), m.logsTick(), m.pollDevices(), m.loadProgramNeeds(false), m.viewerWatch())
+		return m, tea.Batch(m.load(), m.reloadBoards(), m.pollModViews(), m.logsTick(), m.pollDevices(), m.loadProgramNeeds(false), m.viewerWatch(), m.readSideBoards())
+	case sideBoardMsg:
+		return m, nil
 	case viewerGoneMsg:
 		msg.tv.goes(msg.words)
 		return m, nil
