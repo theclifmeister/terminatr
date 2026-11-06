@@ -457,6 +457,9 @@ func remoteTasks(ts []proto.PeerTask, w int) []string {
 			}
 			line := fmt.Sprintf("%-6s %-8s %s", fmt.Sprintf("T%d", t.ID), oneLine(t.Status), oneLine(t.Title))
 			var bits []string
+			if label := tasks.DoneLabel(t.DoneAt, time.Now()); label != "" {
+				bits = append(bits, label)
+			}
 			if t.Thread != "" {
 				bits = append(bits, t.Thread)
 			}

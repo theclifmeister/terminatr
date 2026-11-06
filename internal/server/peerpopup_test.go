@@ -111,7 +111,7 @@ func TestPeerPopupAllowlist(t *testing.T) {
 	if z := zeroFields(reflect.ValueOf(pt2)); len(z) > 0 {
 		t.Errorf("task fields not copied: %v", z)
 	}
-	if b, _ := json.Marshal(pt2); strings.Count(string(b), "SECRET") != 4 { // title, thread, created, updated
+	if b, _ := json.Marshal(pt2); strings.Count(string(b), "SECRET") != 5 { // title, thread, created, updated, done_at
 		t.Errorf("a task's other words crossed: %s", b)
 	}
 	// Priority (T927) stays home: a paired server's board lists in its
@@ -119,7 +119,7 @@ func TestPeerPopupAllowlist(t *testing.T) {
 	// to other projects, which may name this server's other projects or
 	// its paired servers' aliases. Parts (programs B10) stay home: only a
 	// program's umbrella tasks have them, and programs aren't shared.
-	if want := []string{"After", "AfterX", "Archived", "Created", "Design", "ID", "Notes", "Owner", "Parts", "Priority", "Repo", "Status", "Steps", "Thread", "Title", "Updated"}; !slices.Equal(fieldNames(reflect.TypeFor[tasks.Task]()), want) {
+	if want := []string{"After", "AfterX", "Archived", "Created", "Design", "DoneAt", "ID", "Notes", "Owner", "Parts", "Priority", "Repo", "Status", "Steps", "Thread", "Title", "Updated"}; !slices.Equal(fieldNames(reflect.TypeFor[tasks.Task]()), want) {
 		t.Errorf("tasks.Task has %v: decide what of a new field a paired server sees (peerTaskOf)", fieldNames(reflect.TypeFor[tasks.Task]()))
 	}
 

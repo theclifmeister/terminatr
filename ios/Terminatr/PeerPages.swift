@@ -293,6 +293,9 @@ private struct PeerBoardPage: View {
                                 .font(theme.monoSized(12.5))
                                 .foregroundStyle(theme.muted)
                         }
+                        if t.status == "done" {
+                            FinishedTag(task: t)
+                        }
                     }
                 }
                 .contentShape(Rectangle())

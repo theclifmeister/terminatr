@@ -158,6 +158,9 @@ private struct PeerBoardRow: View {
                             .font(theme.sized(Flat.label))
                             .foregroundStyle(theme.muted)
                     }
+                    if task.status == "done" {
+                        FinishedLabel(task: task)
+                    }
                 }
                 .contentShape(Rectangle())
             }

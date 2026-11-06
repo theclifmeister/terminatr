@@ -1354,7 +1354,8 @@ final class AppModel {
         return false
     }
 
-    /// The done tasks of project's board, in board order (task.done).
+    /// The done tasks of project's board as task.done answers: newest
+    /// first, or board order from an older tm.
     func doneTasks(_ project: String) async throws -> [AppAPI.Task] {
         try await connected().call(AppAPI.Methods.taskDone, AppAPI.ProjectParams(project: project)).tasks
     }

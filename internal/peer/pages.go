@@ -222,7 +222,7 @@ func cleanPages(p proto.PeerPages) proto.PeerPages {
 		}
 		t.Title, t.Status = textsafe.Line(t.Title, proto.PeerPagesTitle), word(peerWord, t.Status)
 		t.Thread = word(peerThread, t.Thread)
-		t.Created, t.Updated = textsafe.Line(t.Created, 40), textsafe.Line(t.Updated, 40)
+		t.Created, t.Updated, t.DoneAt = textsafe.Line(t.Created, 40), textsafe.Line(t.Updated, 40), textsafe.Line(t.DoneAt, 40)
 		if len(t.Steps) > proto.PeerPagesMaxSteps {
 			t.Steps = t.Steps[:proto.PeerPagesMaxSteps]
 		}

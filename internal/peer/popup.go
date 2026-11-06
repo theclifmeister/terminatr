@@ -104,7 +104,7 @@ func cleanPopup(p proto.PeerPopup) proto.PeerPopup {
 		t.Thread = word(peerThread, t.Thread)
 		t.StepsTotal = max(t.StepsTotal, 0)
 		t.StepsDone = min(max(t.StepsDone, 0), t.StepsTotal)
-		t.Created, t.Updated = textsafe.Line(t.Created, 40), textsafe.Line(t.Updated, 40)
+		t.Created, t.Updated, t.DoneAt = textsafe.Line(t.Created, 40), textsafe.Line(t.Updated, 40), textsafe.Line(t.DoneAt, 40)
 		ts = append(ts, t)
 	}
 	p.Tasks = ts

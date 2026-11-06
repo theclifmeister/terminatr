@@ -105,8 +105,8 @@ type PeerOverview struct {
 }
 
 // PeerPageTask is a task of the board: its id, title, status, thread,
-// its steps (their words and whether done) and when it was made and
-// last changed. Its notes, owner, repo, PR and reports stay home.
+// its steps (their words and whether done) and when it was made, last
+// changed and finished. Its notes, owner, repo, PR and reports stay home.
 type PeerPageTask struct {
 	ID      int        `json:"id"`
 	Title   string     `json:"title"`
@@ -115,6 +115,9 @@ type PeerPageTask struct {
 	Steps   []PeerStep `json:"steps,omitempty"`
 	Created string     `json:"created,omitempty"`
 	Updated string     `json:"updated,omitempty"`
+	// DoneAt is when a done task finished: absent from an older tm, whose
+	// done tasks come in board order.
+	DoneAt string `json:"done_at,omitempty"`
 }
 
 // PeerStep is one step of a task.

@@ -44,7 +44,7 @@
     }
     return out;
   }
-  function status(s) {
+  function status(s, finished) {
     var _a;
     const look = {
       started: ["working", "good"],
@@ -57,7 +57,7 @@
     const [icon, role] = (_a = look[s]) != null ? _a : ["other", "faint"];
     return [
       { icon, role },
-      { text: " " + s, role }
+      { text: " " + (s === "done" && finished || s), role }
     ];
   }
   function priority(p) {
@@ -73,7 +73,7 @@
     if (more) rest.push({ text: (rest.length > 0 ? "  " : "") + more, role: "faint" });
     const r = {
       id: t.id,
-      cells: [[{ text: t.id }], ...prio ? [priority(t.priority)] : [], [{ text: t.title }], status(t.status), rest],
+      cells: [[{ text: t.id }], ...prio ? [t.status === "done" ? [] : priority(t.priority)] : [], [{ text: t.title }], status(t.status, t.done_label), rest],
       actions: actions(project, t)
     };
     if (!closed(groupOf(t.status)) && ((_b = t.steps) != null ? _b : []).length > 0) {
@@ -94,10 +94,11 @@
         in_.sort((a, b) => rank(a.priority) - rank(b.priority) || num(a.id) - num(b.id));
       }
       if (closed(g.id)) {
-        in_.sort((a, b) => {
+        const when = (x) => {
           var _a, _b;
-          return ((_a = b.updated) != null ? _a : "").localeCompare((_b = a.updated) != null ? _b : "") || num(b.id) - num(a.id);
-        });
+          return (_b = (_a = x.done_at) != null ? _a : x.updated) != null ? _b : "";
+        };
+        in_.sort((a, b) => (when(a) === when(b) ? 0 : when(a) < when(b) ? 1 : -1) || num(b.id) - num(a.id));
       }
       out.push(...in_);
     }
@@ -121,7 +122,7 @@
     const rows = [];
     let group = "";
     const list = shown(t);
-    const prio = list.some((x) => !!x.priority);
+    const prio = list.some((x) => !!x.priority && x.status !== "done");
     for (const task of list) {
       const g = groupOf(task.status);
       if (g !== group) {

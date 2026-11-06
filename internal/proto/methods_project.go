@@ -127,7 +127,8 @@ const MethodTaskAdd = "task.add"
 const MethodTaskGet = "task.get"
 
 // MethodTaskDone lists a project's done tasks, the board's done group
-// in board order, without their notes and steps (since protocol 24):
+// newest first (tasks.NewestDoneFirst), without their notes and steps
+// (since protocol 24):
 // what projects.watch leaves out, for a console's board when the user
 // shows the done tasks. Params TaskDoneParams, result {tasks}
 // (server.TaskDone). The human's.
