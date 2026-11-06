@@ -159,6 +159,7 @@ struct AttachmentView: View {
         if file.sendable {
             Button("Save As…") { Task { await FileActs.saveAs(app, session, file) } }
             Button("Open") { Task { await FileActs.open(app, session, file, in: nil) } }
+                .disabled(FileCaution.launches(file.name))
         }
         if !file.path.isEmpty, FileManager.default.fileExists(atPath: file.path) {
             Button("Reveal") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: file.path)]) }
@@ -332,6 +333,7 @@ enum FileActs {
     /// Opens a copy of the file, in the app of bundle id (Preview) or
     /// the type's default.
     static func open(_ app: AppModel, _ session: String?, _ f: Attachment, in bundle: String?) async {
+        guard bundle != nil || !FileCaution.launches(f.name) else { return }
         guard let d = await bytes(app, session, f) else { return }
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("terminatr-files/\(UUID().uuidString)")
         let name = f.name.hasPrefix("Image #") ? "Image.\(ext(f))" : f.name

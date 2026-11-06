@@ -200,7 +200,12 @@ struct LibraryPane: View {
     @ViewBuilder
     private func actions(_ f: AppAPI.LibraryFile) -> some View {
         Button("Quick Look") { look(f) }
-        Button("Open") { Task { if let url = await copy(f) { NSWorkspace.shared.open(url) } } }
+        Button("Open") {
+            guard !FileCaution.launches(f.name) else { return }
+            Task { if let url = await copy(f) { NSWorkspace.shared.open(url) } }
+        }
+        .disabled(FileCaution.launches(f.name))
+        .help(FileCaution.launches(f.name) ? "Open would run this file: Quick Look it or Save As…" : "")
         Button("Save As…") { Task { await saveAs(f) } }
     }
 
