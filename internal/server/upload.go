@@ -307,13 +307,9 @@ func (s *Server) takeChunk(info proto.SessionInfo, p proto.SessionUploadParams, 
 		if info.Project == "" {
 			return none, proto.Errorf(proto.ErrRefused, "session %s is in no project: files go to a project's uploads/", p.Session)
 		}
-		name := uploadName(p.Name)
-		typ := uploadType(name)
-		if typ == "" {
-			return none, proto.Errorf(proto.ErrBadParams, "%s: tm takes images (PNG, JPEG, GIF, WebP), PDFs and text files", shownName(p.Name))
-		}
-		if p.Size <= 0 || p.Size > proto.MaxUpload {
-			return none, proto.Errorf(proto.ErrBadParams, "%s: a file is 1 byte to %d MB", name, proto.MaxUpload>>20)
+		name, typ, perr := uploadRules(p.Name, p.Size)
+		if perr != nil {
+			return none, perr
 		}
 		dir, err := sessionDir(info)
 		if err != nil {
@@ -322,7 +318,6 @@ func (s *Server) takeChunk(info proto.SessionInfo, p proto.SessionUploadParams, 
 			}
 			return none, proto.Errorf(proto.ErrRefused, "session %s: %v", p.Session, err)
 		}
-		var perr *proto.Error
 		id, perr = s.uploads.begin(&upload{session: p.Session, dir: dir, name: name, typ: typ, size: p.Size, at: now, peer: peer})
 		if perr != nil {
 			return none, perr
@@ -354,6 +349,38 @@ func (s *Server) takeChunk(info proto.SessionInfo, p proto.SessionUploadParams, 
 	s.journalSession(info, who, "session.upload", sessionRef(info), ref+" ("+strconv.FormatInt(up.size, 10)+" bytes)")
 	res.Ref, res.Name, res.Type, res.Size = ref, ref, up.typ, up.size
 	return res, nil
+}
+
+// uploadRules checks a file's name and size by what uploads/ takes, and
+// answers the name it stores it as and its type.
+func uploadRules(name string, size int64) (stored, typ string, perr *proto.Error) {
+	stored = uploadName(name)
+	typ = uploadType(stored)
+	if typ == "" {
+		return "", "", proto.Errorf(proto.ErrBadParams, "%s: tm takes images (PNG, JPEG, GIF, WebP), PDFs and text files", shownName(name))
+	}
+	if size <= 0 || size > proto.MaxUpload {
+		return "", "", proto.Errorf(proto.ErrBadParams, "%s: a file is 1 byte to %d MB", stored, proto.MaxUpload>>20)
+	}
+	return stored, typ, nil
+}
+
+// StoreFile stores the bytes of a file named name in folder's uploads/ by
+// session.upload's rules, for tm thread prompt --file, and answers the name it
+// took there.
+func StoreFile(folder, name string, data []byte, now time.Time) (string, *proto.Error) {
+	stored, typ, perr := uploadRules(name, int64(len(data)))
+	if perr != nil {
+		return "", perr
+	}
+	if !sniffs(typ, data) {
+		return "", proto.Errorf(proto.ErrBadParams, "%s isn't a %s file", stored, typ)
+	}
+	ref, err := storeUpload(filepath.Join(folder, "uploads"), stored, data, now)
+	if err != nil {
+		return "", proto.Errorf(proto.ErrInternal, "storing %s: %v", stored, err)
+	}
+	return ref, nil
 }
 
 // shownName is a name the app gave, for an error.
@@ -406,7 +433,7 @@ func promptFiles(folder, text string, refs []string) (string, *proto.Error) {
 	if perr != nil {
 		return "", perr
 	}
-	return attachedText(text, paths), nil
+	return AttachedText(text, paths), nil
 }
 
 // promptPaths are the paths of the uploads refs name in folder's uploads/. A
@@ -435,9 +462,9 @@ func promptPaths(folder string, refs []string) ([]string, *proto.Error) {
 	return paths, nil
 }
 
-// attachedText is text with each of paths on an "Attached: <path>" line after
+// AttachedText is text with each of paths on an "Attached: <path>" line after
 // it.
-func attachedText(text string, paths []string) string {
+func AttachedText(text string, paths []string) string {
 	text = strings.TrimRight(text, " \t\r\n")
 	if len(paths) == 0 {
 		return text

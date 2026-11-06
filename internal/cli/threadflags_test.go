@@ -69,22 +69,34 @@ func TestThreadSubcommandFlags(t *testing.T) {
 	_, err = parseWith(t, readFlags, "t-0001", "--lines", "0")
 	isUsage(t, err, "--lines takes a positive number")
 
-	if o, err := parseWith(t, promptFlags, "t-0001", "go on"); err != nil || o != (promptOpts{id: "t-0001", text: "go on"}) {
+	if o, err := parseWith(t, promptFlags, "t-0001", "go on"); err != nil || !reflect.DeepEqual(o, promptOpts{id: "t-0001", text: "go on"}) {
 		t.Errorf("prompt: %+v, %v", o, err)
 	}
-	if o, err := parseWith(t, promptFlags, "t-0001", "--next", "2"); err != nil || o != (promptOpts{id: "t-0001", next: "2"}) {
+	if o, err := parseWith(t, promptFlags, "t-0001", "--next", "2"); err != nil || !reflect.DeepEqual(o, promptOpts{id: "t-0001", next: "2"}) {
 		t.Errorf("prompt --next: %+v, %v", o, err)
 	}
-	if o, err := parseWith(t, promptFlags, "t-0001", "go on", "--now"); err != nil || o != (promptOpts{id: "t-0001", text: "go on", mode: proto.PromptNow}) {
+	if o, err := parseWith(t, promptFlags, "t-0001", "go on", "--now"); err != nil || !reflect.DeepEqual(o, promptOpts{id: "t-0001", text: "go on", mode: proto.PromptNow}) {
 		t.Errorf("prompt --now: %+v, %v", o, err)
 	}
-	if o, err := parseWith(t, promptFlags, "t-0001", "--next", "1", "--interrupt"); err != nil || o != (promptOpts{id: "t-0001", next: "1", mode: proto.PromptInterrupt}) {
+	if o, err := parseWith(t, promptFlags, "t-0001", "--next", "1", "--interrupt"); err != nil || !reflect.DeepEqual(o, promptOpts{id: "t-0001", next: "1", mode: proto.PromptInterrupt}) {
 		t.Errorf("prompt --next --interrupt: %+v, %v", o, err)
 	}
-	for _, args := range [][]string{{"t-0001"}, {"t-0001", "x", "--next", "2"}, {"t-0001", "a", "b"}, {"t-0001", "x", "--now", "--interrupt"}} {
+	if o, err := parseWith(t, promptFlags, "t-0001", "--file", "a.png", "--file", "b.md"); err != nil || !reflect.DeepEqual(o, promptOpts{id: "t-0001", files: []string{"a.png", "b.md"}}) {
+		t.Errorf("prompt --file alone: %+v, %v", o, err)
+	}
+	if o, err := parseWith(t, promptFlags, "t-0001", "see this", "--file", "a.png"); err != nil || !reflect.DeepEqual(o, promptOpts{id: "t-0001", text: "see this", files: []string{"a.png"}}) {
+		t.Errorf("prompt text --file: %+v, %v", o, err)
+	}
+	for _, args := range [][]string{{"t-0001"}, {"t-0001", "x", "--next", "2"}, {"t-0001", "x", "--next", "2", "--file", "a.png"}, {"t-0001", "a", "b"}, {"t-0001", "x", "--now", "--interrupt"}} {
 		_, err = parseWith(t, promptFlags, args...)
 		isUsage(t, err, "tm thread prompt <id>")
 	}
+	tooMany := []string{"t-0001"}
+	for range proto.MaxPromptFiles + 1 {
+		tooMany = append(tooMany, "--file", "a.png")
+	}
+	_, err = parseWith(t, promptFlags, tooMany...)
+	isUsage(t, err, "at most")
 
 	if o, err := parseWith(t, approveFlags, "t-0001"); err != nil || o != (approveOpts{"t-0001", 1}) {
 		t.Errorf("approve: %+v, %v", o, err)

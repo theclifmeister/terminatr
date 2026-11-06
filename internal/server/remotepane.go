@@ -695,5 +695,5 @@ func (r *remotes) promptFiles(id, text string, refs []string) (string, *proto.Er
 	if err != nil {
 		return "", remoteUploadError(alias, err)
 	}
-	return attachedText(text, paths), nil
+	return AttachedText(text, paths), nil
 }
