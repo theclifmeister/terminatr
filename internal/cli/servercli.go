@@ -10,10 +10,12 @@ import (
 	"io"
 	"os"
 	"runtime"
+	"time"
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/keychain"
+	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/service"
 )
@@ -87,6 +89,37 @@ func warnSSH(w io.Writer, goos string, getenv func(string) string) {
 	if msg := keychain.StartWarning(goos, getenv); msg != "" {
 		fmt.Fprintln(w, "tm: "+msg)
 	}
+}
+
+// identifyWait bounds serverHuman's question to the server: a hung
+// server is what tm server stop --force is for, so it must not hold the
+// command up.
+var identifyWait = 5 * time.Second
+
+// serverHuman refuses stopping, restarting or installing the server to
+// anyone but the human. Who it is comes from the server when one answers
+// (Env.Run asks only for the commands in checked, and tm server run and
+// start must not dial), else from the environment: the user's own
+// terminal still gets through to a server that is hung or down.
+func (e *Env) serverHuman() error {
+	if e.Identify != nil && !e.Identified && !e.Caller.IsAgent() {
+		who := make(chan caller.Caller, 1)
+		go func() {
+			if c, ok := e.Identify(); ok {
+				who <- c
+			}
+		}()
+		select {
+		case c := <-who:
+			e.Caller = caller.Narrower(e.Caller, c)
+			e.Identified = true
+		case <-time.After(identifyWait):
+		}
+	}
+	if e.Caller.IsAgent() {
+		return &project.Error{Code: "human-only", Msg: "stopping or restarting the server and installing its service are the user's, in their own terminal"}
+	}
+	return nil
 }
 
 // identifyByServer asks a running server who this process is, from its
