@@ -371,6 +371,8 @@ func (c *client) sideName(r treeRow) string {
 		return "inactive projects"
 	case treePeerProject:
 		return r.server() + " / " + r.slug
+	case treePeerTask:
+		return r.server() + " / " + r.name
 	}
 	return r.slug
 }

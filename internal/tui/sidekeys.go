@@ -67,7 +67,7 @@ var sideActions = []sideAction{
 	{id: "side.needs-next", keys: []string{"W"}, op: sideNeedNext, label: "W", help: "the next row that needs you, round the ends; it unfolds what hides the row, and clears a filter that does"},
 	// The previous one, kept bindable with no key: W goes round the ends.
 	{id: "side.needs-prev", op: sideNeedPrev},
-	{id: "side.filter", keys: []string{"/"}, op: sideFilter, label: "/", help: "filter: type to narrow the tree to what matches (a project's name, a thread's task, title or id) and the projects over it; enter keeps the filter, esc clears it"},
+	{id: "side.filter", keys: []string{"/"}, op: sideFilter, label: "/", help: "filter: type to narrow the tree to what matches (a project's name, a thread's task, title or id, a paired server's name, a paired project's open tasks) and the rows over it; enter keeps the filter, esc clears it"},
 	{id: "side.help", keys: []string{"?"}, op: sideHelp, label: "?", help: "help, as prefix+?"},
 }
 
@@ -284,7 +284,7 @@ func sideKeyStep(all []treeRow, w int, sel string, op int) sideStep {
 				return moveTo(j)
 			}
 		}
-		for j := i - 1; j >= 0 && (r.kind == treePeerCoord || r.kind == treePeerThread); j-- {
+		for j := i - 1; j >= 0 && (r.kind == treePeerCoord || r.kind == treePeerThread || r.kind == treePeerTask); j-- {
 			if rows[j].kind == treePeerProject {
 				return moveTo(j)
 			}

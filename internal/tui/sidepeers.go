@@ -95,7 +95,8 @@ func peerFoldOf(r treeRow) string {
 // peerKey names a server header or a remote row as View.SideSel does:
 // "g:" for this server's header, "g:<alias>" for a paired one's,
 // "r:<alias>/<project>" for its project, "rc:…" for the project's
-// coordinator and "rt:<alias>/<project>/<thread>" for a thread.
+// coordinator, "rt:<alias>/<project>/<thread>" for a thread and
+// "rk:<alias>/<project>/<task>" for a task.
 func peerKey(r treeRow) string {
 	if r.prog != "" && r.kind != treeServer {
 		// A paired member's row under its program: its own key, beside
@@ -111,6 +112,8 @@ func peerKey(r treeRow) string {
 		return "rc:" + r.peer + "/" + r.slug
 	case treePeerThread:
 		return "rt:" + r.peer + "/" + r.slug + "/" + r.thread
+	case treePeerTask:
+		return "rk:" + r.peer + "/" + r.slug + "/" + r.name
 	}
 	return "g:" + r.peer
 }
@@ -309,7 +312,7 @@ func mirrorLink(pm proto.PeerMirror) peerLink {
 // fold are that place's own.
 func peerProjectRows(alias string, p proto.PeerMirrorProject, link *peerLink, t view.Tree, prog string) []treeRow {
 	pr := treeRow{kind: treePeerProject, peer: alias, slug: p.Project, pct: -1, link: link, threads: p.Threads,
-		hint: p.NeedsYou > 0, paused: p.Paused, stale: p.Stale}
+		hint: p.NeedsYou > 0, paused: p.Paused, stale: p.Stale, pages: p.Pages}
 	ctx, asks := -1, 0
 	byID := map[string]proto.PeerSession{}
 	for _, s := range p.Sessions {
@@ -395,7 +398,7 @@ func (r treeRow) drawn() treeRow {
 		r.kind = treeProject
 	case treePeerCoord:
 		r.kind = treeCoordinator
-	case treePeerThread:
+	case treePeerThread, treePeerTask:
 		r.kind = treeThread
 	}
 	return r
@@ -593,6 +596,8 @@ func peerDetails(r treeRow) (string, string) {
 			bits = append(bits, counted(r.asks, "question")+" waiting")
 		}
 		return where + " coordinator · " + running(r.state), strings.Join(bits, " · ")
+	case treePeerTask:
+		return taskDetails(r)
 	}
 	l1 := r.server() + " / " + r.thread
 	switch {
@@ -694,6 +699,8 @@ func peerKeyBar(r *treeRow) []string {
 			return []string{enter + " open", barKey("side.unfold", "→") + " unfold"}
 		}
 		return []string{enter + " open", left + " fold"}
+	case treePeerTask:
+		return []string{enter + " show its project", left + " project"}
 	}
 	if _, _, through := typeTarget(*r); through {
 		// Every printable key types through to it (typethrough.go).

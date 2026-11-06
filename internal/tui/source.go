@@ -479,6 +479,10 @@ type PeerSource interface {
 	// serves none, ErrPanesOff while its pane switch for this server is
 	// off. The human's.
 	PeerPopup(alias, slug string) (proto.PeerPopup, error)
+	// PeerBoard reads the board of the paired server alias's shared
+	// project slug, where its pages switch is on (peer.pages-read,
+	// §16.17). The human's.
+	PeerBoard(alias, slug string) (proto.PeerPages, error)
 	// AskShare asks the paired server alias's user to share a project
 	// with this server, for project forSlug here ("" for none in
 	// particular), with an optional one-line note (peer.share-ask,

@@ -10,6 +10,7 @@ import (
 // drainFed are the messages drain feeds back into the dashboard: the ones
 // a key's command returns for the model to act on.
 var drainFed = []reflect.Type{
+	reflect.TypeOf(sideBoardMsg{}),
 	reflect.TypeOf(actionMsg{}),
 	reflect.TypeOf(loadedMsg{}),
 	reflect.TypeOf(bindingMsg{}),
