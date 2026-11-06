@@ -14,7 +14,8 @@
   Your brief's Related past work, if any, is such hits for your task:
   open the rows that look like they bear on it, skip the rest.
   Files the user uploaded are in its uploads/ folder; your brief or
-  the coordinator names yours.
+  the coordinator names yours (a prompt's `Attached: <path>` line is
+  one, to read by that path).
 - Work through your task's steps in order, ticking each when done: `tm
   task steps T<n> check <N>`. With no steps, first add your plan, one
   call per step (`tm task steps T<n> add "…"`), before you change

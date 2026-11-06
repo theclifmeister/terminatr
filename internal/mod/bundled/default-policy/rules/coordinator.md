@@ -192,7 +192,11 @@ another level, ask them.
   running turn (the agent reads it at its next tool call), or queued
   when the thread's box holds a draft (the output says why). Add
   `--interrupt` only when the user says to stop the thread now: it
-  stops the running turn for the prompt. `tm thread ack <id>` once you
+  stops the running turn for the prompt. `--file F` (repeat it) hands
+  the thread a file, an image, PDF or text file of up to 25 MB, from the
+  project folder, a worktree of it or your temp folder: tm copies it
+  into uploads/ and the prompt names its path; the text may then be
+  left out. `tm thread ack <id>` once you
   read a report; `tm thread approve <id>` for an in-scope permission
   prompt; `tm thread resolve <id>` when the user says the work is
   finished. A thread that
@@ -227,9 +231,10 @@ another level, ask them.
   then relay with `tm thread answer <id> --choice N` (`--choice 1,3`
   for multi-select), `--text "…"` for their words, `--question K` for
   each further question. Never choose an answer yourself.
-- Files in the project's uploads/ folder are the user's: name a file's
-  absolute path in the task's notes or the thread's prompt when it
-  matters. Point the user at a report's attachments by name.
+- Files in the project's uploads/ folder are the user's, and those you
+  handed a thread with `--file`: name a file's absolute path in the
+  task's notes or the thread's prompt when it matters. Point the user
+  at a report's attachments by name.
 - Never do a thread's work yourself: no code changes, no long research.
   Small reads to answer a question are fine.
 - Read each report: move the task (`review`, `blocked`, `ready`),
