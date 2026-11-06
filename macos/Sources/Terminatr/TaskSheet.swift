@@ -31,10 +31,14 @@ struct TaskSheet: View {
     var body: some View {
         let detail = app.project(shown.project).flatMap { TaskDetail.of(shown.task, in: $0, fetched: full) }
         let watched = app.project(shown.project).flatMap { TaskDetail.of(shown.task, in: $0) }
-        VStack(alignment: .leading, spacing: 0) {
+        FlatSheet(width: 640) {
             if let detail {
                 header(detail)
-                theme.line.frame(height: 1)
+            } else {
+                SheetTitle(shown.task, detail: shown.project)
+            }
+        } content: {
+            if let detail {
                 ScrollView {
                     content(detail)
                         .padding(16)
@@ -50,10 +54,9 @@ struct TaskSheet: View {
                     .foregroundStyle(theme.muted)
                     .padding(16)
             }
-            theme.line.frame(height: 1)
+        } footer: {
             footer(detail)
         }
-        .frame(width: 560)
         .guardingLinks()
         .task(id: watched.map { "\($0.task.status) \($0.task.updated) \($0.partial)" }) {
             await fetch(watched)
@@ -64,34 +67,29 @@ struct TaskSheet: View {
 
     private func header(_ d: TaskDetail) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(d.task.ref)
-                    .font(theme.mono(.title3, .medium))
+                    .font(theme.monoSized(Flat.text, .medium))
                     .foregroundStyle(theme.action)
                 Text(d.task.title)
-                    .font(theme.title(.title2, .heavy))
+                    .font(theme.title(.headline, .semibold))
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
+                    .accessibilityAddTraits(.isHeader)
                 Spacer(minLength: 8)
                 PriorityTag(d.task.priority)
-                Text(TaskDetail.words(d.task.status))
-                    .font(theme.mono(.caption, .medium))
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 2)
-                    .background(theme.pane, in: RoundedRectangle(cornerRadius: 4))
-                    .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(theme.line, lineWidth: 1))
+                Chip(TaskDetail.words(d.task.status))
             }
             Text(d.facts)
-                .font(theme.mono(.footnote))
+                .font(theme.sized(Flat.label))
                 .foregroundStyle(theme.muted)
             if let priorityError {
                 Text(priorityError)
-                    .font(theme.body(.footnote))
+                    .font(theme.sized(Flat.label))
                     .foregroundStyle(theme.attention)
             }
             TaskOutcome(project: d.project, task: d.task.ref)
         }
-        .padding(16)
     }
 
     private func content(_ d: TaskDetail) -> some View {
@@ -109,12 +107,13 @@ struct TaskSheet: View {
     }
 
     private func footer(_ d: TaskDetail?) -> some View {
-        HStack(spacing: 8) {
+        Group {
             if let d, let th = d.thread {
                 Button("Show Thread") {
                     dismiss()
                     app.select(.card(th, in: d.project))
                 }
+                .fixedSize()
                 .help("Shows \(th.record.id) in the window")
             }
             if let d {
@@ -133,8 +132,6 @@ struct TaskSheet: View {
                 TaskActs(project: d.project, task: d.task.ref, status: d.task.status)
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
     }
 
     /// The TUI's c on a task: the project's coordinator, started when
@@ -146,13 +143,14 @@ struct TaskSheet: View {
             Button(asking ? "Opening…" : "Ask the Coordinator") {
                 ask(d)
             }
+            .fixedSize()
             .disabled(asking || (!running && project?.active != true))
             .help(running || project?.active == true
                   ? "Opens \(d.project)'s coordinator with \(d.task.ref) in its composer, for your question"
                   : "The project is inactive: activate it to start its coordinator")
             if let askError {
                 Text(askError)
-                    .font(theme.body(.footnote))
+                    .font(theme.sized(Flat.label))
                     .foregroundStyle(theme.attention)
             }
         }

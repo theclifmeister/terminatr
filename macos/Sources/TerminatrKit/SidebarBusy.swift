@@ -8,10 +8,10 @@ import Foundation
 
 extension Busy {
     /// A paired server's session's, while it works and doesn't ask. No
-    /// time: the mirror doesn't carry its turn's start.
+    /// time from a tm that doesn't send its turn's start.
     public static func of(peer s: AppAPI.PeerSession?) -> Busy? {
         guard let s, s.state == "working", !s.asking else { return nil }
-        return Busy(since: nil)
+        return Busy(since: s.turnSince)
     }
 
     /// Program g's director's, with s its session, as a coordinator's.

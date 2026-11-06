@@ -44,7 +44,6 @@ struct TaskActs: View {
         .onChange(of: status, initial: true) { app.settle(project: project, task: task, status: status) }
         .sheet(isPresented: $sendingBack) {
             SendBackSheet(task: task) { note in ask(.sendBack(note: note)) }
-                .buttonStyle(.automatic)
         }
         .confirmationDialog("Delegate \(task)?", isPresented: $delegating) {
             Button("Ask to Delegate") { ask(.delegate) }
@@ -174,35 +173,29 @@ struct SendBackSheet: View {
     @FocusState private var focused: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Send \(task) back")
-                .font(theme.title(.title2, .heavy))
-            Text("Say what to change. The coordinator passes it on to the thread.")
-                .foregroundStyle(theme.muted)
-            TextEditor(text: $note)
-                .font(theme.body(.body))
-                .frame(minHeight: 90)
-                .scrollContentBackground(.hidden)
-                .padding(6)
-                .background(theme.pane, in: RoundedRectangle(cornerRadius: 8))
-                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(theme.line, lineWidth: 1))
-                .focused($focused)
-                .modifier(NoWritingTools())
-                .accessibilityLabel("What to change")
-            HStack {
-                Spacer()
-                Button("Cancel", role: .cancel) { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Button("Send Back") {
-                    send(note.trimmingCharacters(in: .whitespacesAndNewlines))
-                    dismiss()
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        FlatSheet(width: 440) {
+            SheetTitle("Send \(task) back", detail: "Say what to change. The coordinator passes it on to the thread.")
+        } content: {
+            SheetBody {
+                TextEditor(text: $note)
+                    .scrollContentBackground(.hidden)
+                    .frame(minHeight: 90)
+                    .sheetField()
+                    .focused($focused)
+                    .modifier(NoWritingTools())
+                    .accessibilityLabel("What to change")
             }
+        } footer: {
+            Button("Cancel", role: .cancel) { dismiss() }
+                .keyboardShortcut(.cancelAction)
+            Button("Send Back") {
+                send(note.trimmingCharacters(in: .whitespacesAndNewlines))
+                dismiss()
+            }
+            .buttonStyle(.flatPrimary)
+            .keyboardShortcut(.defaultAction)
+            .disabled(note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
-        .padding(20)
-        .frame(width: 440)
         .onAppear { focused = true }
     }
 }

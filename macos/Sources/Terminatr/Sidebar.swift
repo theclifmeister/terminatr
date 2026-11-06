@@ -71,6 +71,10 @@ struct Sidebar: View {
                     .onChange(of: app.nav.selection) { _, s in
                         if let s { proxy.scrollTo(s) }
                     }
+                    .onChange(of: app.serverReveal) { _, r in
+                        // After the pass that lays out what it unfolded.
+                        DispatchQueue.main.async { proxy.scrollTo(r.key, anchor: .top) }
+                    }
                 }
                 .frame(maxHeight: .infinity)
                 theme.lineSoft.frame(height: 1)
@@ -134,6 +138,7 @@ struct Sidebar: View {
                         }
                     }
                 }
+                .id(Navigation.sectionKey(server: ""))
                 if expanded(Navigation.sectionKey(server: "")).wrappedValue {
                     ForEach(active, id: \.slug) { e in
                         switch e {
@@ -150,6 +155,7 @@ struct Sidebar: View {
                     SectionHead(first: false, open: open) {
                         remoteHeader(peer)
                     }
+                    .id(Navigation.sectionKey(server: peer.alias))
                     if open.wrappedValue {
                         ForEach(projects, id: \.project) { p in
                             remote(peer, p)

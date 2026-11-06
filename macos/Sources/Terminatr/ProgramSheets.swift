@@ -37,30 +37,28 @@ struct ProgramAskSheet: View {
     @State private var working = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(title)
-                .font(theme.title(.title3, .heavy))
-            content
-            if let failed {
-                Text(failed)
-                    .font(theme.body(.callout))
-                    .foregroundStyle(theme.attention)
+        FlatSheet(width: 440) {
+            SheetTitle(title)
+        } content: {
+            SheetBody {
+                content
+                if let failed {
+                    Text(failed)
+                        .font(theme.sized(Flat.label))
+                        .foregroundStyle(theme.attention)
+                }
+                if let said {
+                    Text(said)
+                        .font(theme.monoSized(Flat.label))
+                        .foregroundStyle(theme.muted)
+                        .textSelection(.enabled)
+                }
             }
-            if let said {
-                Text(said)
-                    .font(theme.mono(.footnote))
-                    .foregroundStyle(theme.muted)
-                    .textSelection(.enabled)
-            }
-            HStack {
-                Spacer()
-                Button(said == nil ? "Cancel" : "Done") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                if said == nil { actions }
-            }
+        } footer: {
+            Button(said == nil ? "Cancel" : "Done") { dismiss() }
+                .keyboardShortcut(.cancelAction)
+            if said == nil { actions }
         }
-        .padding(16)
-        .frame(width: 440)
         .disabled(working)
     }
 
@@ -78,7 +76,7 @@ struct ProgramAskSheet: View {
         switch ask {
         case .answer(_, let q, let text):
             Text(q?.question ?? text)
-                .font(theme.body(.body))
+                .font(theme.sized(Flat.text))
                 .fixedSize(horizontal: false, vertical: true)
             ForEach(q?.options ?? [], id: \.label) { o in
                 Toggle(isOn: Binding(get: { picks.contains(o.label) }, set: { on in
@@ -90,9 +88,9 @@ struct ProgramAskSheet: View {
                     }
                 })) {
                     VStack(alignment: .leading, spacing: 0) {
-                        Text(o.label).font(theme.body(.body, .medium))
+                        Text(o.label).font(theme.sized(Flat.text, .medium))
                         if !o.description.isEmpty {
-                            Text(o.description).font(theme.body(.caption)).foregroundStyle(theme.muted)
+                            Text(o.description).font(theme.sized(Flat.label)).foregroundStyle(theme.muted)
                         }
                     }
                 }
@@ -100,24 +98,28 @@ struct ProgramAskSheet: View {
             }
             TextField("Or your own words", text: $other, axis: .vertical)
                 .lineLimit(1...4)
+                .sheetField()
             Text("The answer goes to every member question it covers.")
-                .font(theme.body(.caption))
+                .font(theme.sized(Flat.label))
                 .foregroundStyle(theme.muted)
         case .umbrella(_, _, let text):
             Text(text)
-                .font(theme.body(.body))
+                .font(theme.sized(Flat.text))
             TextField("A note (sending back needs one)", text: $other, axis: .vertical)
                 .lineLimit(1...4)
+                .sheetField()
         case .rename:
             Text("The director starts again under the new name, and the members' settings follow it.")
-                .font(theme.body(.callout))
+                .font(theme.sized(Flat.text))
                 .foregroundStyle(theme.muted)
             TextField("New name", text: $other)
+                .sheetField()
         case .delete:
             Text("Its folder goes to the trash and its members stay as they are. Type \(program) to delete it.")
-                .font(theme.body(.callout))
+                .font(theme.sized(Flat.text))
                 .foregroundStyle(theme.muted)
             TextField(program, text: $other)
+                .sheetField()
         }
     }
 
@@ -128,6 +130,7 @@ struct ProgramAskSheet: View {
             Button("Answer") {
                 run { "\(ProgramFacts.answered(try await app.programAnswer(program, ref: ref, choices: Array(picks), other: other)))" }
             }
+            .buttonStyle(.flatPrimary)
             .keyboardShortcut(.defaultAction)
             .disabled(picks.isEmpty && other.trimmingCharacters(in: .whitespaces).isEmpty)
         case .umbrella(let task, _, _):
@@ -138,12 +141,14 @@ struct ProgramAskSheet: View {
             Button("Accept") {
                 run { "Accepted: \(try await app.programUmbrella(program, task: task, accept: true, note: other).status)" }
             }
+            .buttonStyle(.flatPrimary)
             .keyboardShortcut(.defaultAction)
         case .rename:
             Button("Rename") {
                 let to = other.trimmingCharacters(in: .whitespaces)
                 run { (try await app.programRename(program, to: to)).notes.joined(separator: "\n") }
             }
+            .buttonStyle(.flatPrimary)
             .keyboardShortcut(.defaultAction)
             .disabled(other.trimmingCharacters(in: .whitespaces).isEmpty)
         case .delete:

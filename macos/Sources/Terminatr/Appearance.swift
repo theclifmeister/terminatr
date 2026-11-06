@@ -168,66 +168,64 @@ struct NewTaskSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("New Task")
-                    .font(theme.title(.title, .heavy))
-                Text("Adds a task to \(project)'s board. Its coordinator picks it up from there.")
-                    .font(theme.body(.subheadline))
-                    .foregroundStyle(theme.muted)
-            }
-            Form {
+        FlatSheet(width: 480) {
+            SheetTitle("New Task", detail: "Adds a task to \(project)'s board. Its coordinator picks it up from there.")
+        } content: {
+            SheetBody {
                 if !templates.isEmpty {
-                    Picker("Template", selection: $form.template) {
-                        Text("No template").tag("")
-                        ForEach(templates, id: \.ref) { t in
-                            Text(NewTaskForm.label(t, among: templates)).tag(t.ref)
+                    SheetField("Template") {
+                        SheetPicker(label: "Template", shown: template.map { NewTaskForm.label($0, among: templates) } ?? "No template", selection: $form.template) {
+                            Text("No template").tag("")
+                            ForEach(templates, id: \.ref) { t in
+                                Text(NewTaskForm.label(t, among: templates)).tag(t.ref)
+                            }
                         }
                     }
                 }
-                TextField("Title", text: $form.title, prompt: Text("What needs doing, in one line"))
-                    .focused($titleFocused)
-                TextField("Notes", text: $form.notes,
-                          prompt: Text(template.map { $0.notes.isEmpty ? "Optional: details, links, acceptance" : "Empty: the \($0.name) template's notes" }
-                                       ?? "Optional: details, links, acceptance"),
-                          axis: .vertical)
-                    .lineLimit(4...8)
+                SheetField("Title") {
+                    TextField("Title", text: $form.title, prompt: Text("What needs doing, in one line"))
+                        .sheetField()
+                        .focused($titleFocused)
+                }
+                SheetField("Notes") {
+                    TextField("Notes", text: $form.notes,
+                              prompt: Text(template.map { $0.notes.isEmpty ? "Optional: details, links, acceptance" : "Empty: the \($0.name) template's notes" }
+                                           ?? "Optional: details, links, acceptance"),
+                              axis: .vertical)
+                        .lineLimit(4...8)
+                        .sheetField()
+                }
                 if let template {
-                    LabeledContent("Adds") {
-                        VStack(alignment: .trailing, spacing: 2) {
+                    SheetField("Adds") {
+                        VStack(alignment: .leading, spacing: 2) {
                             Text(NewTaskForm.title(form.title, with: template))
-                                .multilineTextAlignment(.trailing)
                             if !template.steps.isEmpty {
                                 Text(template.steps.count == 1 ? "with 1 step" : "with \(template.steps.count) steps")
                                     .foregroundStyle(theme.muted)
                             }
                         }
+                        .accessibilityElement(children: .combine)
                     }
                     .help(template.steps.map { "• \($0)" }.joined(separator: "\n"))
                 }
+                if let error {
+                    Text(error)
+                        .font(theme.sized(Flat.label))
+                        .foregroundStyle(theme.attention)
+                } else if let added {
+                    Label(added, systemImage: "checkmark.circle.fill")
+                        .font(theme.sized(Flat.label, .medium))
+                        .foregroundStyle(theme.good)
+                }
             }
-            .formStyle(.grouped)
-            .scrollDisabled(true)
-            if let error {
-                Text(error)
-                    .font(theme.body(.subheadline))
-                    .foregroundStyle(theme.attention)
-            } else if let added {
-                Label(added, systemImage: "checkmark.circle.fill")
-                    .font(theme.body(.subheadline, .medium))
-                    .foregroundStyle(theme.good)
-            }
-            HStack {
-                Spacer()
-                Button(added == nil ? "Cancel" : "Done") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                Button(added == nil ? "Add Task" : "Add Another") { add() }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(!form.canAdd || busy)
-            }
+        } footer: {
+            Button(added == nil ? "Cancel" : "Done") { dismiss() }
+                .keyboardShortcut(.cancelAction)
+            Button(added == nil ? "Add Task" : "Add Another") { add() }
+                .buttonStyle(.flatPrimary)
+                .keyboardShortcut(.defaultAction)
+                .disabled(!form.canAdd || busy)
         }
-        .padding(24)
-        .frame(width: 480)
         .onAppear { titleFocused = true }
         .task { templates = (try? await app.templates(project)) ?? [] }
     }

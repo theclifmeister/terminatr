@@ -64,7 +64,6 @@ struct ModsPane: View {
                 consenting = nil
                 said = "unchanged"
             }
-            .buttonStyle(.automatic)
         }
         .alert(asking?.toggle.title ?? "", isPresented: Binding(get: { asking != nil }, set: { if !$0 { asking = nil } }), presenting: asking) { m in
             Button("Turn off", role: .destructive) { Task { await set(m) } }
@@ -224,20 +223,20 @@ private struct ConsentSheet: View {
     let cancel: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        FlatSheet {
+            SheetTitle(mod.name, detail: mod.toggle.title)
+        } content: {
             ScrollView {
                 ModConsentText(mod.toggle.consent)
-                    .padding(24)
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(minWidth: 520, idealWidth: 600, minHeight: 360, idealHeight: 520)
-            Divider()
-            HStack {
-                Spacer()
-                Button("Cancel", role: .cancel, action: cancel)
-                    .keyboardShortcut(.cancelAction)
-                Button(mod.toggle.question.hasPrefix("Grant") ? "Grant" : "Enable", action: enable)
-            }
-            .padding(16)
+        } footer: {
+            Button("Cancel", role: .cancel, action: cancel)
+                .keyboardShortcut(.cancelAction)
+            Button(mod.toggle.question.hasPrefix("Grant") ? "Grant" : "Enable", action: enable)
+                .buttonStyle(.flatPrimary)
         }
     }
 }
