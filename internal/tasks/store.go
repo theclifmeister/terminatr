@@ -383,8 +383,11 @@ func (s *Store) addOne(c caller.Caller, b *Board, it NewTask) (AddResult, *Task)
 
 // SetStatus moves a task. Only the human sets done or dropped (§6.4):
 // an agent's call is refused with human-only, and the coordinator relays
-// the user's word with SetApproved. note, if given, is appended to the
-// notes and journaled.
+// the user's word with SetApproved. An agent's call on a task that is
+// done is refused too (task-done): done is the user's acceptance, by
+// their word or their complete_tasks setting, and a status arriving after
+// it must not take that back. note, if given, is appended to the notes
+// and journaled.
 func (s *Store) SetStatus(c caller.Caller, id int, st Status, note string) (Result, error) {
 	if st.Closed() && c.IsAgent() {
 		return s.refuseClosed(c, id, st)
@@ -397,11 +400,10 @@ func (s *Store) SetStatus(c caller.Caller, id int, st Status, note string) (Resu
 
 // SetApproved marks a task done or dropped on the coordinator's call
 // once the user told it so (tm task status T12 done|dropped
-// --approved-by-user); the journal says the user approved it.
+// --approved-by-user), or moves a done task back once they sent it back
+// (tm task status T12 started --approved-by-user); the journal says the
+// user approved it.
 func (s *Store) SetApproved(c caller.Caller, id int, st Status, note string) (Result, error) {
-	if !st.Closed() {
-		return Result{}, refuse("invalid-status", "only done and dropped take the user's word")
-	}
 	if c.Kind == caller.Director {
 		return Result{}, refuse("human-only", "only the user accepts or drops work, in the project's own console or the program's needs dialog")
 	}
@@ -438,6 +440,14 @@ func (s *Store) CompleteBySetting(c caller.Caller, id int, why string) (Result, 
 
 func (s *Store) setStatus(c caller.Caller, id int, st Status, note, approved string) (Result, error) {
 	res, err := s.edit(c, id, opWrite, func(t *Task) (bool, error) {
+		// Here, under the board's lock: the ticker may complete the task
+		// between the caller's read and this write.
+		if approved != "" && !st.Closed() && t.Status != Done {
+			return false, refuse("invalid-status", "only done, dropped and moving a done task back take the user's word")
+		}
+		if approved == "" && c.IsAgent() && t.Status == Done && st != Done {
+			return false, refuseReopen(t, st)
+		}
 		changed := t.Status != st
 		t.Status = st
 		if note != "" {
@@ -454,6 +464,11 @@ func (s *Store) setStatus(c caller.Caller, id int, st Status, note, approved str
 		return res, err
 	}
 	return res, s.journal(c, "task.status", res.Task, joinDetail(string(st), note)+approved)
+}
+
+// refuseReopen answers an agent's plain request to move a done task.
+func refuseReopen(t *Task, st Status) error {
+	return refuse("task-done", fmt.Sprintf("%s is done, and only the user takes that back: once they send it back, run tm task status %s %s --approved-by-user --note \"sent back: …\". To change its notes, use tm task edit %s --notes", t.Ref(), t.Ref(), st, t.Ref()))
 }
 
 // refuseClosed answers an agent's plain request to set done or dropped:

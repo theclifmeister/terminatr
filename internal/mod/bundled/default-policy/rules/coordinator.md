@@ -51,7 +51,8 @@ asks, so acknowledge reports, prompt threads and move tasks yourself.
   T<n> started --note "sent back: …"`. If that thread is resolved,
   propose a new thread for it with the note and keep the task `ready`
   until the user agrees. A send-back on a done task reopens it the same
-  way.
+  way, with `--approved-by-user` on the status: tm refuses any other
+  status on a done task (`task-done`), done being the user's acceptance.
 - `takeover`: the user typed into a thread's pane; check the thread
   before you prompt it again.
 - `prompt-waiting`: a prompt you sent has waited 10 minutes in a

@@ -374,3 +374,62 @@ func TestCompleteBySetting(t *testing.T) {
 		t.Fatalf("T2 %s, journal %v", got.Status, ev.journal)
 	}
 }
+
+// TestDoneMovesOnlyOnTheUsersWord: a done task, by the merge setting or
+// by the user's word, takes no agent's plain status (T951: a coordinator's
+// review note reopened one). The user's send-back, relayed with
+// SetApproved, does move it; so does the human.
+func TestDoneMovesOnlyOnTheUsersWord(t *testing.T) {
+	s, ev := newStore(t)
+	mustAdd(t, s, human, NewTask{Title: "By setting", Status: "review"}, NewTask{Title: "By word", Status: "review"}, NewTask{Title: "Human's", Status: "review"})
+	ticker := caller.Caller{Kind: caller.Ticker}
+	if _, err := s.CompleteBySetting(ticker, 1, "merged (PR #7)"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SetApproved(coord, 2, Done, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CompleteBySetting(ticker, 3, "merged (PR #8)"); err != nil {
+		t.Fatal(err)
+	}
+	n := len(ev.journal)
+	for _, id := range []int{1, 2} {
+		for _, st := range []Status{Open, Ready, Started, Blocked, Review} {
+			if _, err := s.SetStatus(coord, id, st, "Check: late"); code(err) != "task-done" {
+				t.Fatalf("T%d %s: %v", id, st, err)
+			}
+		}
+		if got, _ := s.Get(id); got.Status != Done || strings.Contains(got.Notes, "late") {
+			t.Fatalf("T%d: %s, notes %q", id, got.Status, got.Notes)
+		}
+	}
+	if _, err := s.SetStatus(thread, 1, Review, ""); code(err) != "coordinator-only" {
+		t.Fatalf("thread: %v", err)
+	}
+	if len(ev.journal) != n {
+		t.Fatalf("journal grew: %v", ev.journal[n:])
+	}
+	// Already done is no move: no refusal, and nothing written.
+	if res, err := s.SetStatus(coord, 1, Done, ""); err != nil || res.Changed {
+		t.Fatalf("done again: %+v %v", res, err)
+	}
+
+	res, err := s.SetApproved(coord, 1, Started, "sent back: redo")
+	if err != nil || res.Task.Status != Started {
+		t.Fatalf("send-back: %+v %v", res, err)
+	}
+	if j := ev.journal[len(ev.journal)-1]; j != "coordinator task.status T1 started: sent back: redo (approved by the user)" {
+		t.Fatalf("journal %q", j)
+	}
+	// Moved back, the task takes plain statuses again, and the word has
+	// nothing left to take back.
+	if _, err := s.SetStatus(coord, 1, Review, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SetApproved(coord, 1, Started, ""); code(err) != "invalid-status" {
+		t.Fatalf("word on an open task: %v", err)
+	}
+	if res, err := s.SetStatus(human, 3, Started, ""); err != nil || res.Task.Status != Started {
+		t.Fatalf("human: %+v %v", res, err)
+	}
+}
