@@ -72,9 +72,9 @@ func libTotal(files []thread.LibFile) int64 {
 }
 
 // libWhere is where a group's files came from, without the day: its thread
-// and repository. A linked project's group has neither.
+// and repository. A linked project's group has neither, nor a seat's own.
 func libWhere(f thread.LibFile) []string {
-	if f.Peer != "" {
+	if f.Peer != "" || f.IsSeat() {
 		return nil
 	}
 	out := []string{f.Thread}

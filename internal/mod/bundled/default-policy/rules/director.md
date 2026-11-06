@@ -161,6 +161,14 @@ You are the only agent that writes it.
 
 - Your inbox and memory are the program's: `tm inbox list|read|done`,
   `tm memory find|show|new|edit` act on the program's folder.
+- Keep the pages and files you make for the user (an HTML page, a report,
+  a chart) in your library: write it in your scratch folder, then `tm
+  library add <file>`, which copies it to the program's `library/` (a file
+  of that name is replaced). Never leave them in the program folder's
+  root. tm alone writes `library/`, and only the user deletes from it. Name
+  the file to the user and say where it is: the Files view's Attached tab
+  (`F` on your panel), with your files on top and each member's under its
+  project; `tm library list` lists yours and the members' on this server.
 - Edit CONTEXT.md and memory/ in the program's folder directly. Change
   PROGRAM.md's goal and body only when the user asks you to.
 - The program's TASKS.md holds umbrella tasks only, through tm, never

@@ -29,7 +29,10 @@ import (
 // beside a coordinator that folder is a repo's main checkout, which the
 // view says, with a picker when the project has more than one;
 // Attached is the Library's files of that thread, of the whole project
-// beside a coordinator. Enter reads a file in the Library's viewer,
+// beside a coordinator, its own first; beside a director, which has no
+// folder to list and no Worktree tab, its own files and then every member's
+// by project, with the Library's filter and kinds so they can all be
+// searched (library.list's program form, programFiles). Enter reads a file in the Library's viewer,
 // drawn over the session, with its changes since the base marked
 // (files.diff; filesdiff.go). Everything a folder holds is data: names go
 // through oneLine and text through libText and textsafe, so no control
@@ -48,6 +51,10 @@ const (
 	// request to the other machine.
 	filesFarEvery = 5 * time.Second
 )
+
+// programFilesEvery is how often a director's view reads its program's
+// library again.
+const programFilesEvery = 10 * time.Second
 
 // filesCall calls a files method of the server; a variable for tests.
 var filesCall = func(paths tmclient.Paths, method string, params, res any) error {
@@ -82,6 +89,7 @@ type filesView struct {
 	session string
 	slug    string
 	thread  string // "" beside a coordinator: the whole project's files
+	program string // beside a director: its program, whose library is all this shows
 
 	repos   []proto.FileRepo // a coordinator's choices (files.repos)
 	repo    string           // the one chosen, "" for the first
@@ -94,16 +102,18 @@ type filesView struct {
 	ignored  bool   // git-ignored files show
 	changed  bool   // only what git marks
 
-	open   map[string]bool              // the unfolded folders
-	dirs   map[string][]proto.FileEntry // the folders as last listed
-	found  []proto.FileEntry            // a filter's or changed's files
-	tree   map[string][]proto.FileEntry // changed's files by folder
-	shut   map[string]bool              // the folders changed's tree has folded
-	sum    proto.FilesListResult        // the top's totals
-	cut    bool                         // a listing was cut
-	err    string                       // why the worktree doesn't show
-	loaded bool
-	lib    []thread.LibFile
+	open    map[string]bool              // the unfolded folders
+	dirs    map[string][]proto.FileEntry // the folders as last listed
+	found   []proto.FileEntry            // a filter's or changed's files
+	tree    map[string][]proto.FileEntry // changed's files by folder
+	shut    map[string]bool              // the folders changed's tree has folded
+	sum     proto.FilesListResult        // the top's totals
+	cut     bool                         // a listing was cut
+	err     string                       // why the worktree doesn't show
+	loaded  bool
+	lib     []thread.LibFile
+	pick    string // the kind a director's view is narrowed to
+	libNote string // what a program's listing leaves out for now
 
 	sel     int    // the selected row
 	selPath string // its path, to find it again after a refresh
@@ -123,7 +133,6 @@ type filesView struct {
 	slow     bool            // the last look got no answer in time
 	readAt   time.Time       // when it last answered
 	notText  map[string]bool // files a read found aren't text
-	libNote  string          // why Attached has nothing
 }
 
 func newFilesView(d *infoData) *filesView {
@@ -143,11 +152,17 @@ func newFilesView(d *infoData) *filesView {
 			fv.done = !slices.ContainsFunc(r.project.Watch.Threads, func(t proto.WatchThread) bool { return t.ID == fv.thread })
 		}
 	}
+	if d.prog != nil {
+		fv.program, fv.attached = d.slug, true
+	}
 	return fv
 }
 
 // every is how often the view asks whether its folders changed.
 func (fv *filesView) every() time.Duration {
+	if fv.program != "" {
+		return programFilesEvery // each paired member's server is asked
+	}
 	if fv.far != "" {
 		return filesFarEvery
 	}
@@ -295,6 +310,12 @@ func (r fileRow) id() string {
 // rows are the view's rows, as they list.
 func (fv *filesView) rows() []fileRow {
 	var out []fileRow
+	if fv.program != "" {
+		for _, f := range libraryOrder(libShown(fv.lib, fv.filter, fv.pick)) {
+			out = append(out, fileRow{lib: &f})
+		}
+		return out
+	}
 	if fv.attached {
 		for _, f := range libraryOrder(fv.lib) {
 			if fv.filter == "" || strings.Contains(strings.ToLower(f.Name), strings.ToLower(fv.filter)) {
@@ -356,6 +377,10 @@ func filesLay(fv *filesView, w int, focused bool) ([]string, []infoHit) {
 	}
 	lines := []string{th().Title.Render("FILES") + "  " + tab("Worktree", !fv.attached) + th().Faint.Render(" · ") + tab("Attached", fv.attached)}
 	hits := []infoHit{{kind: hitFilesTab}}
+	if fv.program != "" {
+		// Nothing to switch to: a director has no folder here.
+		lines, hits = []string{th().Title.Render("FILES") + "  " + tab("Attached", true)}, []infoHit{{}}
+	}
 	add := func(l string) {
 		lines = append(lines, l)
 		hits = append(hits, infoHit{})
@@ -406,6 +431,10 @@ func filesLay(fv *filesView, w int, focused bool) ([]string, []infoHit) {
 	rows := fv.rows()
 	fv.settle(rows)
 	switch {
+	case fv.program != "" && fv.err != "":
+		add(th().Warn.Render(oneLine(fv.err)))
+	case fv.program != "" && !fv.loaded:
+		add(th().Faint.Render("loading…"))
 	case fv.attached && len(rows) > 0:
 		add(th().Faint.Render(fileCount(len(rows))))
 	case fv.attached:
@@ -444,8 +473,16 @@ func filesLay(fv *filesView, w int, focused bool) ([]string, []infoHit) {
 	if len(flags) > 0 {
 		add(th().Faint.Render(strings.Join(flags, " · ")))
 	}
+	if fv.program != "" {
+		if fv.libNote != "" {
+			add(th().Warn.Render(oneLine(fv.libNote)))
+		}
+		for i, l := range libChipLinesOf(fv.lib, fv.filter, fv.pick, w) {
+			lines, hits = append(lines, l.text), append(hits, infoHit{kind: hitFilesChip, task: i})
+		}
+	}
 	fv.lineOf = make([]int, len(rows))
-	group := ""
+	group, place := "", ""
 	groups := map[string]int{}
 	if fv.attached {
 		for _, r := range rows {
@@ -453,9 +490,19 @@ func filesLay(fv *filesView, w int, focused bool) ([]string, []infoHit) {
 		}
 	}
 	for i, r := range rows {
+		if r.lib != nil && libPlace(*r.lib) != place {
+			place = libPlace(*r.lib)
+			add(th().Title.Render(fit(libPlaceWords(*r.lib), w)))
+		}
 		if r.lib != nil && r.lib.Group() != group {
 			group = r.lib.Group()
-			add(libGroup(*r.lib, groups[group], w))
+			if fv.program != "" {
+				title, meta := libHeading(groupFiles(rows, group), w)
+				add(title)
+				add(meta)
+			} else {
+				add(libGroup(*r.lib, groups[group], w))
+			}
 		}
 		fv.lineOf[i] = len(lines)
 		l := fileRowLine(r, w, fv.unfolded(r.e.Path), fv.far, fv.notText[r.e.Path])
@@ -469,10 +516,18 @@ func filesLay(fv *filesView, w int, focused bool) ([]string, []infoHit) {
 		hits = append(hits, infoHit{kind: hitFileRow, task: i})
 	}
 	switch {
-	case len(rows) == 0 && fv.attached && fv.libNote != "":
+	case len(rows) == 0 && fv.far != "" && fv.attached && fv.libNote != "":
 		for _, l := range wrapLines(oneLine(fv.libNote), max(w, 8)) {
 			add(th().Faint.Render(l))
 		}
+	case len(rows) == 0 && fv.program != "" && len(fv.lib) > 0:
+		add(th().Faint.Render("nothing matches: esc clears"))
+	case len(rows) == 0 && fv.program != "":
+		if fv.loaded {
+			add(th().Faint.Render("no files: the director keeps its own (tm library add), threads attach theirs"))
+		}
+	case len(rows) == 0 && fv.attached && fv.thread == "":
+		add(th().Faint.Render("no files: a thread's report attaches them, the coordinator keeps its own (tm library add)"))
 	case len(rows) == 0 && fv.attached:
 		add(th().Faint.Render("no files: a thread's report attaches them"))
 	case len(rows) == 0 && fv.loaded && fv.err == "":
@@ -487,6 +542,25 @@ func filesLay(fv *filesView, w int, focused bool) ([]string, []infoHit) {
 		}
 	}
 	return lines, hits
+}
+
+// groupFiles are the files of group among rows.
+func groupFiles(rows []fileRow, group string) []thread.LibFile {
+	var out []thread.LibFile
+	for _, r := range rows {
+		if r.lib != nil && r.lib.Group() == group {
+			out = append(out, *r.lib)
+		}
+	}
+	return out
+}
+
+// libPlaceWords is the heading over a member's files in a program's list.
+func libPlaceWords(f thread.LibFile) string {
+	if f.Server != "" {
+		return oneLine(f.Project) + " on " + oneLine(f.Server)
+	}
+	return oneLine(f.Project)
 }
 
 // fileCount is a number of files in words.
@@ -573,18 +647,26 @@ type filesFetched struct {
 	err     string
 	noFiles bool
 	lib     []thread.LibFile
+	note    string           // a program's listing's
 	repos   []proto.FileRepo // nil: not asked, or the server has no list
 	offList bool             // the chosen repo left the project's list
 	code    string           // a refusal's code
-	libNote string           // why a far server's Attached has nothing
 }
 
 // fetchFiles asks the server for what the view shows. The stamp comes
 // first: a change during the listing moves the next one.
 func fetchFiles(paths tmclient.Paths, fv filesView, folders []string) filesFetched {
 	var out filesFetched
+	if fv.program != "" {
+		lib, note, err := programFiles(paths, fv.program)
+		out.lib, out.note = lib, note
+		if err != nil {
+			out.err, _ = filesErrText(err)
+		}
+		return out
+	}
 	if fv.far != "" {
-		out.lib, out.libNote = attachedFar(paths, fv.farAlias, fv.slug, fv.thread)
+		out.lib, out.note = attachedFar(paths, fv.farAlias, fv.slug, fv.thread)
 		if fv.attached {
 			// A request to the other machine for what doesn't show. The tab
 			// back to Worktree asks.
@@ -688,6 +770,21 @@ func attachedFiles(slug, id string) ([]thread.LibFile, error) {
 	return out, nil
 }
 
+// programFiles is program slug's library as its director's view lists it:
+// its own, then each member's, with what that leaves out for now.
+func programFiles(paths tmclient.Paths, slug string) ([]thread.LibFile, string, error) {
+	var res proto.LibraryListResult
+	if err := filesCall(paths, proto.MethodLibraryList, proto.ProjectFilesParams{Program: slug}, &res); err != nil {
+		return nil, "", err
+	}
+	out := make([]thread.LibFile, 0, len(res.Files))
+	for _, f := range res.Files {
+		out = append(out, thread.LibFile{Thread: f.Thread, Task: f.Task, TaskStatus: f.TaskStatus, Title: f.Title, Repo: f.Repo, State: f.State,
+			Name: f.Name, Size: f.Size, Time: f.Time, Peer: f.Peer, Message: f.Message, Project: f.Project, Server: f.Server})
+	}
+	return out, res.Note, nil
+}
+
 // filesErrText is a refusal in words, and whether it means the session
 // has no folder at all.
 func filesErrText(err error) (string, bool) {
@@ -768,7 +865,11 @@ func (c *client) filesFetch() {
 func (fv *filesView) take(got filesFetched) {
 	first := !fv.loaded
 	fv.loaded = true
-	fv.lib, fv.libNote = got.lib, got.libNote
+	fv.lib, fv.libNote = got.lib, got.note
+	if fv.program != "" {
+		fv.err = got.err
+		return
+	}
 	if fv.far != "" {
 		switch got.code {
 		case "attached":
@@ -877,7 +978,7 @@ func (c *client) filesFollow(d *infoData) bool {
 			return true
 		}
 	}
-	if fv := c.info.files; fv != nil && (fv.session != id || d.prog != nil) {
+	if fv := c.info.files; fv != nil && fv.session != id {
 		c.info.files = nil
 		return true
 	}
@@ -910,8 +1011,6 @@ func (c *client) filesToggle() {
 		c.flash = "no files here"
 	case d.remote != nil && filesFarRefused(d.remote) != "":
 		c.flash = filesFarRefused(d.remote)
-	case d.prog != nil:
-		c.flash = "a director has no repo: its projects' threads have the files"
 	default:
 		ip.files = newFilesView(d)
 		ip.top = 0
@@ -951,6 +1050,8 @@ func filesHint(fv *filesView) string {
 		return "filter ▸ type a name · enter keep · esc clear"
 	case fv.picking:
 		return "repo ▸ ↑ ↓ · enter show · esc back"
+	case fv.program != "":
+		return "files ▸ ↑ ↓ · enter read · / filter · t kinds · F info · esc back"
 	case fv.attached:
 		return "files ▸ ↑ ↓ · enter read · / filter · a worktree · F info · esc back"
 	case fv.far != "" && len(fv.repos) > 1:
@@ -1014,6 +1115,12 @@ func (c *client) filesKeyboard(k uv.Key) {
 		fv.picking, fv.pickSel, ip.top = true, fv.repoShown(), 0
 	case name == "/":
 		fv.typing = true
+	case name == "a" && fv.program != "":
+		c.flash = "a director has no worktree: its projects' threads have those"
+	case name == "t" && fv.program != "":
+		if chips := libChips(fv.lib, fv.filter, fv.pick); chips != nil {
+			fv.narrow(libNextKind(chips, libPicked(fv.lib, fv.pick)))
+		}
 	case name == "a":
 		fv.attached, fv.sel = !fv.attached, 0
 		refetch = true
@@ -1034,6 +1141,9 @@ func (c *client) filesKeyboard(k uv.Key) {
 		move(0)
 	case op == panelLast:
 		move(len(rows) - 1)
+	case op == panelBack && fv.program != "" && (fv.filter != "" || fv.pick != ""):
+		fv.filter, fv.pick = "", ""
+		fv.sel = 0
 	case op == panelBack && fv.filter != "":
 		fv.filter, refetch = "", !fv.attached
 	case op == panelBack:
@@ -1094,6 +1204,11 @@ func (c *client) filesKeyboard(k uv.Key) {
 	}
 }
 
+// narrow shows the kind: the selection stays on its file while that shows.
+func (fv *filesView) narrow(kind string) {
+	fv.pick, fv.sel = kind, 0
+}
+
 // pickRepo closes the picker on repos[i], and says whether that changed
 // what the view shows.
 func (fv *filesView) pickRepo(i int) bool {
@@ -1126,11 +1241,19 @@ func (c *client) filesReveal() {
 // filesClick is a click on the view's line with hit h: a tab switches, a
 // row selects, a folder then folds or unfolds, and a selected file
 // reads. c.mu held; released here.
-func (c *client) filesClick(h infoHit) {
+func (c *client) filesClick(h infoHit, col int) {
 	fv := c.info.files
 	refetch := false
 	var read *fileRow
 	switch h.kind {
+	case hitFilesChip:
+		if ls := libChipLinesOf(fv.lib, fv.filter, fv.pick, max(c.infoW-1, 1)); h.task < len(ls) {
+			for _, s := range ls[h.task].spans {
+				if col >= s.from && col < s.to {
+					fv.narrow(s.kind)
+				}
+			}
+		}
 	case hitFilesTab:
 		fv.attached, fv.sel, fv.picking, refetch = !fv.attached, 0, false, true
 	case hitFilesRepo:
@@ -1201,11 +1324,13 @@ func (c *client) filesRead(r fileRow) {
 		c.poke()
 		return
 	}
-	session, repo, slug, ignored, paths, far, alias := fv.session, fv.repo, fv.slug, fv.ignored, c.paths, fv.far, fv.farAlias
+	session, repo, slug, ignored, paths, program, far, alias := fv.session, fv.repo, fv.slug, fv.ignored, c.paths, fv.program, fv.far, fv.farAlias
 	gone := fv.farGone()
 	c.mu.Unlock()
 	var tv *textView
 	switch {
+	case r.lib != nil && program != "":
+		tv = programFileViewer(paths, program, *r.lib)
 	case r.lib != nil && far != "":
 		tv = attachedFarViewer(paths, alias, slug, *r.lib)
 	case r.lib != nil:
@@ -1302,6 +1427,75 @@ func attachedViewer(paths tmclient.Paths, slug string, f thread.LibFile) *textVi
 	tv.body, tv.note = libText(f.Name, data, truncated)
 	tv.body = textsafe.Text(tv.body)
 	return tv
+}
+
+// programFileViewer is the viewer on a file of a program's list: the
+// director's own, or a member's here or on its paired server, each read as
+// a console off this machine's files reads it, so a path never crosses.
+func programFileViewer(paths tmclient.Paths, program string, f thread.LibFile) *textView {
+	tv := &textView{title: oneLine(f.Name) + " · " + sizeWords(f.Size)}
+	if f.Project != "" {
+		tv.title += " · " + libPlaceWords(f)
+	}
+	tv.open = func(m *dash) tea.Cmd {
+		return m.openCopy(f.Name, func() ([]byte, bool, error) { return programFileBytes(paths, program, f, openMax) })
+	}
+	if previewable() && thumb.Supported(f.Name) {
+		var res proto.LibraryThumbnailResult
+		if programFileThumb(paths, program, f, &res) == nil {
+			if tv.image = newImagePreview(res.Data); tv.image != nil {
+				return tv
+			}
+		}
+	}
+	data, truncated, err := programFileBytes(paths, program, f, libMax)
+	if err != nil {
+		tv.note = "can't read it: " + oneLine(err.Error())
+		return tv
+	}
+	tv.body, tv.note = libText(f.Name, data, truncated)
+	tv.body = textsafe.Text(tv.body)
+	return tv
+}
+
+// programFileThumb asks for the thumbnail of a file of a program's list.
+func programFileThumb(paths tmclient.Paths, program string, f thread.LibFile, res *proto.LibraryThumbnailResult) error {
+	switch {
+	case f.Server != "":
+		return filesCall(paths, proto.MethodPeerLibraryThumbnail, proto.PeerLibraryThumbnailReadParams{Alias: f.Server, Project: f.Project, Thread: f.Thread, Name: f.Name}, res)
+	case f.Project != "":
+		return filesCall(paths, proto.MethodLibraryThumbnail, proto.LibraryThumbnailParams{Project: f.Project, ID: libFileID(f), Name: f.Name}, res)
+	}
+	return filesCall(paths, proto.MethodLibraryThumbnail, proto.LibraryThumbnailParams{Program: program, ID: libFileID(f), Name: f.Name}, res)
+}
+
+// programFileBytes reads up to most bytes of a file of a program's list, a
+// chunk at a time; truncated says it was longer.
+func programFileBytes(paths tmclient.Paths, program string, f thread.LibFile, most int64) (data []byte, truncated bool, err error) {
+	for {
+		var res proto.LibraryReadResult
+		off := int64(len(data))
+		switch {
+		case f.Server != "":
+			err = filesCall(paths, proto.MethodPeerLibraryRead, proto.PeerLibraryReadReadParams{Alias: f.Server, Project: f.Project, Thread: f.Thread, Name: f.Name, Offset: off}, &res)
+		case f.Project != "":
+			err = filesCall(paths, proto.MethodLibraryRead, proto.LibraryReadParams{Project: f.Project, ID: libFileID(f), Name: f.Name, Offset: off}, &res)
+		default:
+			err = filesCall(paths, proto.MethodLibraryRead, proto.LibraryReadParams{Program: program, ID: libFileID(f), Name: f.Name, Offset: off}, &res)
+		}
+		if err != nil {
+			return nil, false, err
+		}
+		data = append(data, res.Data...)
+		switch {
+		case int64(len(data)) >= res.Size:
+			return data, false, nil
+		case int64(len(data)) >= most:
+			return data[:most], true, nil
+		case len(res.Data) == 0:
+			return nil, false, errors.New("it changed while it was read")
+		}
+	}
 }
 
 // worktreeViewer is the viewer on a file of the session's folder, its

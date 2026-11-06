@@ -2,6 +2,7 @@ package server
 
 import (
 	"errors"
+	"time"
 
 	"github.com/theclifmeister/terminatr/internal/config"
 	"github.com/theclifmeister/terminatr/internal/mod"
@@ -100,8 +101,11 @@ func (s *Server) taskGet(p proto.TaskGetParams) (any, *proto.Error) {
 	}
 	t := b.Find(id)
 	if t == nil {
-		_, err := pr.Tasks().Get(id) // its refusal (unknown-task)
-		return nil, taskError(err)
+		// An archived task (its Archived says so), or the refusal
+		// (unknown-task).
+		if t, err = pr.Tasks().Get(id); err != nil {
+			return nil, taskError(err)
+		}
 	}
 	cfg, _ := config.Load()
 	out := sideTask(t)
@@ -109,30 +113,83 @@ func (s *Server) taskGet(p proto.TaskGetParams) (any, *proto.Error) {
 	return out, nil
 }
 
-// TaskDone is task.done's result: the board's done tasks, newest first
-// (tasks.NewestDoneFirst), without their notes and steps.
+// TaskDone is task.done's result: done tasks, newest first
+// (tasks.NewestDoneFirst), without their notes and steps. With a groups
+// call, Groups are Done's headings, and Total how many tasks they hold;
+// otherwise Tasks is the page, Total how many the range holds, and Next
+// the offset to read on from (0 at the end).
 type TaskDone struct {
-	Tasks []SideTask `json:"tasks"`
+	Tasks  []SideTask      `json:"tasks"`
+	Groups []SideDoneGroup `json:"groups,omitempty"`
+	Total  int             `json:"total,omitempty"`
+	Next   int             `json:"next,omitempty"`
 }
 
-// taskDone is task.done's: the done tasks of the board as it is now.
+// SideDoneGroup is a heading of Done on the wire (tasks.DoneGroup).
+type SideDoneGroup struct {
+	Kind     string     `json:"kind"`
+	Title    string     `json:"title"`
+	From     string     `json:"from"`
+	To       string     `json:"to"`
+	Count    int        `json:"count"`
+	Archived int        `json:"archived,omitempty"`
+	Open     bool       `json:"open,omitempty"`
+	Tasks    []SideTask `json:"tasks,omitempty"`
+	Next     int        `json:"next,omitempty"`
+}
+
+// doneRow is done task t as task.done lists it.
+func doneRow(t *tasks.Task) SideTask {
+	st := sideTask(t)
+	st.Notes, st.Steps = "", nil
+	return st
+}
+
+// doneRows are done tasks as task.done lists them.
+func doneRows(ts []*tasks.Task) []SideTask {
+	out := make([]SideTask, 0, len(ts))
+	for _, t := range ts {
+		out = append(out, doneRow(t))
+	}
+	return out
+}
+
+// zoneOr is IANA zone name's location, the server's own when it has none
+// or it isn't known here.
+func zoneOr(name string) *time.Location {
+	if name != "" {
+		if loc, err := time.LoadLocation(name); err == nil {
+			return loc
+		}
+	}
+	return time.Local
+}
+
+// taskDone is task.done's: the done tasks as they are now. No git and no
+// thread records: a plain folder gets the same answer as a repository.
+// The archive is read only for what can hold it: the groups, whose counts
+// need its dates, and a range the caller says holds archived tasks.
 func (s *Server) taskDone(p proto.TaskDoneParams) (any, *proto.Error) {
 	pr, err := project.Open(p.Project)
 	if err != nil {
 		return nil, proto.Errorf(proto.ErrBadParams, "%v", err)
 	}
-	b, err := pr.Tasks().Load()
+	done, err := pr.Tasks().Done(p.Groups || p.Archived)
 	if err != nil {
 		return nil, taskError(err)
 	}
+	loc := zoneOr(p.TZ)
 	out := TaskDone{Tasks: []SideTask{}}
-	for _, t := range tasks.NewestDoneFirst(b.Tasks) {
-		if t.Status == tasks.Done {
-			st := sideTask(t)
-			st.Notes, st.Steps = "", nil
-			out.Tasks = append(out.Tasks, st)
+	if p.Groups {
+		out.Total = len(done)
+		for _, g := range tasks.GroupDone(done, time.Now().In(loc), 0) {
+			out.Groups = append(out.Groups, SideDoneGroup{Kind: g.Kind, Title: g.Title, From: g.From, To: g.To,
+				Count: g.Count, Archived: g.Archived, Open: g.Open, Tasks: doneRows(g.Tasks), Next: g.Next})
 		}
+		return out, nil
 	}
+	page, total, next := tasks.PageDone(done, loc, p.From, p.To, p.Offset, p.Limit)
+	out.Tasks, out.Total, out.Next = doneRows(page), total, next
 	return out, nil
 }
 

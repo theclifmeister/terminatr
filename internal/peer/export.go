@@ -120,6 +120,7 @@ func (d *dispatcher) methods() map[string]handler {
 		d.needsMethods(m)
 		d.pagesMethods(m)
 		d.designsMethods(m)
+		d.historyMethods(m)
 		d.worktreeMethods(m)
 		d.uploadMethods(m)
 	}

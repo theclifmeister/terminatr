@@ -41,7 +41,9 @@ func (b *binding) target() modaction.Target { return widget.ActionTarget(b.actio
 type bindingMsg struct {
 	b     binding
 	board *tasks.Board
-	err   error
+	// archived: a task.show\'s task in the archive, if it is there.
+	archived *tasks.Task
+	err      error
 	// refused: the server refused the binding as outside its mod's
 	// reach; the mod is told nothing.
 	refused bool
@@ -72,6 +74,9 @@ func (m *dash) pressBinding(mod string, ev *widget.Event) tea.Cmd {
 		msg.b.token = tok
 		if t.Project != "" && t.Task != "" {
 			msg.board, msg.err = src.Board(t.Project)
+			if msg.err == nil && b.action.ID == "task.show" {
+				msg.archived = src.ArchivedTask(t.Project, t.Task)
+			}
 		}
 		return msg
 	}
@@ -119,12 +124,15 @@ func (m *dash) runBinding(msg bindingMsg) tea.Cmd {
 		}
 		return m.bindingDone(&b, false)
 	}
-	st := dashActions{m: m, board: msg.board}
+	st := dashActions{m: m, board: msg.board, archived: msg.archived}
 	if why := modaction.Why(b.action.ID, st, t); why != "" {
 		m.msg = "not available: " + why
 		return m.bindingDone(&b, false)
 	}
 	task := st.Task(t.Project, t.Task)
+	if task == nil {
+		task = st.ArchivedTask(t.Project, t.Task)
+	}
 	switch b.action.ID {
 	case "task.show":
 		// From the project's own popup (its Tasks tab mod's row), the
@@ -201,9 +209,19 @@ func (m *dash) bindingDone(b *binding, ok bool) tea.Cmd {
 type dashActions struct {
 	m     *dash
 	board *tasks.Board
+	// archived is the archived task a task.show read, if any.
+	archived *tasks.Task
 }
 
 func (d dashActions) Project(slug string) bool { return d.m.projectData(slug) != nil }
+
+// ArchivedTask is the archived task the press read, if it is that one.
+func (d dashActions) ArchivedTask(_, ref string) *tasks.Task {
+	if d.archived != nil && d.archived.Ref() == ref {
+		return d.archived
+	}
+	return nil
+}
 
 func (d dashActions) Task(slug, ref string) *tasks.Task {
 	if d.board == nil {

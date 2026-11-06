@@ -167,7 +167,8 @@ func (w *Widget) Timed() bool {
 }
 
 // Row is a list's or table's row. Spans are a list row's; Cells are a
-// table row's, one per column. ID keeps the cursor on the row across
+// table row's, one per column, and a table row with Spans and no Cells
+// (mod API 1.16) draws them across the columns, as a fold's row. ID keeps the cursor on the row across
 // publishes and names it in events; it defaults to the row's index.
 type Row struct {
 	ID    string   `json:"id,omitempty"`

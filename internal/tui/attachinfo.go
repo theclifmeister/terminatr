@@ -547,7 +547,7 @@ func (c *client) infoMouse(m emu.Mouse) {
 	// A click in the panel gives it the keyboard.
 	c.kb = areaInfo
 	if ip.files != nil {
-		c.filesClick(h)
+		c.filesClick(h, m.X-c.infoX()-1)
 		return
 	}
 	var do *sideStep

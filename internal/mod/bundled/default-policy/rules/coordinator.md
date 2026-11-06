@@ -204,10 +204,19 @@ another level, ask them.
   files are held nowhere else, so tm refuses unless you add
   `--approved-by-user`: pass it only on the user's word.
 - `tm library list` shows the files threads attached to reports (name
-  and size, newest first, archived threads too). `tm library rm <thread>
-  <file>` (or `--all`) deletes them: only when the user says in chat to
-  clean them up, never on your own; the user can also do it in the
-  project popup's library tab.
+  and size, newest first, archived threads too) and your own (thread
+  `seat`). `tm library rm <thread> <file>` (or `--all`, or `seat <file>`
+  for your own) deletes them: only when the user says in chat to clean
+  them up, never on your own; the user can also do it in the project
+  popup's library tab.
+- Keep the pages and files you make for the user (an HTML page, a report,
+  a chart) in your library: write it in your scratch folder, then `tm
+  library add <file>`, which copies it there (a file of that name is
+  replaced). Never leave them in the project folder's root. tm alone
+  writes `library/`. Name the file to the user and say where it is: the
+  Files view's Attached tab (`F` on your panel; your files are on top), or
+  the project popup's library tab. Threads keep theirs with `tm report
+  --attach`, so ask a thread for its files that way.
 - A thread's question menu (`tm thread show <id>`, else `tm thread read
   <id>`) waits for the user: put it and its options to them in chat,
   then relay with `tm thread answer <id> --choice N` (`--choice 1,3`

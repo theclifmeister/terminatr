@@ -4,7 +4,8 @@
 // each section by priority (must, should, could, none) as tm lists it,
 // done ones newest first by when they finished, each saying when instead
 // of its priority, and p narrows the list to one priority. Each row names the
-// core actions its keys run: enter shows the task, D delegates, A
+// core actions its keys run: enter shows the task (an archived one too,
+// the only thing a row of the archive binds), D delegates, A
 // accepts, x sends back, P sets the priority, c opens the coordinator; + (a new task) is
 // bound in the whole view, as no row stands for it. The mod only names
 // them. The key, its word, the check against the live board, the
@@ -12,12 +13,18 @@
 // afterwards. The cursor, the filter, the scroll and the selected task's
 // steps (a row's more) are the core's too, so moving never waits on the
 // mod, and a task picked elsewhere (t, NEEDS YOU) gets the cursor once
-// its row is listed.
+// its row is listed. Shown with b, Done is by day: the newest 7 days with
+// work open (at most 30 rows), older work folded by week, then by month
+// (tasks.done), and enter on a heading opens or folds it, on "… more" reads
+// on. The mod draws what tm groups, so an empty week has no heading.
 import type { TM } from "./types/tm";
 declare const $: TM;
 
 const VIEW = "tasks";
 const TABLE = "tasks";
+
+// PAGE is how many rows a fold reads at a time.
+const PAGE = 50;
 
 // The board's sections, in order, and the statuses in each (tasks.GroupOf).
 const GROUPS: { id: string; title: string; statuses: string[] }[] = [
@@ -45,7 +52,23 @@ interface Tab {
   // one), "" for all.
   prio: string;
   error: string;
+  // The Done groups (tasks.done), read while done tasks show; a fold's
+  // rows, by its key, as far as they were read; the folds the user
+  // opened or closed from how they came; the done task to reveal.
+  groups: TM.DoneGroup[];
+  total: number;
+  rows: Map<string, Fold>;
+  toggled: Set<string>;
+  reveal: string;
 }
+
+// Fold is the rows read of a group that opened.
+interface Fold {
+  tasks: TM.Task[];
+  next: number;
+}
+
+const key = (g: TM.DoneGroup) => `${g.from}:${g.to}`;
 
 // PRIOS are what p steps through, all first.
 const PRIOS = ["", "must", "should", "could", "none"];
@@ -58,6 +81,7 @@ const tabs = new Map<string, Tab>();
 function actions(project: string, t: TM.Task): { id: string; target: Record<string, string> }[] {
   const task = { project, task: t.id };
   const out = [{ id: "task.show", target: task }];
+  if (t.archived) return out;
   if (!closed(groupOf(t.status))) out.push({ id: "task.priority", target: task });
   const ask = (id: string) => {
     if (!t.asked) out.push({ id, target: task });
@@ -100,6 +124,13 @@ function status(s: string, finished?: string): TM.Span[] {
   ];
 }
 
+// timeOf is the time a done label ends with ("5 Nov 10:10"), "" for a
+// label with only a day.
+function timeOf(label: string | undefined): string {
+  const last = (label ?? "").split(" ").pop() ?? "";
+  return last.includes(":") ? last : "";
+}
+
 // priority is a task's priority cell: must stands out, could is faint.
 function priority(p: string | undefined): TM.Span[] {
   if (!p) return [];
@@ -118,7 +149,8 @@ function waitWords(t: TM.Task): string {
 }
 
 // row is task t's row; prio says the list has a priority column.
-function row(project: string, t: TM.Task, prio: boolean): TM.Value {
+// timeOnly: its section's heading says the day, so it says the time alone.
+function row(project: string, t: TM.Task, prio: boolean, timeOnly = false): TM.Value {
   const rest: TM.Span[] = [];
   if (t.asked) rest.push({ text: "asked the coordinator", role: "warn" });
   // Waits-for (mod API 1.15): "after T9" while a link is unmet, "2 wait"
@@ -129,7 +161,7 @@ function row(project: string, t: TM.Task, prio: boolean): TM.Value {
   if (more) rest.push({ text: (rest.length > 0 ? "  " : "") + more, role: "faint" });
   const r: Record<string, TM.Value> = {
     id: t.id,
-    cells: [[{ text: t.id }], ...(prio ? [t.status === "done" ? [] : priority(t.priority)] : []), [{ text: t.title }], status(t.status, t.done_label), rest] as TM.Value,
+    cells: [[{ text: t.id }], ...(prio ? [t.status === "done" ? [] : priority(t.priority)] : []), [{ text: t.title }], status(t.status, timeOnly ? timeOf(t.done_label) : t.done_label), rest] as TM.Value,
     actions: actions(project, t) as TM.Value,
   };
   // The selected task's steps, under it, unless it is done or dropped.
@@ -151,6 +183,7 @@ function shown(t: Tab): TM.Task[] {
   const out: TM.Task[] = [];
   for (const g of GROUPS) {
     if (closed(g.id) && !t.doneAll) continue;
+    if (g.id === "done" && byDay(t)) continue;
     const in_ = t.tasks.filter((x) => groupOf(x.status) === g.id && wanted(t, x));
     if (!closed(g.id)) {
       in_.sort((a, b) => rank(a.priority) - rank(b.priority) || num(a.id) - num(b.id));
@@ -162,6 +195,39 @@ function shown(t: Tab): TM.Task[] {
     out.push(...in_);
   }
   return out;
+}
+
+// byDay says whether Done lists by day: b shows it and p narrows nothing
+// (with p, the board's done tasks of that priority, newest first).
+function byDay(t: Tab): boolean {
+  return t.doneAll && t.prio === "";
+}
+
+// isOpen says whether group g shows its rows: as it came, unless the user
+// pressed enter on it.
+function isOpen(t: Tab, g: TM.DoneGroup): boolean {
+  return g.open !== t.toggled.has(key(g));
+}
+
+// foldRow is a heading of Done that enter opens or folds.
+function foldRow(t: Tab, g: TM.DoneGroup): TM.Value {
+  const mark = isOpen(t, g) ? "" : "  ▸";
+  return { id: "f:" + key(g), spans: [{ text: g.title, role: isOpen(t, g) ? undefined : "faint" }, { text: ` · ${g.count}${mark}`, role: "faint" }] };
+}
+
+// doneRows are Done by day: each group's heading, an open one's rows and,
+// while it has more to read, a row that reads them.
+function doneRows(project: string, t: Tab, prio: boolean): TM.Value[] {
+  const rows: TM.Value[] = [{ id: "g:done", head: true, spans: [{ text: `DONE · ${t.total}`, role: "head" }, { text: "  newest first   b hides   ⏎ opens", role: "faint" }] }];
+  for (const g of t.groups) {
+    rows.push(foldRow(t, g));
+    if (!isOpen(t, g)) continue;
+    const f = t.rows.get(key(g));
+    if (!f) continue;
+    for (const task of f.tasks) rows.push(row(project, task, prio, g.kind === "day"));
+    if (f.next > 0) rows.push({ id: "m:" + key(g), spans: [{ text: `  … ${g.count - f.tasks.length} more`, role: "faint" }] });
+  }
+  return rows;
 }
 
 // wanted says whether p's filter lets task x through.
@@ -188,16 +254,22 @@ function tree(project: string, t: Tab): TM.Widget {
   const list = shown(t);
   // The priority column, only while a listed task shows one.
   const prio = list.some((x) => !!x.priority && x.status !== "done");
+  const days = byDay(t) && t.groups.length > 0;
   for (const task of list) {
     const g = groupOf(task.status);
     if (g !== group) {
+      // Done by day goes where its section would, before the dropped.
+      if (g === "dropped" && days) rows.push(...doneRows(project, t, prio));
       group = g;
       const title = GROUPS.find((x) => x.id === g)!.title;
       rows.push({ id: "g:" + g, head: true, spans: [{ text: title, role: g === "needs-you" ? "warn" : "head" }] });
     }
     rows.push(row(project, task, prio));
   }
-  const done = t.tasks.filter((x) => x.status === "done" && wanted(t, x)).length;
+  if (days && group !== "dropped") rows.push(...doneRows(project, t, prio));
+  // The board's, or with no filter and none left there, the archive's.
+  const onBoard = t.tasks.filter((x) => x.status === "done" && wanted(t, x)).length;
+  const done = onBoard === 0 && t.prio === "" ? t.total : onBoard;
   const dropped = t.tasks.filter((x) => x.status === "dropped" && wanted(t, x)).length;
   const folded = !t.doneAll && done + dropped > 0;
   if (folded && done > 0) rows.push({ id: "g:done", head: true, spans: [{ text: "DONE", role: "head" }] });
@@ -221,6 +293,8 @@ function tree(project: string, t: Tab): TM.Widget {
   }
   // b and p are the mod's own keys; + runs tm's new task, from a template or none.
   const keys: { key: string; label: string }[] = t.doneAll || done + dropped > 0 ? [{ key: "b", label: t.doneAll ? "hide done" : "done" }] : [];
+  // enter is the core's on a task's row; on a heading of Done it is this.
+  if (days) keys.push({ key: "enter", label: "open or fold" });
   // p's label says what the next press lists.
   const next = PRIOS[(PRIOS.indexOf(t.prio) + 1) % PRIOS.length];
   keys.push({ key: "p", label: next === "" ? "all priorities" : next === "none" ? "no priority only" : `${next} only` });
@@ -232,9 +306,70 @@ async function load(project: string, t: Tab): Promise<void> {
   t.error = "";
   try {
     t.tasks = await $.tasks.list(project);
+    await loadDone(project, t);
+    // No done task left on the board: is there one in the archive?
+    if (!t.doneAll && !t.tasks.some((x) => x.status === "done")) {
+      t.total = (await $.tasks.done(project, { groups: true }))?.total ?? 0;
+    }
   } catch (e: any) {
     t.error = String(e?.message ?? e);
   }
+}
+
+// loadDone reads Done's groups while they show, and again each fold that
+// is open as far as it was read. The archive is read only for a fold that
+// holds archived tasks. Nothing is read while Done is folded.
+async function loadDone(project: string, t: Tab): Promise<void> {
+  if (!byDay(t)) return;
+  const res = await $.tasks.done(project, { groups: true, reveal: t.reveal });
+  t.groups = res.groups;
+  t.total = res.total;
+  const was = t.rows;
+  t.rows = new Map();
+  for (const g of t.groups) {
+    if (!isOpen(t, g)) continue;
+    const read = was.get(key(g))?.tasks.length ?? 0;
+    if (g.open && read <= (g.tasks ?? []).length) {
+      t.rows.set(key(g), { tasks: g.tasks ?? [], next: g.next });
+    } else {
+      t.rows.set(key(g), await readFold(project, g, 0, Math.max(read, PAGE)));
+    }
+  }
+}
+
+// readFold reads limit of g's rows from offset.
+async function readFold(project: string, g: TM.DoneGroup, offset: number, limit: number): Promise<Fold> {
+  const res = await $.tasks.done(project, { from: g.from, to: g.to, archived: g.archived > 0, offset, limit });
+  return { tasks: res.tasks, next: res.next };
+}
+
+// press handles enter or a click on a row of Done: a heading opens or
+// folds, "… more" reads on. It says whether row was one of those.
+async function press(project: string, t: Tab, row: string): Promise<boolean> {
+  const fold = row.startsWith("f:");
+  if (!fold && !row.startsWith("m:")) return false;
+  const k = row.slice(2);
+  const g = t.groups.find((x) => key(x) === k);
+  if (!g) return false;
+  try {
+    t.error = "";
+    if (fold) {
+      if (t.toggled.has(k)) t.toggled.delete(k);
+      else t.toggled.add(k);
+      if (isOpen(t, g) && !t.rows.has(k)) {
+        t.rows.set(k, g.open ? { tasks: g.tasks ?? [], next: g.next } : await readFold(project, g, 0, PAGE));
+      }
+    } else {
+      const f = t.rows.get(k);
+      if (f && f.next > 0) {
+        const more = await readFold(project, g, f.next, PAGE);
+        t.rows.set(k, { tasks: [...f.tasks, ...more.tasks], next: more.next });
+      }
+    }
+  } catch (e: any) {
+    t.error = String(e?.message ?? e);
+  }
+  return true;
 }
 
 async function publish(project: string, t: Tab): Promise<void> {
@@ -259,10 +394,14 @@ async function refresh(project: string | undefined): Promise<void> {
 // done or dropped, those are listed, so its row is there for the cursor.
 $.on("view.opened", async (e) => {
   if (e.view !== VIEW || !e.project) return;
-  const t: Tab = tabs.get(e.project) ?? { tasks: [], doneAll: false, prio: "", error: "" };
+  const t: Tab = tabs.get(e.project) ?? { tasks: [], doneAll: false, prio: "", error: "", groups: [], total: 0, rows: new Map(), toggled: new Set(), reveal: "" };
   tabs.set(e.project, t);
   await load(e.project, t);
-  if (e.task && t.tasks.some((x) => x.id === e.task && closed(groupOf(x.status)))) t.doneAll = true;
+  if (e.task && t.tasks.some((x) => x.id === e.task && closed(groupOf(x.status)))) {
+    t.doneAll = true;
+    t.reveal = e.task;
+    await load(e.project, t);
+  }
   await publish(e.project, t);
 });
 
@@ -279,10 +418,23 @@ $.on("tasks.changed", async (e) => refresh(e.project));
 
 $.on("ui.key", async (e) => {
   const project = e.target?.project;
-  if (e.view !== VIEW || !project || (e.key !== "b" && e.key !== "p")) return;
+  if (e.view !== VIEW || !project) return;
   const t = tabs.get(project);
   if (!t) return;
+  if (e.key === "enter") {
+    if (await press(project, t, e.row ?? "")) await publish(project, t);
+    return;
+  }
+  if (e.key !== "b" && e.key !== "p") return;
   if (e.key === "b") t.doneAll = !t.doneAll;
   else t.prio = PRIOS[(PRIOS.indexOf(t.prio) + 1) % PRIOS.length];
+  await load(project, t);
   await publish(project, t);
+});
+
+$.on("ui.click", async (e) => {
+  const project = e.target?.project;
+  if (e.view !== VIEW || !project) return;
+  const t = tabs.get(project);
+  if (t && (await press(project, t, e.row ?? ""))) await publish(project, t);
 });

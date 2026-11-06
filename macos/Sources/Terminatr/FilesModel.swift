@@ -55,6 +55,10 @@ final class FilesModel {
     private(set) var problem: String?
     private(set) var loaded = false
     private(set) var library: [AppAPI.LibraryFile]?
+    /// The kind a program's list is narrowed to.
+    var kind: LibraryPage.Kind?
+    /// What a program's list leaves out for now.
+    private(set) var libraryNote: String?
     /// A coordinator's repos, the first the default; none for a thread, or
     /// a tm without the list.
     private(set) var repos: [AppAPI.FilesRepo] = []
@@ -73,7 +77,10 @@ final class FilesModel {
     var wantsFocus = false
     /// The file tabs Open in pane added.
     var pane = PaneFiles()
-    var place: FilesPlace?
+    var place: FilesPlace? {
+        // A program has only Attached.
+        didSet { if place?.isProgram == true { scope = .attached } }
+    }
     /// A paired server's link is down: what shows is as of this. Nothing new
     /// can be read.
     private(set) var offlineAsOf: Date?
@@ -139,6 +146,7 @@ final class FilesModel {
 
     var attached: [AppAPI.LibraryFile] {
         let all = library ?? []
+        if place?.isProgram == true { return LibraryPage.shown(all, query: filter, kind: kind) }
         let q = filter.lowercased()
         return q.isEmpty ? all : all.filter { $0.name.lowercased().contains(q) }
     }
@@ -265,6 +273,10 @@ final class FilesModel {
         let g = generation
         await loadLibrary(app)
         guard g == generation else { return }
+        if place?.isProgram == true {
+            loaded = true
+            return
+        }
         guard let session = place?.session, let b = app.bridge else {
             if place?.farOff == true, readAt != nil {
                 stoppedSharing()
@@ -408,6 +420,13 @@ final class FilesModel {
     private func loadLibrary(_ app: AppModel) async {
         guard let place else { return }
         do {
+            if place.isProgram {
+                let l = try await app.programLibrary(place.project)
+                library = l.files
+                libraryNote = l.note.isEmpty ? nil : l.note
+                libraryProblem = nil
+                return
+            }
             let all = place.server.isEmpty ? try await app.library(place.project) : try await app.peerLibrary(place.server, place.project)
             library = place.thread.map { t in all.filter { $0.thread == t } } ?? all
             libraryProblem = nil
@@ -574,6 +593,7 @@ final class FilesModel {
 
     private func attachedBytes(_ a: AppAPI.LibraryFile, _ app: AppModel) async -> FileOutcome {
         guard let place else { return .unavailable("Not connected to terminatr.") }
+        if place.isProgram { return await app.programLibraryData(place.project, a) }
         return place.server.isEmpty ? await app.libraryData(place.project, a) : await app.peerLibraryData(place.server, place.project, a)
     }
 

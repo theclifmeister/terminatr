@@ -23,6 +23,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/config"
+	"github.com/theclifmeister/terminatr/internal/history"
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/mod"
 	"github.com/theclifmeister/terminatr/internal/modapi"
@@ -357,12 +358,29 @@ func (s *Server) modMethods(b *modbroker.Broker) {
 		items, _ := p.Inbox()
 		return modTasks(p.Slug, board, items), nil
 	})
+	b.Handle("tasks.done", mod.PermProjectRead, func(_ context.Context, c *modbroker.Call) (any, error) {
+		var o struct {
+			Options modapi.DoneOptions `json:"options"`
+		}
+		p, err := modProject(c, &o)
+		if err != nil {
+			return nil, err
+		}
+		return modDone(p, o.Options, time.Now())
+	})
 	b.Handle("designs.list", mod.PermProjectRead, func(_ context.Context, c *modbroker.Call) (any, error) {
 		p, err := modProject(c, &struct{}{})
 		if err != nil {
 			return nil, err
 		}
 		return modDesigns(p)
+	})
+	b.Handle("history.get", mod.PermProjectRead, func(_ context.Context, c *modbroker.Call) (any, error) {
+		p, err := modProject(c, &struct{}{})
+		if err != nil {
+			return nil, err
+		}
+		return history.Read(p)
 	})
 	b.Handle("thread.get", mod.PermProjectRead, func(_ context.Context, c *modbroker.Call) (any, error) {
 		var a struct {
@@ -570,9 +588,42 @@ func modTasks(slug string, board *tasks.Board, items []project.Item) []ModTask {
 			StepsDone: t.StepsDone(), StepsTotal: len(t.Steps), Thread: t.Thread,
 			Steps: steps, Updated: t.Updated, Asked: project.TaskAsked(items, t.Ref()),
 			Design: t.Design, After: taskRefs(t.After), Priority: string(t.Priority), DoneAt: t.DoneAt, DoneLabel: tasks.DoneLabel(t.DoneAt, time.Now()),
-			WaitsFor: waits.After[t.ID], Waiters: waits.Waiters[t.ID]})
+			WaitsFor: waits.After[t.ID], Waiters: waits.Waiters[t.ID], Archived: t.Archived})
 	}
 	return out
+}
+
+// modDone is $.tasks.done's answer as of now, in now's time zone. The
+// archive is read for groups, whose counts need its dates, and for a range
+// the mod says holds archived tasks.
+func modDone(p *project.Project, o modapi.DoneOptions, now time.Time) (modapi.DoneTasks, error) {
+	out := modapi.DoneTasks{Tasks: []ModTask{}, Groups: []modapi.DoneGroup{}}
+	done, err := p.Tasks().Done(o.Groups || o.Archived)
+	if err != nil {
+		return out, err
+	}
+	items, _ := p.Inbox()
+	// A done task waits for nothing, and only part of the board is here
+	// to say otherwise.
+	rows := func(ts []*tasks.Task) []ModTask {
+		out := modTasks(p.Slug, &tasks.Board{Tasks: ts}, items)
+		for i := range out {
+			out[i].WaitsFor, out[i].Waiters = nil, 0
+		}
+		return out
+	}
+	if !o.Groups {
+		page, total, next := tasks.PageDone(done, now.Location(), o.From, o.To, o.Offset, o.Limit)
+		out.Tasks, out.Total, out.Next = rows(page), total, next
+		return out, nil
+	}
+	out.Total = len(done)
+	reveal, _ := tasks.ParseRef(o.Reveal)
+	for _, g := range tasks.GroupDone(done, now, reveal) {
+		out.Groups = append(out.Groups, modapi.DoneGroup{Kind: g.Kind, Title: g.Title, From: g.From, To: g.To,
+			Count: g.Count, Archived: g.Archived, Open: g.Open, Tasks: rows(g.Tasks), Next: g.Next})
+	}
+	return out, nil
 }
 
 // taskRefs are task ids as refs, "T10".
