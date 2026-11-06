@@ -430,6 +430,10 @@ type Task struct {
 	Owner    string `json:"owner,omitempty"`
 	Created  string `json:"created,omitempty"`
 	Updated  string `json:"updated,omitempty"`
+	// DoneAt (app API 54) is when a done task finished: a UTC time
+	// (2026-11-06T09:10:44Z), or a day (2026-11-06) when only that is
+	// known; absent when nothing dates it, and from an older tm.
+	DoneAt string `json:"done_at,omitempty"`
 	// After (app API 44; task.get only) are the tasks it comes after,
 	// this board's and other projects', with another program member's
 	// dependency state while programs are on.
@@ -947,7 +951,7 @@ func projectOf(p server.SideProject) Project {
 
 func taskOf(t server.SideTask) Task {
 	out := Task{ID: t.ID, Ref: (&tasks.Task{ID: t.ID}).Ref(), Title: t.Title, Status: string(t.Status), Priority: string(t.Priority), Notes: t.Notes,
-		Thread: t.Thread, Owner: t.Owner, Created: t.Created, Updated: t.Updated}
+		Thread: t.Thread, Owner: t.Owner, Created: t.Created, Updated: t.Updated, DoneAt: t.DoneAt}
 	for _, s := range t.Steps {
 		out.Steps = append(out.Steps, Step{N: s.N, Text: s.Text, Done: s.Done})
 	}
@@ -1194,8 +1198,8 @@ func taskAddedOf(r proto.TaskAddResult) TaskAdded {
 	return TaskAdded{Task: r.Task, Existing: r.Existing}
 }
 
-// DoneTasks is task.done's result: the board's done tasks, in board
-// order, without their notes and steps.
+// DoneTasks is task.done's result: the board's done tasks, newest first
+// since app API 54 (board order before), without their notes and steps.
 type DoneTasks struct {
 	Tasks []Task `json:"tasks"`
 }
