@@ -39,6 +39,17 @@ public enum Compatibility: Equatable, Sendable {
             && (hello.server?.caps ?? []).contains("peer-history")
     }
 
+    /// The app API that has release.tags and release.tags.set: File ›
+    /// Release Tags… needs it.
+    public static let releaseTagsAPI = 65
+
+    /// Whether hello's tm reads and sets which tags count as releases, its
+    /// server too (caps release-tags): else the menu item is off.
+    public static func setsReleaseTags(_ hello: AppAPI.Hello) -> Bool {
+        hello.appApi >= releaseTagsAPI && hello.methods.contains(AppAPI.Methods.releaseTagsSet.name)
+            && (hello.server?.caps ?? []).contains("release-tags")
+    }
+
     /// The app API that has task.add: File › New Task… needs it.
     public static let taskAddAPI = 7
 

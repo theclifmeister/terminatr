@@ -1303,6 +1303,32 @@ final class AppModel {
         return r
     }
 
+    /// The project whose Release Tags sheet shows.
+    var releaseTagsProject: String?
+
+    /// Whether this tm sets which tags count as releases (app API 65).
+    var setsReleaseTags: Bool {
+        if case .connected(let h) = phase { return Compatibility.setsReleaseTags(h) }
+        return false
+    }
+
+    /// Release Tags…: the sheet for project p.
+    func showReleaseTags(_ p: AppAPI.Project) {
+        guard setsReleaseTags else { return }
+        releaseTagsProject = p.slug
+        showWindow?()
+    }
+
+    /// Which of project's tags count as releases (release.tags).
+    func releaseTags(_ project: String) async throws -> AppAPI.ReleaseTags {
+        try await connected().call(AppAPI.Methods.releaseTags, AppAPI.ProjectParams(project: project))
+    }
+
+    /// Sets which of project's tags count (release.tags.set).
+    func setReleaseTags(_ form: ReleaseTagsForm, project: String) async throws -> AppAPI.ReleaseTags {
+        try await connected().call(AppAPI.Methods.releaseTagsSet, form.params(project: project))
+    }
+
     /// Write to Linked Project…: the sheet for project p, to first or
     /// the first link that sends.
     func showLinkMessage(_ p: AppAPI.Project, to first: String = "") {

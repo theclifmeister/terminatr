@@ -169,6 +169,10 @@ struct FileCommands: Commands {
                 if let p { model.showLinkMessage(p) }
             }
             .disabled(!model.actsOnSidebar || p.map { LinkMessageForm.writable($0).isEmpty } ?? true)
+            Button("Release Tags…") {
+                if let p { model.showReleaseTags(p) }
+            }
+            .disabled(!model.setsReleaseTags || p == nil)
         }
     }
 }

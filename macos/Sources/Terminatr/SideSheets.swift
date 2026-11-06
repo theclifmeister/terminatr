@@ -88,6 +88,102 @@ struct NewProjectSheet: View {
 
 /// Write to Linked Project… (app API 22), as the TUI's M: a message the
 /// user writes as the project to one of its links that send.
+struct ReleaseTagsSheet: View {
+    @Environment(AppModel.self) private var app
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.theme) private var theme
+    let project: String
+    @State private var form: ReleaseTagsForm?
+    @State private var counts = ""
+    @State private var busy = false
+    @State private var error: String?
+    @FocusState private var textFocused: Bool
+
+    var body: some View {
+        FlatSheet(width: 480) {
+            SheetTitle("Release Tags", detail: "Which tags count as releases in any repo of \(project).")
+        } content: {
+            SheetBody {
+                if let binding = Binding($form) {
+                    let f = binding.wrappedValue
+                    SheetField("What counts") {
+                        SheetPicker(label: "What counts", shown: f.title(f.mode), selection: binding.mode) {
+                            ForEach(ReleaseTagsForm.Mode.allCases, id: \.self) { m in
+                                Text(f.title(m)).tag(m)
+                            }
+                        }
+                    }
+                    if f.mode == .patterns {
+                        SheetField("Patterns") {
+                            TextField("Patterns", text: binding.text, prompt: Text("prod-*"))
+                                .sheetField()
+                                .focused($textFocused)
+                                .onAppear { textFocused = true }
+                        }
+                    }
+                    Text(words(f.mode))
+                        .font(theme.sized(Flat.label))
+                        .foregroundStyle(theme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if !counts.isEmpty {
+                        Text("Releases now: \(counts)")
+                            .font(theme.sized(Flat.label))
+                            .foregroundStyle(theme.muted)
+                    }
+                } else if error == nil {
+                    ProgressView().controlSize(.small)
+                }
+                if let error {
+                    Text(error)
+                        .font(theme.sized(Flat.label))
+                        .foregroundStyle(theme.attention)
+                }
+            }
+        } footer: {
+            Button("Cancel") { dismiss() }
+                .keyboardShortcut(.cancelAction)
+            Button("Save") { save() }
+                .buttonStyle(.flatPrimary)
+                .keyboardShortcut(.defaultAction)
+                .disabled(form?.canSave != true || busy)
+        }
+        .task { await read() }
+    }
+
+    private func words(_ mode: ReleaseTagsForm.Mode) -> String {
+        switch mode {
+        case .follow: "This project follows all projects' setting, in the TUI's Settings tab."
+        case .rule: "Version tags: v1.2.3, 1.4.0, release-1.2, a part's api/v1.2 or pkg@1.3.0. No pre-releases, nightlies or moving tags. Only tags since the project's first record count."
+        case .patterns: "Tag names, * for any text, split by spaces or commas. They replace the version rule. Only tags since the project's first record count."
+        case .none: "No tag counts, so nothing shows releases."
+        }
+    }
+
+    private func read() async {
+        do {
+            form = ReleaseTagsForm(try await app.releaseTags(project))
+            counts = ReleaseCounts.words(try await app.history(project)?.releases ?? [])
+        } catch {
+            self.error = Dashboard.words(error)
+        }
+    }
+
+    private func save() {
+        guard let form else { return }
+        busy = true
+        error = nil
+        Task {
+            defer { busy = false }
+            do {
+                _ = try await app.setReleaseTags(form, project: project)
+                dismiss()
+            } catch {
+                self.error = Dashboard.words(error)
+            }
+        }
+    }
+}
+
 struct LinkMessageSheet: View {
     @Environment(AppModel.self) private var app
     @Environment(\.dismiss) private var dismiss

@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"errors"
-	"path/filepath"
 	"slices"
 
 	"github.com/theclifmeister/terminatr/internal/changes"
@@ -112,17 +111,10 @@ func (s *Server) filesRepos(p proto.FilesReposParams) (any, *proto.Error) {
 // fileRepos names the repos of a list, each by its folder's name, with
 // its parent folder too when two share that.
 func fileRepos(list []string) []proto.FileRepo {
-	named := map[string]int{}
-	for _, r := range list {
-		named[tasks.RepoName(r)]++
-	}
+	names := tasks.RepoLabels(list)
 	out := make([]proto.FileRepo, 0, len(list))
-	for _, r := range list {
-		name := tasks.RepoName(r)
-		if named[name] > 1 {
-			name = filepath.ToSlash(filepath.Join(filepath.Base(filepath.Dir(r)), name))
-		}
-		out = append(out, proto.FileRepo{Name: name, Path: r})
+	for i, r := range list {
+		out = append(out, proto.FileRepo{Name: names[i], Path: r})
 	}
 	return out
 }

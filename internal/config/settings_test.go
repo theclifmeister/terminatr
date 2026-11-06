@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"reflect"
 	"slices"
 	"strings"
@@ -12,7 +13,7 @@ import (
 // and order.
 func TestSettingKeys(t *testing.T) {
 	want := []string{"start_threads", "yolo", "coordinator_approves", "parallel_threads", "global_parallel_threads", "auto_close", "auto_close_days", "auto_resolve", "pr_followup", "pr_poll_seconds", "complete_tasks", "coordinator_remote_control", "auto_clear", "coordinator_sleep_after", "coordinator_merges", "merge_method", "fast_forward_checkout", "protection", "coordinator_access", "thread_agent", "thread_agents", "coordinator_agent", "models", "coordinator_model", "active", "paused", "archived", "pinned", "share",
-		"archive_tasks_days", "archive_threads_days", "archive_inbox_days", "archive_journal_days", "link_burst", "link_per_hour", "link_max_kb", "link_file_mb", "link_file_kbps", "branch_name", "guard", "guard_off", "guard_mode", "guard_allow"}
+		"archive_tasks_days", "archive_threads_days", "archive_inbox_days", "archive_journal_days", "link_burst", "link_per_hour", "link_max_kb", "link_file_mb", "link_file_kbps", "branch_name", "release_tags", "guard", "guard_off", "guard_mode", "guard_allow"}
 	if !slices.Equal(ProjectKeys, want) {
 		t.Errorf("ProjectKeys %v", ProjectKeys)
 	}
@@ -211,5 +212,76 @@ func TestSleepAfter(t *testing.T) {
 		if got := SleepAfter(Safety{CoordinatorSleepAfter: tc.set}, tc.inProgram); got != tc.want {
 			t.Errorf("%q in program %v: %v, want %v", tc.set, tc.inProgram, got, tc.want)
 		}
+	}
+}
+
+func TestReleaseTagsSetting(t *testing.T) {
+	t.Setenv("TERMINATR_HOME", t.TempDir())
+	read := func() Safety {
+		t.Helper()
+		c, err := Load()
+		if err != nil {
+			t.Fatal(err)
+		}
+		s, err := c.Safety("web")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
+	if got := read().ReleaseTags; len(got) != 0 {
+		t.Fatalf("the default is the rule: %v", got)
+	}
+	if err := SetProject("web", "release_tags", []string{"prod-*", "v*"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := read().ReleaseTags; !slices.Equal(got, []string{"prod-*", "v*"}) {
+		t.Fatalf("patterns: %v", got)
+	}
+	// "none" is written as the design has it, and read back as the list.
+	if err := SetProject("web", "release_tags", []string{ReleaseTagsOff}); err != nil {
+		t.Fatal(err)
+	}
+	path, _ := Path()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `release_tags = "none"`) {
+		t.Errorf("the file:\n%s", data)
+	}
+	if got := read().ReleaseTags; !ReleaseTagsAreOff(got) {
+		t.Fatalf("none: %v", got)
+	}
+	// All projects' patterns, and a project's empty list going back to
+	// the rule over them.
+	if err := UnsetProject("web", "release_tags"); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetDefaults("release_tags", []string{"prod-*"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := read().ReleaseTags; !slices.Equal(got, []string{"prod-*"}) {
+		t.Fatalf("following all projects: %v", got)
+	}
+	if err := SetProject("web", "release_tags", []string{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := read().ReleaseTags; len(got) != 0 {
+		t.Fatalf("own empty list: %v", got)
+	}
+	for _, bad := range [][]string{{""}, {"a b"}, {"none", "v*"}, {strings.Repeat("a", MaxReleaseTagPattern+1)}, make([]string, MaxReleaseTags+1)} {
+		if err := CheckSetting("release_tags", bad); err == nil {
+			t.Errorf("%q passes", bad)
+		}
+	}
+	if err := CheckSetting("release_tags", "prod-*"); err == nil {
+		t.Error("a bare string passes")
+	}
+	if err := os.WriteFile(path, []byte("[projects.web]\nrelease_tags = \"prod-*\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(); err == nil {
+		t.Error("a string other than none loads")
 	}
 }

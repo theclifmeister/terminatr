@@ -304,6 +304,11 @@ func init() {
 		proto.MethodProjectHistory: {gate: gateHuman, call: typed(func(s *Server, p proto.HistoryParams, _ callCtx) (any, *proto.Error) {
 			return s.projectHistory(p)
 		})},
+		// Which of a project's tags count as releases (CapReleaseTags).
+		proto.MethodReleaseTags: {gate: gateHuman, call: typed(func(s *Server, p proto.ReleaseTagsParams, _ callCtx) (any, *proto.Error) {
+			return s.releaseTags(p)
+		})},
+		proto.MethodReleaseTagsSet: {gate: gateHuman, call: typed((*Server).releaseTagsSet)},
 		// A project's designs, read only (CapDesigns).
 		proto.MethodDesignList: {gate: gateHuman, call: typed(func(s *Server, p proto.DesignListParams, _ callCtx) (any, *proto.Error) {
 			return s.designList(p)

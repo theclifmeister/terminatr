@@ -18,7 +18,7 @@ func TestSafetyRowKeys(t *testing.T) {
 		"Complete tasks": {"complete_tasks"}, "Pull request follow-up": {"pr_followup"}, "Remote control": {"coordinator_remote_control"},
 		"Auto-clear coordinator": {"auto_clear"}, "Coordinator sleep": {"coordinator_sleep_after"}, "Coordinator may merge": {"coordinator_merges"}, "Merge method": {"merge_method"}, "Keep my checkout current": {"fast_forward_checkout"},
 		"Thread agent": {"thread_agent"}, "Coordinator agent": {"coordinator_agent"}, "Thread agents": {"thread_agents"}, "Thread models": {"models"},
-		"Coordinator model": {"coordinator_model"}, "Branch names": {"branch_name"}, "Keep history": config.ArchiveKeys, "Link limits": config.LinkKeys,
+		"Coordinator model": {"coordinator_model"}, "Branch names": {"branch_name"}, "Release tags": {"release_tags"}, "Keep history": config.ArchiveKeys, "Link limits": config.LinkKeys,
 		"Guard": {"guard"}, "Guard mode": {"guard_mode"}, "Guard rules": {"guard_off"}, "Protection": {"protection"}, "Coordinator sets access": {"coordinator_access"},
 	}
 	for _, slug := range []string{"demo", ""} {
