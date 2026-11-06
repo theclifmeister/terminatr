@@ -3,7 +3,7 @@ import SwiftUI
 /// The flat look's line icons (T1008): the design page's own, drawn on its
 /// 24 pt grid, where an SF Symbol of the same side is heavier and larger.
 public enum FlatGlyph: Sendable {
-    case gear, info, board, mark, books, mod, back, tool
+    case gear, info, board, mark, books, designs, mod, back, tool
 
     fileprivate func path() -> Path {
         var p = Path()
@@ -50,6 +50,9 @@ public enum FlatGlyph: Sendable {
             box(4, 5, 4, 15, 1)
             box(9.5, 8, 4, 12, 1)
             shape((15.5, 6.5), (18.9, 5.7), (21.2, 19.3), (17.8, 20))
+        case .designs:
+            box(9, 9, 12, 12, 2)
+            line((15, 5.5), (15, 5), (14, 4), (5, 4), (4, 5), (4, 14), (5, 15), (5.5, 15))
         case .mod:
             p.move(to: CGPoint(x: 5, y: 6))
             p.addLine(to: CGPoint(x: 9.5, y: 6))
