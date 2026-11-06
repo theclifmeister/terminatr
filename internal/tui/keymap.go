@@ -55,6 +55,7 @@ var popupKeys = []keyHelp{
 	{"+ X", "on the overview: add a repository / remove the selected one (asks first)"},
 	{"enter", "on a task (Tasks tab): show it, with what it is blocked on, or how to check it and whether its pull request merged"},
 	{"/ t", "in the Library tab: filter by file name, title, task, thread or repository (from 7 files) / step through the kinds (with two or more)"},
+	{"v", "on a stack (Library tab, or while reading it): switch between its two files, dark and light or before and after"},
 	{"enter", "on a file (Library tab): read it, read-only: text as it is, JSON indented, an image in half-blocks with 24-bit colour, other files by name and size; on +N more or show fewer: open or fold its group"},
 	{"o", "on a file (Library tab, or while reading it): open it in this computer's viewer"},
 	{"p", "on a page (Library tab) marked published: open its published copy in this computer's browser"},

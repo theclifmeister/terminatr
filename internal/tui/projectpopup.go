@@ -86,6 +86,9 @@ type projectView struct {
 	// filter's words and the kind ("" for all); libTyping says the keyboard
 	// is in the filter.
 	libFilter string
+	// libShow is which file a switched stack's row shows (librarystack.go).
+	libShow map[string]string
+
 	// libOpen are the groups opened past their fold (libraryheads.go).
 	libOpen   map[string]bool
 	libPick   string
@@ -559,6 +562,9 @@ func (pv *projectView) box(m *dash) box {
 			if f, ok := pv.selLib(); ok && f.Published != "" {
 				keys = "p published · " + keys
 			}
+			if r, ok := pv.libStackRow(); ok {
+				keys = "v " + r.otherWord() + " · " + keys
+			}
 		}
 	case tabDesigns:
 		body, sel, hits = pv.designLines(w)
@@ -684,16 +690,30 @@ func (pv *projectView) click(m *dash, item, col int, double bool) tea.Cmd {
 	if l := pv.list(); l != nil {
 		return l.click(m, item, col)
 	}
+	listW := 0
 	if pv.tab == tabLibrary {
 		// The preview column isn't the row beside it.
 		w := m.inner(viewWidth)
-		if cols := pv.libPreviewCols(m, w); cols > 0 && col >= w-cols-libPreviewGap {
-			return nil
+		listW = w
+		if cols := pv.libPreviewCols(m, w); cols > 0 {
+			if col >= w-cols-libPreviewGap {
+				return nil
+			}
+			listW = w - cols - libPreviewGap
 		}
 	}
 	pv.sel[pv.tab] = item
 	if pv.tab == tabLibrary && pv.toggleLibFold() {
 		return nil
+	}
+	if pv.tab == tabLibrary {
+		// A click on a stack's switch switches it.
+		if r, ok := pv.libStackRow(); ok {
+			if from, to, fits := libSwitchSpan(listW); fits && col >= from && col < to {
+				pv.switchLib(r)
+				return nil
+			}
+		}
 	}
 	if pv.tab == tabMessages {
 		// A click opens a message, as enter does.

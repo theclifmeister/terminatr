@@ -113,6 +113,24 @@ private struct LibraryFixture: Decodable {
     let order: [Order]
     let heads: [Head]
     let fold: [Fold]
+    let stacks: [Stack]
+    let strips: [Strip]
+
+    /// A group as tiles: titles, a stack being one, and what +N counts.
+    struct Strip: Decodable {
+        let why: String
+        let names: [String]
+        let strip: [String]
+        let rows: [String]
+        let more: Int
+    }
+
+    struct Stack: Decodable {
+        let why: String
+        var names: [String]?
+        var library: String?
+        let rows: [[String]]
+    }
 
     struct Head: Decodable {
         let library: String
@@ -212,10 +230,10 @@ private struct LibraryFixture: Decodable {
     let fs = (0..<37).map { lib("t-0001", "\($0).png", 37 - $0) }
     let g = try #require(LibraryPage.groups(fs).first)
     let shut = g.listed(open: false, query: "")
-    #expect(shut.files.map(\.name) == (0..<6).map { "\($0).png" } && shut.more == 31 && !shut.fewer)
+    #expect(shut.rows.map(\.title) == (0..<6).map { "\($0).png" } && shut.more == 31 && !shut.fewer)
     let open = g.listed(open: true, query: "")
-    #expect(open.files.count == 37 && open.more == 0 && open.fewer)
-    #expect(g.listed(open: false, query: "1").files.count == 37)
+    #expect(open.rows.count == 37 && open.more == 0 && open.fewer)
+    #expect(g.listed(open: false, query: "1").rows.count == 37)
     #expect(g.kinds == ["37 images"])
 }
 
@@ -375,6 +393,61 @@ private actor Thumbs {
     }
 }
 
+/// The stack rule (T1057), on the table the TUI's test reads too.
+@Test func libraryStacksAsTheTUI() throws {
+    let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .appendingPathComponent("../../../internal/tui/testdata/library-filter.json").standardized
+    let fx = try JSONDecoder().decode(LibraryFixture.self, from: Data(contentsOf: url))
+    #expect(fx.stacks.count >= 25)
+    for c in fx.stacks {
+        var files = (c.library.flatMap { fx.libraries[$0] } ?? []).map(\.file)
+        files += (c.names ?? []).map { lib("t-0001", $0, 1) }
+        let rows = LibraryPage.groups(files).flatMap(\.rows).map { r in
+            r.isStack ? [r.title, r.files[0].name, r.files[1].name, r.words[0], r.words[1]] : [r.files[0].name]
+        }
+        #expect(rows == c.rows, "\(c.why)")
+    }
+}
+
+/// A stack is one tile, and one in +N (T1057, T1059), by the shared table.
+@Test func libraryStacksAreOneTile() throws {
+    let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .appendingPathComponent("../../../internal/tui/testdata/library-filter.json").standardized
+    let fx = try JSONDecoder().decode(LibraryFixture.self, from: Data(contentsOf: url))
+    #expect(fx.strips.count >= 6)
+    for c in fx.strips {
+        let g = LibraryPage.groups(c.names.map { lib("t-0001", $0, 1) })[0]
+        let l = g.listed(open: false, query: "", tiles: LibraryPage.hasThumbnail)
+        #expect(l.strip.map(\.title) == c.strip, "\(c.why)")
+        #expect(l.rows.map(\.title) == c.rows, "\(c.why)")
+        #expect(l.more == c.more, "\(c.why)")
+    }
+    // One half with no thumbnail: the stack is a row, still with its switch.
+    let pair = LibraryPage.groups([lib("t-0001", "a-dark.png", 1), lib("t-0001", "a-light.png", 1)])[0]
+    let failed = pair.listed(open: false, query: "") { $0.name != "a-light.png" }
+    #expect(failed.strip.isEmpty && failed.rows.map(\.isStack) == [true])
+}
+
+@Test func libraryStackFoldsByRowsAndCountsFiles() {
+    let files = (0..<7).flatMap { i in ["dark", "light"].map { lib("t-0001", "s\(i)-\($0).png", 1) } }
+    let g = LibraryPage.groups(files)[0]
+    let l = g.listed(open: false, query: "")
+    #expect(l.rows.count == 6 && l.more == 1)
+    #expect(g.kinds == ["14 images"])
+    // A filter that leaves one of the two lists it as itself.
+    let one = LibraryPage.groups(LibraryPage.shown(files, query: "s0-light", kind: nil))[0]
+    #expect(one.rows.map(\.isStack) == [false])
+}
+
+@Test func libraryBeforeIsOnTheLeft() throws {
+    let r = try #require(LibraryPage.rows([lib("t-0001", "x-after.png", 2), lib("t-0001", "x-before.png", 1)]).first)
+    #expect(r.opensSideBySide)
+    #expect(r.sideBySide.map(\.word) == ["before", "after"])
+    #expect(r.sideBySide.map(\.file.name) == ["x-before.png", "x-after.png"])
+    let d = try #require(LibraryPage.rows([lib("t-0001", "x-dark.png", 2), lib("t-0001", "x-light.png", 1)]).first)
+    #expect(!d.opensSideBySide)
+}
+
 /// A Library group with images (T1059): a strip of four, the rest rows, one
 /// +N for what's left of both.
 @Test func aLibraryGroupListsItsImagesAsAStrip() {
@@ -383,7 +456,7 @@ private actor Thumbs {
         LibraryPage.Group(id: "t-1", files: names.map { AppAPI.LibraryFile(thread: "t-1", title: "x", state: "running", name: $0, size: 1, time: at) })
     }
     let images = { (f: AppAPI.LibraryFile) in LibraryPage.hasThumbnail(f) }
-    let names = { (fs: [AppAPI.LibraryFile]) in fs.map(\.name) }
+    let names = { (rs: [LibraryPage.Row]) in rs.map(\.files[0].name) }
 
     // No images: as before.
     let notes = files((0..<8).map { "\($0).md" })
@@ -397,7 +470,7 @@ private actor Thumbs {
     // Mixed: images strip, others rows, in their order, an SVG a row.
     let mixed = files(["a.png", "b.md", "c.jpg", "d.svg"]).listed(open: false, query: "", tiles: images)
     #expect(names(mixed.strip) == ["a.png", "c.jpg"] && names(mixed.rows) == ["b.md", "d.svg"] && !mixed.folds)
-    #expect(names(mixed.files) == ["a.png", "c.jpg", "b.md", "d.svg"])
+    #expect(names(mixed.all) == ["a.png", "c.jpg", "b.md", "d.svg"])
 
     // Four images and six rows stay unfolded; one over either folds.
     let full = files((0..<4).map { "\($0).png" } + (0..<6).map { "\($0).md" })
