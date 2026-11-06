@@ -10,10 +10,11 @@ public enum WindowColumns {
     public static let window: Double = 980
     /// A session's own window's (Open in New Window).
     public static let sessionWindow: Double = 760
-    /// The sidebar's least, ideal and greatest width, its line included.
+    /// The sidebar's least and ideal width, its line included. There is
+    /// no greatest: a drag stops where another visible panel would go
+    /// under its least (limit).
     public static let sidebarMin: Double = 240
     public static let sidebarIdeal: Double = 296
-    public static let sidebarMax: Double = 420
     /// The main pane's least width: a session's conversation or
     /// terminal, or a project's dashboard.
     public static let detailMin: Double = 340
@@ -25,22 +26,51 @@ public enum WindowColumns {
     /// From the last pane to the window's edge.
     public static let trailing: Double = 8
 
+    /// A resizable column.
+    public enum Column: Sendable { case sidebar, inspector }
+
     /// The widths the columns take in a window width wide, the main pane
-    /// keeping at least detailMin: the inspector gives way first, then
-    /// the sidebar, down to their least. nil is a column that's hidden.
-    public static func fit(window width: Double, sidebar: Double?, inspector: Double?) -> (sidebar: Double?, inspector: Double?) {
-        var s = sidebar.map { clamp($0, sidebarMin, sidebarMax) }
+    /// keeping at least detailMin. When they don't all fit, the inspector
+    /// gives way first, then the sidebar, down to their least; the column
+    /// named in keep (the one the user sized last) gives way last instead.
+    /// The widths passed are the saved ones and stay so: a wider window
+    /// gives the columns their saved widths back. nil is a hidden column.
+    public static func fit(window width: Double, sidebar: Double?, inspector: Double?, keep: Column? = nil) -> (sidebar: Double?, inspector: Double?) {
+        var s = sidebar.map { Swift.max(sidebarMin, $0) }
         var i = inspector.map { InspectorColumn.width(saved: $0) }
         var over = needs(sidebar: s, inspector: i, main: detailMin) - width
-        if over > 0, let w = i {
-            let keep = max(InspectorColumn.min, w - over)
-            over -= w - keep
-            i = keep
-        }
-        if over > 0, let w = s {
-            s = max(sidebarMin, w - over)
+        let order: [Column] = keep == .sidebar ? [.inspector, .sidebar] : keep == .inspector ? [.sidebar, .inspector] : [.inspector, .sidebar]
+        for c in order where over > 0 {
+            switch c {
+            case .inspector:
+                if let w = i {
+                    let to = Swift.max(InspectorColumn.min, w - over)
+                    over -= w - to
+                    i = to
+                }
+            case .sidebar:
+                if let w = s {
+                    let to = Swift.max(sidebarMin, w - over)
+                    over -= w - to
+                    s = to
+                }
+            }
         }
         return (s, i)
+    }
+
+    /// The most a column can be dragged to in a window width wide: the
+    /// other visible columns at their least, the main pane at its least.
+    /// Never under the column's own least.
+    public static func limit(_ column: Column, window width: Double, sidebarShown: Bool, inspectorShown: Bool) -> Double {
+        switch column {
+        case .sidebar:
+            let rest = needs(sidebar: nil, inspector: inspectorShown ? InspectorColumn.min : nil, main: detailMin)
+            return Swift.max(sidebarMin, width - rest)
+        case .inspector:
+            let rest = needs(sidebar: sidebarShown ? sidebarMin : nil, inspector: nil, main: detailMin) + gap
+            return Swift.max(InspectorColumn.min, width - rest)
+        }
     }
 
     /// The window's width with these columns and a main pane main wide.
@@ -61,7 +91,7 @@ public enum WindowColumns {
 
     /// The sidebar's width as saved, or the ideal.
     public static func sidebar(saved: Double?) -> Double {
-        saved.map { clamp($0, sidebarMin, sidebarMax) } ?? sidebarIdeal
+        saved.map { Swift.max(sidebarMin, $0) } ?? sidebarIdeal
     }
 
     /// The sidebar's lower section (Needs you) in a sidebar height high:
@@ -69,9 +99,5 @@ public enum WindowColumns {
     /// it lands where the reference's does.
     public static func needsHeight(sidebar height: Double) -> Double {
         (height * 476 / 1076).rounded()
-    }
-
-    private static func clamp(_ v: Double, _ lo: Double, _ hi: Double) -> Double {
-        Swift.min(hi, Swift.max(lo, v))
     }
 }

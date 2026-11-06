@@ -16,6 +16,8 @@ struct MainWindow: View {
     @Environment(\.theme) private var theme
     @AppStorage("sidebarWidth") private var sidebarWidth = WindowColumns.sidebarIdeal
     @AppStorage("inspectorPanelWidth") private var panelWidth = InspectorColumn.ideal
+    /// The column the user sized last: the last to give way in a narrow window.
+    @State private var sizedLast: WindowColumns.Column?
     /// The needs rotor's entries are the sidebar's need rows.
     @Namespace private var needsRotor
 
@@ -23,7 +25,8 @@ struct MainWindow: View {
         @Bindable var app = app
         GeometryReader { g in
             let shown = app.panelShown(app.nav.selection) != nil
-            let f = WindowColumns.fit(window: g.size.width, sidebar: app.sidebarShown ? sidebarWidth : nil, inspector: shown ? panelWidth : nil)
+            let f = WindowColumns.fit(window: g.size.width, sidebar: app.sidebarShown ? sidebarWidth : nil, inspector: shown ? panelWidth : nil, keep: sizedLast)
+            let sidebarOn = app.sidebarShown
             HStack(spacing: 0) {
                 if let s = f.sidebar {
                     Sidebar(needsRotor: needsRotor)
@@ -34,13 +37,15 @@ struct MainWindow: View {
                     theme.line
                         .frame(width: 1)
                         .overlay {
-                            SplitHandle(width: 7, value: $sidebarWidth, sign: 1, range: WindowColumns.sidebarMin...WindowColumns.sidebarMax, name: "Sidebar width")
+                            SplitHandle(width: 7, value: $sidebarWidth, shown: s, sign: 1, range: WindowColumns.sidebarMin...WindowColumns.limit(.sidebar, window: g.size.width, sidebarShown: true, inspectorShown: shown), name: "Sidebar width", sized: { sizedLast = .sidebar })
                         }
                         .zIndex(1)
                 }
                 MainArea(selection: app.nav.selection, files: app.nav.selection.map { app.filesModel($0) }, buttons: f.sidebar == nil,
                          shownPanel: app.panelShown(app.nav.selection), press: { app.press($0) },
-                         panelWidth: f.inspector, panelWidthSaved: $panelWidth) {
+                         panelWidth: f.inspector, panelWidthSaved: $panelWidth,
+                         panelLimit: WindowColumns.limit(.inspector, window: g.size.width, sidebarShown: sidebarOn, inspectorShown: true),
+                         panelSized: { sizedLast = .inspector }) {
                     VStack(spacing: 0) {
                         if app.lost { ConnectionBanner() }
                         detail.opacity(app.lost ? Self.dimmed : 1)
