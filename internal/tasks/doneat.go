@@ -27,6 +27,15 @@ func fillValue(t *Task, journal map[int]string) string {
 	return ""
 }
 
+// DoneValue is when done task t finished: its DoneAt, or what the upkeep
+// would fill in for it (journal holds the journal's times by task id).
+func DoneValue(t *Task, journal map[int]string) string {
+	if t.DoneAt != "" {
+		return t.DoneAt
+	}
+	return fillValue(t, journal)
+}
+
 // NeedsFill reports whether a task on board could get a DoneAt it
 // lacks, so that a caller reads the journal only then.
 func NeedsFill(board *Board) bool {
