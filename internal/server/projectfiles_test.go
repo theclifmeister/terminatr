@@ -15,6 +15,39 @@ import (
 	"github.com/theclifmeister/terminatr/internal/thread"
 )
 
+// TestLibraryReadTooLarge (T1093): a file over what the app reads is
+// refused in sizes for people, not byte counts.
+func TestLibraryReadTooLarge(t *testing.T) {
+	p := testPaths(t)
+	startServer(t, p)
+	pr, err := project.New(project.Options{Slug: "web"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	th, err := thread.Create(pr, thread.Record{Title: "Report", Task: "T1", State: thread.Running})
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.MkdirAll(thread.Path(pr, th.ID, "library"), 0o755)
+	video := thread.Path(pr, th.ID, "library", "demo.mp4")
+	if err := os.WriteFile(video, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Truncate(video, 175_100_000); err != nil {
+		t.Fatal(err)
+	}
+	app, err := client.DialAs(p, proto.ClientApp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.Close()
+	err = app.Call(proto.MethodLibraryRead, proto.LibraryReadParams{Project: "web", ID: th.ID, Name: "demo.mp4"}, &proto.LibraryReadResult{})
+	var pe *proto.Error
+	if !errors.As(err, &pe) || pe.Code != "too-large" || pe.Message != "demo.mp4 is 175.1 MB, over the 26.2 MB the app reads" {
+		t.Fatalf("library.read: %v", err)
+	}
+}
+
 // TestProjectFiles: memory.list and memory.read read the project's
 // memory files by their paths in it, no other; library.list lists a
 // thread's report attachments and library.read reads one a chunk at a

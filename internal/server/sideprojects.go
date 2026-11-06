@@ -153,6 +153,9 @@ type SideTask struct {
 	// row, boardWaits).
 	WaitsFor []string `json:"waits_for,omitempty"`
 	Waiters  int      `json:"waiters,omitempty"`
+	// Repo is the repo a row of Done names, with several repos and no
+	// filter (task.done only; none for a task with none, doneLedger).
+	Repo string `json:"repo,omitempty"`
 }
 
 // sideTask is t on the wire.

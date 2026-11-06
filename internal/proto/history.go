@@ -49,6 +49,10 @@ const (
 // newest: HistoryRepo.Count still says how many there are.
 const HistoryReleases = 1000
 
+// DoneReleaseLines is the most release lines Done's headings carry, the
+// newest: they come whole with the headings, on a line a bridge caps.
+const DoneReleaseLines = 1000
+
 // PeerHistoryDays is the most days a paired server's answer carries, the
 // newest, about ten years of daily work: History.Truncated says some
 // were left out.

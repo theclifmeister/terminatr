@@ -125,6 +125,27 @@ type TaskDone struct {
 	Total  int             `json:"total,omitempty"`
 	Next   int             `json:"next,omitempty"`
 	Mark   *SideDoneMark   `json:"mark,omitempty"`
+	// Repos are what a filter offers, with several repos; on a groups
+	// call only.
+	Repos []SideDoneRepo `json:"repos,omitempty"`
+}
+
+// SideDoneRepo is a filter's entry on the wire (doneRepo).
+type SideDoneRepo struct {
+	Repo     string `json:"repo"`
+	Done     int    `json:"done,omitempty"`
+	Releases int    `json:"releases,omitempty"`
+}
+
+// SideDoneRelease is a release line on the wire (tasks.ReleaseLine).
+type SideDoneRelease struct {
+	Label  string `json:"label"`
+	Time   string `json:"time"`
+	Repo   string `json:"repo,omitempty"`
+	Part   string `json:"part,omitempty"`
+	Tag    string `json:"tag"`
+	At     string `json:"at"`
+	Offset int    `json:"offset,omitempty"`
 }
 
 // SideDoneMark is the line in Done on the wire (tasks.DoneMark).
@@ -137,8 +158,8 @@ type SideDoneMark struct {
 }
 
 // markDone places the line at the human's last action in project p's
-// groups, made of done as of now. Like them it reads no git, so a plain
-// folder gets the same line as a repository.
+// groups, made of done as of now. It reads no git, so a plain folder gets
+// the same line as a repository.
 func markDone(p *project.Project, groups []tasks.DoneGroup, done []*tasks.Task, now time.Time) *tasks.DoneMark {
 	at, where, ok := p.LastHumanAct()
 	if !ok {
@@ -158,20 +179,34 @@ type SideDoneGroup struct {
 	Open     bool       `json:"open,omitempty"`
 	Tasks    []SideTask `json:"tasks,omitempty"`
 	Next     int        `json:"next,omitempty"`
+	// Releases are the group's release lines, newest first.
+	Releases []SideDoneRelease `json:"releases,omitempty"`
 }
 
-// doneRow is done task t as task.done lists it.
-func doneRow(t *tasks.Task) SideTask {
+// doneRow is done task t as task.done lists it, naming its repo when name
+// does.
+func doneRow(t *tasks.Task, name func(*tasks.Task) string) SideTask {
 	st := sideTask(t)
 	st.Notes, st.Steps = "", nil
+	st.Repo = name(t)
 	return st
 }
 
 // doneRows are done tasks as task.done lists them.
-func doneRows(ts []*tasks.Task) []SideTask {
+func doneRows(ts []*tasks.Task, name func(*tasks.Task) string) []SideTask {
 	out := make([]SideTask, 0, len(ts))
 	for _, t := range ts {
-		out = append(out, doneRow(t))
+		out = append(out, doneRow(t, name))
+	}
+	return out
+}
+
+// sideReleases are a group's lines on the wire.
+func sideReleases(ls []tasks.ReleaseLine) []SideDoneRelease {
+	var out []SideDoneRelease
+	for _, l := range ls {
+		out = append(out, SideDoneRelease{Label: l.Label(), Time: l.Time, Repo: l.Repo, Part: l.Part, Tag: l.Tag,
+			At: l.At.UTC().Format(time.RFC3339), Offset: l.Offset})
 	}
 	return out
 }
@@ -187,36 +222,41 @@ func zoneOr(name string) *time.Location {
 	return time.Local
 }
 
-// taskDone is task.done's: the done tasks as they are now. No git and no
-// thread records: a plain folder gets the same answer as a repository.
-// The archive is read only for what can hold it: the groups, whose counts
-// need its dates, and a range the caller says holds archived tasks.
+// taskDone is task.done's: the done tasks as they are now. No thread
+// records, and git only for the groups' release lines: a plain folder gets
+// the same answer as a repository with no tags. The archive is read only
+// for what can hold it: the groups, whose counts need its dates, and a
+// range the caller says holds archived tasks.
 func (s *Server) taskDone(p proto.TaskDoneParams) (any, *proto.Error) {
 	pr, err := project.Open(p.Project)
 	if err != nil {
 		return nil, proto.Errorf(proto.ErrBadParams, "%v", err)
 	}
-	done, err := pr.Tasks().Done(p.Groups || p.Archived)
+	led, err := readDoneLedger(pr, p.Groups || p.Archived, p.Repo)
 	if err != nil {
 		return nil, taskError(err)
 	}
 	loc := zoneOr(p.TZ)
 	out := TaskDone{Tasks: []SideTask{}}
 	if p.Groups {
-		out.Total = len(done)
 		now := time.Now().In(loc)
-		groups := tasks.GroupDone(done, now, 0)
-		if m := markDone(pr, groups, done, now); m != nil {
+		out.Total = len(led.done)
+		groups := led.groups(pr, now, 0)
+		if m := markDone(pr, groups, led.done, now); m != nil {
 			out.Mark = &SideDoneMark{At: m.At.UTC().Format(time.RFC3339), Title: m.Title, Group: m.Group, Rows: m.Rows, Between: m.Between}
 		}
 		for _, g := range groups {
 			out.Groups = append(out.Groups, SideDoneGroup{Kind: g.Kind, Title: g.Title, From: g.From, To: g.To,
-				Count: g.Count, Archived: g.Archived, Open: g.Open, Tasks: doneRows(g.Tasks), Next: g.Next})
+				Count: g.Count, Archived: g.Archived, Open: g.Open, Tasks: doneRows(g.Tasks, led.rowRepo), Next: g.Next,
+				Releases: sideReleases(g.Releases)})
+		}
+		for _, r := range led.repoCounts(pr, loc) {
+			out.Repos = append(out.Repos, SideDoneRepo(r))
 		}
 		return out, nil
 	}
-	page, total, next := tasks.PageDone(done, loc, p.From, p.To, p.Offset, p.Limit)
-	out.Tasks, out.Total, out.Next = doneRows(page), total, next
+	page, total, next := tasks.PageDone(led.done, loc, p.From, p.To, p.Offset, p.Limit)
+	out.Tasks, out.Total, out.Next = doneRows(page, led.rowRepo), total, next
 	return out, nil
 }
 

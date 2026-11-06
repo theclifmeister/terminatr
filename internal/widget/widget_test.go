@@ -459,6 +459,30 @@ func TestHeadsAndMore(t *testing.T) {
 	}
 }
 
+// A tight head row is a rule among the rows: no blank line before it.
+func TestTightHead(t *testing.T) {
+	tree := &Widget{Kind: KindList, ID: "l", Rows: []Row{
+		{ID: "a", Spans: []Span{{Text: "a"}}},
+		{ID: "r", Head: true, Tight: true, Spans: []Span{{Text: "1.0"}}},
+		{ID: "b", Spans: []Span{{Text: "b"}}},
+		{ID: "h", Head: true, Spans: []Span{{Text: "H"}}},
+	}}
+	if err := tree.Check(); err != nil {
+		t.Fatal(err)
+	}
+	v := NewView()
+	v.Set(tree)
+	got := strings.Join(v.Render(10, 5, plainLook{}), "|")
+	for _, want := range []string{"|1.0 ", "|b", "||H "} {
+		if !strings.Contains(got, want) {
+			t.Errorf("%q has no %q", got, want)
+		}
+	}
+	if strings.Contains(got, "||1.0") {
+		t.Errorf("a blank line before a tight head: %q", got)
+	}
+}
+
 func bandLines(t *testing.T, w, h int, ascii bool, js string) []string {
 	t.Helper()
 	v := NewView()

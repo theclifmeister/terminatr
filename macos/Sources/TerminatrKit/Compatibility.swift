@@ -275,6 +275,14 @@ public enum Compatibility: Equatable, Sendable {
         hello.appApi >= doneGroupsAPI && listsDone(hello)
     }
 
+    /// The app API with Done's release lines and repo filter.
+    public static let doneRepoAPI = 68
+
+    /// Whether hello's tm takes a repo in task.done's params (TaskDoneNoRepoParams).
+    public static func filtersDone(_ hello: AppAPI.Hello) -> Bool {
+        hello.appApi >= doneRepoAPI
+    }
+
     /// Whether hello's tm lists task templates and adds a task with one
     /// (task.templates, task.add's template).
     public static func offersTemplates(_ hello: AppAPI.Hello) -> Bool {

@@ -269,6 +269,19 @@ private struct LibraryFixture: Decodable {
     #expect(l.row(of: between) == nil)
 }
 
+/// T1093: a file over the cap isn't asked for, and says why; before and
+/// after need both.
+@Test func libraryReadOverTheCapAsksNothing() async {
+    var f = lib("t-0001", "demo.mp4", 1)
+    f.size = 175_100_000
+    let asked = await LibraryPage.read({ _ in throw CancellationError() }, project: "p", file: f)
+    #expect(asked == .unavailable(FileImage.unreadable(name: "demo.mp4", size: f.size) ?? ""))
+    var small = lib("t-0001", "a-before.png", 1)
+    small.size = 10
+    #expect(LibraryPage.biggestRows([small])[0].readable)
+    #expect(!LibraryPage.biggestRows([f])[0].readable)
+}
+
 /// A group's line under its title, its day pinned to one calendar.
 @Test func libraryHeadingSaysItsFacts() throws {
     var utc = Calendar(identifier: .gregorian)

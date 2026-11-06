@@ -187,7 +187,7 @@ func (e peerExport) LibraryRead(c caller.Caller, pp proto.PeerLibraryReadParams)
 		return proto.LibraryReadResult{}, proto.Errorf(proto.ErrRefused, "%s can't be read now", pp.Name)
 	}
 	if size > proto.PeerLibraryMaxRead {
-		return proto.LibraryReadResult{}, proto.Errorf("too-large", "%s is %d bytes, over the %d a paired server reads", pp.Name, size, proto.PeerLibraryMaxRead)
+		return proto.LibraryReadResult{}, proto.Errorf("too-large", "%s is %s, over the %s a paired server reads", pp.Name, sizeWords(size), sizeWords(proto.PeerLibraryMaxRead))
 	}
 	return proto.LibraryReadResult{Name: pp.Name, Size: size, MTime: mod, Offset: pp.Offset, Data: data}, nil
 }

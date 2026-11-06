@@ -165,6 +165,9 @@ type Task struct {
 	// known.
 	DoneAt    string `json:"done_at,omitempty"`
 	DoneLabel string `json:"done_label,omitempty"`
+	// Repo is the repo a row of $.tasks.done names, with several repos
+	// and no filter (mod API 1.22; "none" for a task with none).
+	Repo string `json:"repo,omitempty"`
 	// Mod API 1.15: the tasks it still comes after ("T10", or another
 	// project's "acme-api/T12"), none once they are done or dropped, and
 	// how many open tasks of the board come after it.
@@ -181,6 +184,8 @@ type Task struct {
 // inclusive, "none" for what nothing dates), archived reads the archive
 // too, query (mod API 1.20) keeps the tasks with each of its words in their
 // id, title or status, and offset and limit take a page (limit 0: all).
+// Since mod API 1.22, repo narrows either to one repo, by its name in the
+// answer's repos.
 type DoneOptions struct {
 	Groups   bool   `json:"groups,omitempty"`
 	Reveal   string `json:"reveal,omitempty"`
@@ -190,6 +195,7 @@ type DoneOptions struct {
 	Query    string `json:"query,omitempty"`
 	Offset   int    `json:"offset,omitempty"`
 	Limit    int    `json:"limit,omitempty"`
+	Repo     string `json:"repo,omitempty"`
 }
 
 // DoneTasks is $.tasks.done's answer (mod API 1.16): the page and how
@@ -197,12 +203,38 @@ type DoneOptions struct {
 // end); with groups, the headings and how many tasks they hold, and (mod
 // API 1.21) mark, the line at the human's last action when work has
 // finished since.
+// Since mod API 1.22, with groups, repos are what a filter offers: empty
+// with fewer than two repos.
 type DoneTasks struct {
 	Tasks  []Task      `json:"tasks"`
 	Groups []DoneGroup `json:"groups"`
 	Total  int         `json:"total"`
 	Next   int         `json:"next"`
 	Mark   *DoneMark   `json:"mark,omitempty"`
+	Repos  []DoneRepo  `json:"repos"`
+}
+
+// DoneRepo is one entry of a filter (mod API 1.22): the repo's name, "none"
+// for the tasks with no repo, how many done tasks it has and how many
+// releases. Releases are never summed across repos.
+type DoneRepo struct {
+	Repo     string `json:"repo"`
+	Done     int    `json:"done"`
+	Releases int    `json:"releases"`
+}
+
+// DoneRelease is a release line among a group's rows (mod API 1.22): when a
+// release happened, and nothing of which tasks went in. Label and time are
+// tm's words ("site 2.4.0", "07:40"); offset is how many of the group's
+// rows are newer, so it goes before the row of that index.
+type DoneRelease struct {
+	Label  string `json:"label"`
+	Time   string `json:"time"`
+	Repo   string `json:"repo,omitempty"`
+	Part   string `json:"part,omitempty"`
+	Tag    string `json:"tag"`
+	At     string `json:"at"`
+	Offset int    `json:"offset"`
 }
 
 // DoneMark is the line in Done at the human's last action (mod API 1.21):
@@ -222,16 +254,19 @@ type DoneMark struct {
 // or undated; its title in tm's words; its days, from to to; how many
 // tasks it holds and how many of those are archived. An open one comes
 // with its first tasks, next the offset to read on from (0: all there).
+// Since mod API 1.22, releases are its release lines, newest first, open
+// or not.
 type DoneGroup struct {
-	Kind     string `json:"kind"`
-	Title    string `json:"title"`
-	From     string `json:"from"`
-	To       string `json:"to"`
-	Count    int    `json:"count"`
-	Archived int    `json:"archived"`
-	Open     bool   `json:"open"`
-	Tasks    []Task `json:"tasks"`
-	Next     int    `json:"next"`
+	Kind     string        `json:"kind"`
+	Title    string        `json:"title"`
+	From     string        `json:"from"`
+	To       string        `json:"to"`
+	Count    int           `json:"count"`
+	Archived int           `json:"archived"`
+	Open     bool          `json:"open"`
+	Tasks    []Task        `json:"tasks"`
+	Next     int           `json:"next"`
+	Releases []DoneRelease `json:"releases"`
 }
 
 // TaskStep is one step of a task (mod API 1.2).
@@ -407,7 +442,7 @@ var Methods = []Method{
 	{Name: "tasks.list", Params: []Param{{Name: "slug", Type: typ[string]()}}, Result: typ[[]Task](), Needs: mod.PermProjectRead,
 		Doc: "A project's tasks, in board order."},
 	{Name: "tasks.done", Params: []Param{{Name: "slug", Type: typ[string]()}, {Name: "options", Type: typ[DoneOptions](), Optional: true}}, Result: typ[DoneTasks](), Needs: mod.PermProjectRead,
-		Doc: "A project's done tasks, newest first (mod API 1.16), from tm's task records only, no git, in the server's time zone: with options.groups Done's headings, the newest 7 days with work (at most 30 rows open), then older work by week, then by month, the archive's tasks counted; empty spans have no heading; and mark (mod API 1.21), the line at the human's last action in the journal, when work has finished since. Otherwise a page of the tasks, by days from options.from to options.to, the archive's too with options.archived, only those with each word of options.query in their id, title or status (mod API 1.20), whatever its case and accents."},
+		Doc: "A project's done tasks, newest first (mod API 1.16), from tm's task records, in the server's time zone; git only for the tags, read locally, none without tags or git: with options.groups Done's headings, the newest 7 days with work (at most 30 rows open), then older work by week, then by month, the archive's tasks counted; empty spans have no heading; and mark (mod API 1.21), the line at the human's last action in the journal, when work has finished since. Otherwise a page of the tasks, by days from options.from to options.to, the archive's too with options.archived, only those with each word of options.query in their id, title or status (mod API 1.20), whatever its case and accents. Since mod API 1.22, each group's releases are its release lines, and with several repos, repos are what options.repo narrows either to; rows and lines name their repo until it does."},
 	{Name: "designs.list", Params: []Param{{Name: "slug", Type: typ[string]()}}, Result: typ[[]Design](), Needs: mod.PermProjectRead,
 		Doc: "A project's designs (mod API 1.10), by name: those tm design set recorded and those a task names (archived tasks too), each with its status from its build tasks, its design task, page, decided answers and open questions. A task's design and after (tasks.list) say which tasks build which."},
 	{Name: "history.get", Params: []Param{{Name: "slug", Type: typ[string]()}}, Result: typ[proto.History](), Needs: mod.PermProjectRead,

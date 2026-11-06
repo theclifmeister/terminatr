@@ -59,6 +59,17 @@ func ReadIn(p *project.Project, loc *time.Location) (proto.History, error) {
 	return h, nil
 }
 
+// ReleasesIn are the releases Read answers with, without its numbers.
+// Numbers that can't be read are no reason to fail what asks: no releases.
+func ReleasesIn(p *project.Project, loc *time.Location) []proto.HistoryRepo {
+	x := indexOf(p)
+	h, err := x.read(p, loc)
+	if err != nil {
+		return nil
+	}
+	return x.releases(p, h.FirstRecord, loc)
+}
+
 // Records is Read without the releases: tm's records alone, no git run.
 // A paired server gets these.
 func Records(p *project.Project) (proto.History, error) {

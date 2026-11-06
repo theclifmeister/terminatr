@@ -1526,22 +1526,32 @@ final class AppModel {
         var out: [AppAPI.Task] = []
         var offset = 0
         repeat {
-            let page = try await bridge.call(AppAPI.Methods.taskDone, AppAPI.TaskDoneParams(project: project, archived: true, offset: offset, limit: 500, tz: TimeZone.current.identifier))
+            let page = try await callDone(AppAPI.TaskDoneParams(project: project, archived: true, offset: offset, limit: 500, tz: TimeZone.current.identifier))
             out += page.tasks
             offset = page.next
         } while offset > 0
         return out
     }
 
-    /// Done's headings for project, in the viewer's time zone.
-    func doneGroups(_ project: String) async throws -> AppAPI.DoneTasks {
-        try await connected().call(AppAPI.Methods.taskDone, AppAPI.TaskDoneParams(project: project, groups: true, tz: TimeZone.current.identifier))
+    /// task.done, with a repo only to a tm that takes one.
+    private func callDone(_ params: AppAPI.TaskDoneParams) async throws -> AppAPI.DoneTasks {
+        let bridge = try connected()
+        if case .connected(let h) = phase, Compatibility.filtersDone(h) {
+            return try await bridge.call(AppAPI.Methods.taskDone, params)
+        }
+        return try await bridge.call(AppAPI.Methods.taskDoneNoRepo, AppAPI.TaskDoneNoRepoParams(params))
+    }
+
+    /// Done's headings for project, in the viewer's time zone, of one repo
+    /// unless repo is empty.
+    func doneGroups(_ project: String, repo: String = "") async throws -> AppAPI.DoneTasks {
+        try await callDone(AppAPI.TaskDoneParams(project: project, groups: true, tz: TimeZone.current.identifier, repo: repo))
     }
 
     /// limit of group's rows from offset, the archive read only when the
     /// group holds archived tasks.
-    func doneRows(_ project: String, _ group: AppAPI.DoneGroup, offset: Int = 0, limit: Int = DoneLedger.page) async throws -> AppAPI.DoneTasks {
-        try await connected().call(AppAPI.Methods.taskDone, AppAPI.TaskDoneParams(project: project, from: group.from, to: group.to, archived: group.archived > 0, offset: offset, limit: limit, tz: TimeZone.current.identifier))
+    func doneRows(_ project: String, _ group: AppAPI.DoneGroup, repo: String = "", offset: Int = 0, limit: Int = DoneLedger.page) async throws -> AppAPI.DoneTasks {
+        try await callDone(AppAPI.TaskDoneParams(project: project, from: group.from, to: group.to, archived: group.archived > 0, offset: offset, limit: limit, tz: TimeZone.current.identifier, repo: repo))
     }
 
     /// The done tasks of a Pulse's bar, all of them, the archive's too, in

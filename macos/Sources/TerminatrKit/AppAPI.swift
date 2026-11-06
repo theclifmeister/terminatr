@@ -660,8 +660,9 @@ public enum AppAPI {
         public var open: Bool
         public var tasks: [Task]
         public var next: Int
+        public var releases: [DoneRelease]
 
-        public init(kind: String, title: String, from: String, to: String, count: Int, archived: Int = 0, open: Bool = false, tasks: [Task] = [], next: Int = 0) {
+        public init(kind: String, title: String, from: String, to: String, count: Int, archived: Int = 0, open: Bool = false, tasks: [Task] = [], next: Int = 0, releases: [DoneRelease] = []) {
             self.kind = kind
             self.title = title
             self.from = from
@@ -671,6 +672,7 @@ public enum AppAPI {
             self.open = open
             self.tasks = tasks
             self.next = next
+            self.releases = releases
         }
 
         enum CodingKeys: String, CodingKey {
@@ -683,6 +685,7 @@ public enum AppAPI {
             case open
             case tasks
             case next
+            case releases
         }
     }
 
@@ -710,19 +713,69 @@ public enum AppAPI {
         }
     }
 
+    public struct DoneRelease: Codable, Sendable, Hashable {
+        public var label: String
+        public var time: String
+        public var repo: String
+        public var part: String
+        public var tag: String
+        public var at: String
+        public var offset: Int
+
+        public init(label: String, time: String, repo: String = "", part: String = "", tag: String, at: String, offset: Int = 0) {
+            self.label = label
+            self.time = time
+            self.repo = repo
+            self.part = part
+            self.tag = tag
+            self.at = at
+            self.offset = offset
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case label
+            case time
+            case repo
+            case part
+            case tag
+            case at
+            case offset
+        }
+    }
+
+    public struct DoneRepo: Codable, Sendable, Hashable {
+        public var repo: String
+        public var done: Int
+        public var releases: Int
+
+        public init(repo: String, done: Int = 0, releases: Int = 0) {
+            self.repo = repo
+            self.done = done
+            self.releases = releases
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case repo
+            case done
+            case releases
+        }
+    }
+
     public struct DoneTasks: Codable, Sendable, Hashable {
         public var tasks: [Task]
         public var groups: [DoneGroup]
         public var total: Int
         public var next: Int
         public var mark: DoneMark?
+        public var repos: [DoneRepo]
 
-        public init(tasks: [Task] = [], groups: [DoneGroup] = [], total: Int = 0, next: Int = 0, mark: DoneMark? = nil) {
+        public init(tasks: [Task] = [], groups: [DoneGroup] = [], total: Int = 0, next: Int = 0, mark: DoneMark? = nil, repos: [DoneRepo] = []) {
             self.tasks = tasks
             self.groups = groups
             self.total = total
             self.next = next
             self.mark = mark
+            self.repos = repos
         }
 
         enum CodingKeys: String, CodingKey {
@@ -731,6 +784,7 @@ public enum AppAPI {
             case total
             case next
             case mark
+            case repos
         }
     }
 
@@ -4477,8 +4531,9 @@ public enum AppAPI {
         public var after: [TaskDep]
         public var waitsFor: [String]
         public var waiters: Int
+        public var repo: String
 
-        public init(id: Int, ref: String, title: String, status: String, priority: String = "", notes: String = "", steps: [Step] = [], thread: String = "", owner: String = "", created: String = "", updated: String = "", doneAt: String = "", archived: Bool = false, after: [TaskDep] = [], waitsFor: [String] = [], waiters: Int = 0) {
+        public init(id: Int, ref: String, title: String, status: String, priority: String = "", notes: String = "", steps: [Step] = [], thread: String = "", owner: String = "", created: String = "", updated: String = "", doneAt: String = "", archived: Bool = false, after: [TaskDep] = [], waitsFor: [String] = [], waiters: Int = 0, repo: String = "") {
             self.id = id
             self.ref = ref
             self.title = title
@@ -4495,6 +4550,7 @@ public enum AppAPI {
             self.after = after
             self.waitsFor = waitsFor
             self.waiters = waiters
+            self.repo = repo
         }
 
         enum CodingKeys: String, CodingKey {
@@ -4514,6 +4570,7 @@ public enum AppAPI {
             case after
             case waitsFor = "waits_for"
             case waiters
+            case repo
         }
     }
 
@@ -4625,8 +4682,9 @@ public enum AppAPI {
         public var offset: Int
         public var limit: Int
         public var tz: String
+        public var repo: String
 
-        public init(project: String, groups: Bool = false, from: String = "", to: String = "", archived: Bool = false, offset: Int = 0, limit: Int = 0, tz: String = "") {
+        public init(project: String, groups: Bool = false, from: String = "", to: String = "", archived: Bool = false, offset: Int = 0, limit: Int = 0, tz: String = "", repo: String = "") {
             self.project = project
             self.groups = groups
             self.from = from
@@ -4635,6 +4693,7 @@ public enum AppAPI {
             self.offset = offset
             self.limit = limit
             self.tz = tz
+            self.repo = repo
         }
 
         enum CodingKeys: String, CodingKey {
@@ -4646,6 +4705,7 @@ public enum AppAPI {
             case offset
             case limit
             case tz
+            case repo
         }
     }
 
@@ -5749,6 +5809,7 @@ extension AppAPI.DoneGroup {
         self.open = try c.decodeIfPresent(Bool.self, forKey: .open) ?? false
         self.tasks = try c.decodeIfPresent([AppAPI.Task].self, forKey: .tasks) ?? []
         self.next = try c.decodeIfPresent(Int.self, forKey: .next) ?? 0
+        self.releases = try c.decodeIfPresent([AppAPI.DoneRelease].self, forKey: .releases) ?? []
     }
 }
 
@@ -5763,6 +5824,28 @@ extension AppAPI.DoneMark {
     }
 }
 
+extension AppAPI.DoneRelease {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.label = try c.decode(String.self, forKey: .label)
+        self.time = try c.decode(String.self, forKey: .time)
+        self.repo = try c.decodeIfPresent(String.self, forKey: .repo) ?? ""
+        self.part = try c.decodeIfPresent(String.self, forKey: .part) ?? ""
+        self.tag = try c.decode(String.self, forKey: .tag)
+        self.at = try c.decode(String.self, forKey: .at)
+        self.offset = try c.decodeIfPresent(Int.self, forKey: .offset) ?? 0
+    }
+}
+
+extension AppAPI.DoneRepo {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.repo = try c.decode(String.self, forKey: .repo)
+        self.done = try c.decodeIfPresent(Int.self, forKey: .done) ?? 0
+        self.releases = try c.decodeIfPresent(Int.self, forKey: .releases) ?? 0
+    }
+}
+
 extension AppAPI.DoneTasks {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -5771,6 +5854,7 @@ extension AppAPI.DoneTasks {
         self.total = try c.decodeIfPresent(Int.self, forKey: .total) ?? 0
         self.next = try c.decodeIfPresent(Int.self, forKey: .next) ?? 0
         self.mark = try c.decodeIfPresent(AppAPI.DoneMark.self, forKey: .mark)
+        self.repos = try c.decodeIfPresent([AppAPI.DoneRepo].self, forKey: .repos) ?? []
     }
 }
 
@@ -7495,6 +7579,7 @@ extension AppAPI.Task {
         self.after = try c.decodeIfPresent([AppAPI.TaskDep].self, forKey: .after) ?? []
         self.waitsFor = try c.decodeIfPresent([String].self, forKey: .waitsFor) ?? []
         self.waiters = try c.decodeIfPresent(Int.self, forKey: .waiters) ?? 0
+        self.repo = try c.decodeIfPresent(String.self, forKey: .repo) ?? ""
     }
 }
 
@@ -7557,6 +7642,7 @@ extension AppAPI.TaskDoneParams {
         self.offset = try c.decodeIfPresent(Int.self, forKey: .offset) ?? 0
         self.limit = try c.decodeIfPresent(Int.self, forKey: .limit) ?? 0
         self.tz = try c.decodeIfPresent(String.self, forKey: .tz) ?? ""
+        self.repo = try c.decodeIfPresent(String.self, forKey: .repo) ?? ""
     }
 }
 

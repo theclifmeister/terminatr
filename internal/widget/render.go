@@ -256,7 +256,7 @@ func (lo *layer) rows(w *Widget) {
 		r := &w.Rows[i]
 		if r.Head {
 			// A section rule: the head's spans, then ─ to the width.
-			if n > 0 {
+			if n > 0 && !r.Tight {
 				lo.add("")
 			}
 			head := lo.spans(r.Spans)

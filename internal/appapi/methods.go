@@ -559,7 +559,7 @@ func taskDoneParams(p ProjectParams) proto.TaskDoneParams {
 }
 
 func taskDoneListParams(p TaskDoneParams) proto.TaskDoneParams {
-	return proto.TaskDoneParams{Project: p.Project, Groups: p.Groups, From: p.From, To: p.To, Archived: p.Archived, Offset: p.Offset, Limit: p.Limit, TZ: p.TZ}
+	return proto.TaskDoneParams{Project: p.Project, Groups: p.Groups, From: p.From, To: p.To, Archived: p.Archived, Offset: p.Offset, Limit: p.Limit, TZ: p.TZ, Repo: p.Repo}
 }
 
 func projectActiveParams(p ProjectActiveParams) proto.ProjectActiveParams {

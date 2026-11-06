@@ -30,6 +30,8 @@ struct ProjectDashboard: View {
     /// Done by day, read as done is, and when the board has no done task
     /// left to say whether the archive has some.
     @State private var ledger = DoneLedger()
+    /// The repo Done shows only (the TUI's g), "" for all.
+    @State private var doneRepo = ""
     /// The groups with a read on its way.
     @State private var reading: Set<String> = []
     @State private var doneError: String?
@@ -263,7 +265,7 @@ struct ProjectDashboard: View {
             }
         }
         if doneCount > 0 && (!filtering || !doneShown.isEmpty || done == nil) {
-            fold("Done", filtering && done != nil ? doneShown.count : doneCount, key: filtering ? nil : "done") {
+            fold("Done", filtering && done != nil ? doneShown.count : !doneRepo.isEmpty && ledger.groups != nil ? ledger.total : doneCount, key: filtering ? nil : "done") {
                 if let doneError {
                     Text(doneError)
                         .font(theme.body(.subheadline))
@@ -287,7 +289,7 @@ struct ProjectDashboard: View {
                 .foregroundStyle(theme.muted)
         }
         Color.clear.frame(height: 0)
-            .task(id: DoneRead(project: project.slug, open: doneOpen, count: Dashboard.doneCount(project), filtering: filtering,
+            .task(id: DoneRead(project: project.slug, open: doneOpen, count: Dashboard.doneCount(project), filtering: filtering, repo: doneRepo,
                                day: Calendar.current.startOfDay(for: .now))) {
                 await readDone(open: doneOpen, filtering: filtering)
             }
@@ -300,9 +302,16 @@ struct ProjectDashboard: View {
         guard open || (grouped && Dashboard.doneCount(project) == 0) else { return }
         do {
             if grouped && !filtering {
-                let again = ledger.take(try await app.doneGroups(project.slug))
+                let read = try await app.doneGroups(project.slug, repo: doneRepo)
+                // The repo it showed left the project: all of them again,
+                // which changing it reads.
+                if !doneRepo.isEmpty && !read.repos.contains(where: { $0.repo == doneRepo }) {
+                    doneRepo = ""
+                    return
+                }
+                let again = ledger.take(read)
                 for (group, limit) in again {
-                    ledger.set(group, try await app.doneRows(project.slug, group, limit: limit))
+                    ledger.set(group, try await app.doneRows(project.slug, group, repo: doneRepo, limit: limit))
                 }
             } else {
                 done = try await app.doneTasks(project.slug)
@@ -317,6 +326,7 @@ struct ProjectDashboard: View {
     /// and what reads on while it has more.
     private func doneByDay(_ groups: [AppAPI.DoneGroup]) -> some View {
         VStack(alignment: .leading, spacing: 9) {
+            if !ledger.repos.isEmpty { doneRepoMenu }
             ForEach(groups, id: \.key) { group in
                 if let mark = ledger.markAbove(group) { DoneMarkLine(mark: mark) }
                 VStack(alignment: .leading, spacing: 5) {
@@ -339,17 +349,15 @@ struct ProjectDashboard: View {
                     .buttonStyle(.plain)
                     .accessibilityValue(ledger.isOpen(group) ? "open" : "folded")
                     if ledger.isOpen(group) {
-                        let rows = ledger.tasks(in: group)
+                        let rows = ledger.entries(in: group)
                         // The line at the user's last action parts the rows.
-                        let above = ledger.markRows(in: group)
-                        let newer = above.map { Array(rows.prefix($0)) } ?? rows
-                        let older = above.map { Array(rows.dropFirst($0)) } ?? []
-                        if !newer.isEmpty {
-                            HairlineList { ForEach(newer) { BoardRow(project: project.slug, task: $0, timeOnly: group.kind == "day") } }
-                        }
-                        if above != nil, let mark = ledger.mark { DoneMarkLine(mark: mark) }
+                        let at = ledger.markEntry(in: group)
+                        let newer = at.map { Array(rows.prefix($0)) } ?? rows
+                        let older = at.map { Array(rows.dropFirst($0)) } ?? []
+                        if !newer.isEmpty { doneEntries(newer, in: group) }
+                        if at != nil, let mark = ledger.mark { DoneMarkLine(mark: mark) }
                         if !older.isEmpty {
-                            HairlineList { ForEach(older) { BoardRow(project: project.slug, task: $0, timeOnly: group.kind == "day") } }
+                            doneEntries(older, in: group)
                         }
                         if reading.contains(group.key) {
                             ProgressView().controlSize(.small)
@@ -366,13 +374,49 @@ struct ProjectDashboard: View {
         }
     }
 
+    /// A run of an open group's rows and release lines.
+    private func doneEntries(_ rows: [DoneLedger.Entry], in group: AppAPI.DoneGroup) -> some View {
+        HairlineList {
+            ForEach(rows) { entry in
+                switch entry {
+                case .task(let t): BoardRow(project: project.slug, task: t, timeOnly: group.kind == "day")
+                case .release(let r): ReleaseLine(release: r)
+                }
+            }
+        }
+    }
+
+    /// Narrows Done to one repo: tasks and release lines. Task counts follow
+    /// it; a repo's releases are its own and never added up.
+    private var doneRepoMenu: some View {
+        HStack(spacing: 8) {
+            Picker("Repo", selection: Binding(get: { doneRepo }, set: { repo in
+                guard repo != doneRepo else { return }
+                ledger.refilter()
+                doneRepo = repo
+            })) {
+                Text(DoneRepoWords.title("")).tag("")
+                ForEach(ledger.repos, id: \.repo) { Text(DoneRepoWords.title($0.repo)).tag($0.repo) }
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .fixedSize()
+            .help("Shows the tasks and releases of one repo")
+            if let n = ledger.repos.first(where: { $0.repo == doneRepo })?.releases, n > 0 {
+                Text(DoneRepoWords.releases(n))
+                    .font(theme.sized(Flat.label))
+                    .foregroundStyle(theme.muted)
+            }
+        }
+    }
+
     /// Reads a page of group's rows from offset.
     private func read(_ group: AppAPI.DoneGroup, from offset: Int = 0) {
         guard reading.insert(group.key).inserted else { return }
         Task {
             defer { reading.remove(group.key) }
             do {
-                let page = try await app.doneRows(project.slug, group, offset: offset)
+                let page = try await app.doneRows(project.slug, group, repo: doneRepo, offset: offset)
                 if offset == 0 { ledger.set(group, page) } else { ledger.append(group, page) }
                 doneError = nil
             } catch {
@@ -389,6 +433,7 @@ struct ProjectDashboard: View {
         let open: Bool
         let count: Int
         let filtering: Bool
+        let repo: String
         let day: Date
     }
 
@@ -777,6 +822,33 @@ private struct PulseBandView: View {
 
 /// A task on the board: its id, title, priority and its action
 /// (Delegate…); its words show it in the task view.
+/// A release's line among Done's rows (design board-library, B4): when it
+/// happened, and nothing of which tasks went in.
+private struct ReleaseLine: View {
+    @Environment(\.theme) private var theme
+    let release: AppAPI.DoneRelease
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(release.label)
+                .font(theme.mono(.caption, .semibold))
+                .foregroundStyle(theme.action)
+                .lineLimit(1)
+            Text("released \(release.time)")
+                .font(theme.body(.caption))
+                .foregroundStyle(theme.muted)
+                .lineLimit(1)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 3)
+        .background(theme.action.opacity(0.1))
+        .background(theme.pane)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(release.label), released \(release.time)")
+    }
+}
+
 private struct BoardRow: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
@@ -805,6 +877,13 @@ private struct BoardRow: View {
                     }
                     .buttonStyle(.plain)
                     .help("Shows \(task.ref) in full: its steps and notes")
+                    if !task.repo.isEmpty {
+                        Text(task.repo)
+                            .font(theme.mono(.caption))
+                            .foregroundStyle(theme.muted)
+                            .lineLimit(1)
+                            .fixedSize()
+                    }
                     if task.status == "done" {
                         FinishedLabel(task: task, timeOnly: timeOnly)
                     } else {

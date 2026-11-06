@@ -146,7 +146,9 @@ const MethodTaskTemplates = "task.templates"
 // archive's tasks counted and each open heading's rows with it. From and
 // To narrow the list to days, both inclusive; Archived reads the archive
 // too; Offset and Limit take a page (Limit 0: all). The days are TZ's, an
-// IANA zone name, the server's own when empty or unknown.
+// IANA zone name, the server's own when empty or unknown. Repo narrows
+// Done to the tasks and release lines of one repo, by its name in the
+// answer's Repos.
 type TaskDoneParams struct {
 	Project  string `json:"project"`
 	Groups   bool   `json:"groups,omitempty"`
@@ -156,6 +158,7 @@ type TaskDoneParams struct {
 	Offset   int    `json:"offset,omitempty"`
 	Limit    int    `json:"limit,omitempty"`
 	TZ       string `json:"tz,omitempty"`
+	Repo     string `json:"repo,omitempty"`
 }
 
 // TaskTemplate is a task template: Ref is how task.add names it

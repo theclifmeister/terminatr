@@ -423,13 +423,26 @@ func TestTaskDoneGroups(t *testing.T) {
 		if err := os.WriteFile(pr.Tasks().ArchivePath(), []byte("# Archive\n\n### T2 Old\nstatus: done · updated: "+old+"\ndone_at: "+old+"\n\nWhy.\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		os.Remove(mark) // New may look at the repos; task.done may not.
+		os.Remove(mark) // New may look at the repos; git is read only for tags.
 		var res TaskDone
 		if err := app.Call(proto.MethodTaskDone, proto.TaskDoneParams{Project: slug, Groups: true, TZ: "UTC"}, &res); err != nil {
 			t.Fatalf("%s: %v", slug, err)
 		}
-		if _, err := os.Stat(mark); err == nil {
-			t.Errorf("%s: task.done ran git", slug)
+		// A plain folder runs no git; failing, it gives no lines and no error.
+		if _, err := os.Stat(mark); (err == nil) != (len(repos) > 0) {
+			t.Errorf("%s: git ran: %v", slug, err == nil)
+		}
+		if len(res.Repos) != 0 && slug != "several" {
+			t.Errorf("%s: repos %+v", slug, res.Repos)
+		}
+		for g := range res.Groups {
+			if len(res.Groups[g].Releases) != 0 {
+				t.Errorf("%s: release lines %+v", slug, res.Groups[g].Releases)
+			}
+			// Only several repos name them: the rest of the answer is one.
+			for i := range res.Groups[g].Tasks {
+				res.Groups[g].Tasks[i].Repo = ""
+			}
 		}
 		if res.Total != 2 || len(res.Groups) != 2 || res.Groups[0].Title != "Today" || !res.Groups[0].Open || res.Groups[0].Tasks[0].ID != 1 ||
 			res.Groups[1].Archived != 1 || !res.Groups[1].Open || res.Groups[1].Tasks[0].Notes != "" {

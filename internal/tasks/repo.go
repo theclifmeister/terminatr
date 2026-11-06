@@ -3,6 +3,7 @@ package tasks
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -29,6 +30,24 @@ func RepoLabels(repos []string) []string {
 		}
 	}
 	return out
+}
+
+// RepoNamer names tasks' repos for people, as RepoLabels names the
+// project's: NoRepo for a task with none recorded, and the words as they
+// are for a repo no longer among the project's, which a person can still
+// tell apart.
+func RepoNamer(repos []string) func(*Task) string {
+	labels := RepoLabels(repos)
+	return func(t *Task) string {
+		if t.Repo == "" || t.Repo == NoRepo {
+			return NoRepo
+		}
+		dir, err := FindRepo(repos, t.Repo)
+		if err != nil {
+			return t.Repo
+		}
+		return labels[slices.Index(repos, dir)]
+	}
 }
 
 // FindRepo is the repo among repos that name names: one's path, or the

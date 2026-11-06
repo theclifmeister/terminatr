@@ -28,7 +28,7 @@ export interface TM {
   tasks: {
     /** A project's tasks, in board order. Needs the project_read grant. */
     list(slug: string): Promise<TM.Task[]>;
-    /** A project's done tasks, newest first (mod API 1.16), from tm's task records only, no git, in the server's time zone: with options.groups Done's headings, the newest 7 days with work (at most 30 rows open), then older work by week, then by month, the archive's tasks counted; empty spans have no heading; and mark (mod API 1.21), the line at the human's last action in the journal, when work has finished since. Otherwise a page of the tasks, by days from options.from to options.to, the archive's too with options.archived, only those with each word of options.query in their id, title or status (mod API 1.20), whatever its case and accents. Needs the project_read grant. */
+    /** A project's done tasks, newest first (mod API 1.16), from tm's task records, in the server's time zone; git only for the tags, read locally, none without tags or git: with options.groups Done's headings, the newest 7 days with work (at most 30 rows open), then older work by week, then by month, the archive's tasks counted; empty spans have no heading; and mark (mod API 1.21), the line at the human's last action in the journal, when work has finished since. Otherwise a page of the tasks, by days from options.from to options.to, the archive's too with options.archived, only those with each word of options.query in their id, title or status (mod API 1.20), whatever its case and accents. Since mod API 1.22, each group's releases are its release lines, and with several repos, repos are what options.repo narrows either to; rows and lines name their repo until it does. Needs the project_read grant. */
     done(slug: string, options?: TM.DoneOptions): Promise<TM.DoneTasks>;
   };
   designs: {
@@ -381,6 +381,7 @@ export declare namespace TM {
     open: boolean;
     tasks: Task[];
     next: number;
+    releases: DoneRelease[];
   }
 
   interface DoneMark {
@@ -400,6 +401,23 @@ export declare namespace TM {
     query?: string;
     offset?: number;
     limit?: number;
+    repo?: string;
+  }
+
+  interface DoneRelease {
+    label: string;
+    time: string;
+    repo?: string;
+    part?: string;
+    tag: string;
+    at: string;
+    offset: number;
+  }
+
+  interface DoneRepo {
+    repo: string;
+    done: number;
+    releases: number;
   }
 
   interface DoneTasks {
@@ -408,6 +426,7 @@ export declare namespace TM {
     total: number;
     next: number;
     mark?: DoneMark;
+    repos: DoneRepo[];
   }
 
   interface FetchOptions {
@@ -656,6 +675,7 @@ export declare namespace TM {
     priority?: string;
     done_at?: string;
     done_label?: string;
+    repo?: string;
     waits_for?: string[];
     waiters?: number;
     archived?: boolean;

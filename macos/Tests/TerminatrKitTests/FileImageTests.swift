@@ -174,8 +174,31 @@ private func crc(_ d: Data) -> [UInt8] {
     // Under the cap they still read it: too many pixels, or damaged.
     let readable = FileImage.message(name: "a.png", size: 500, why: "it's damaged", hasPath: true, maxBytes: 1000)
     #expect(readable.contains("Space opens Quick Look"))
-    // A file that was never meant as an image keeps its words, whatever its size.
-    #expect(FileImage.message(name: "a.zip", size: 5000, maxBytes: 1000).contains("Space opens Quick Look"))
+    // A file never meant as an image keeps its words while it can be read.
+    #expect(FileImage.message(name: "a.zip", size: 500, maxBytes: 1000).contains("Space opens Quick Look"))
+}
+
+/// T1093: a video over the cap, too, isn't told Quick Look opens it.
+@Test func aFileOverTheCapIsToldOnlyWhatStillWorks() {
+    let tree = FileImage.message(name: "a.mp4", size: 5000, hasPath: true, maxBytes: 1000)
+    #expect(!tree.contains("Space opens"))
+    #expect(tree.contains("Quick Look and Open stop at the \(Attachment.size(1000)) tm reads."))
+    #expect(tree.contains("Copy Path and Reveal in Finder"))
+    #expect(FileImage.message(name: "a.mp4", size: 5000, maxBytes: 1000).contains("can't open from here"))
+}
+
+/// T1093: the sizes in readable units, what still works, and nothing under
+/// the cap or at it.
+@Test func overTheCapSaysSoInPlainWords() {
+    let video = 175_100_000
+    let over = "\(Attachment.size(video)), over the \(Attachment.size(FileImage.maxBytes)) tm reads"
+    #expect(over.contains("MB, over") && !over.contains("175100000") && !over.contains("26214400"))
+    #expect(FileImage.overLimit(video) == over)
+    #expect(FileImage.overLimit(FileImage.maxBytes) == nil)
+    #expect(FileImage.unreadable(name: "a.mp4", size: FileImage.maxBytes) == nil)
+    let then = "\(Attachment.size(video)), over the \(Attachment.size(FileImage.maxBytes)) tm reads."
+    #expect(FileImage.unreadable(name: "demo/a.mp4", size: video) == "a.mp4 is \(then) It can't open or save from here.")
+    #expect(FileImage.unreadable(name: "a.mp4", size: video, hasPath: true) == "a.mp4 is \(then) Copy Path and Reveal in Finder still find it.")
 }
 
 @Test func aDecodeNobodyWantsIsDropped() async {

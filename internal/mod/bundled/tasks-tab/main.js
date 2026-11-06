@@ -109,10 +109,11 @@
     if (waits) rest.push({ text: (rest.length > 0 ? "  " : "") + waits, role: "faint" });
     const more = [t.steps_total > 0 ? `${t.steps_done}/${t.steps_total}` : "", (_a = t.thread) != null ? _a : ""].filter((s) => s !== "").join(" ");
     if (more) rest.push({ text: (rest.length > 0 ? "  " : "") + more, role: "faint" });
+    const title = t.repo ? [{ text: t.repo + " ", role: "faint" }, { text: t.title }] : [{ text: t.title }];
     const r = {
       id: t.id,
       find: `${t.id} ${t.title} ${t.status}`,
-      cells: [[{ text: t.id }], ...prio ? [t.status === "done" ? [] : priority(t.priority)] : [], [{ text: t.title }], status(t.status, timeOnly ? timeOf(t.done_label) : t.done_label), rest],
+      cells: [[{ text: t.id }], ...prio ? [t.status === "done" ? [] : priority(t.priority)] : [], title, status(t.status, timeOnly ? timeOf(t.done_label) : t.done_label), rest],
       actions: actions(project, t)
     };
     if (!closed(groupOf(t.status)) && ((_b = t.steps) != null ? _b : []).length > 0) {
@@ -154,24 +155,54 @@
     const mark = isOpen(t, g) ? "" : "  ▸";
     return { id: "f:" + key(g), spans: [{ text: g.title, role: isOpen(t, g) ? void 0 : "faint" }, { text: ` · ${g.count}${mark}`, role: "faint" }] };
   }
+  function lineRow(g, i) {
+    var _a;
+    const l = ((_a = g.releases) != null ? _a : [])[i];
+    return { id: `r:${key(g)}:${i}`, head: true, tight: true, spans: [{ text: "── ", role: "faint" }, { text: l.label, role: "accent" }, { text: ` released ${l.time}`, role: "faint" }] };
+  }
+  function doneWords(t) {
+    var _a, _b;
+    if (t.repos.length === 0) return "newest first   b hides   ⏎ opens";
+    if (t.repo === "") return "newest first   g all repos   b hides   ⏎ opens";
+    const n = (_b = (_a = t.repos.find((r) => r.repo === t.repo)) == null ? void 0 : _a.releases) != null ? _b : 0;
+    const only = t.repo === "none" ? "only tasks with no repo" : `only ${t.repo}`;
+    return `${only}${n > 0 ? `, ${n} release${n === 1 ? "" : "s"}` : ""}   g next repo   b hides   ⏎ opens`;
+  }
   function markRow(m) {
     return { id: "y:mark", head: true, spans: [{ text: `── ${m.title}`, role: "accent" }] };
   }
   function doneRows(project, t, prio) {
-    const rows = [{ id: "g:done", head: true, spans: [{ text: `DONE · ${t.total}`, role: "head" }, { text: "  newest first   b hides   ⏎ opens", role: "faint" }] }];
+    const rows = [{ id: "g:done", head: true, spans: [{ text: `DONE · ${t.total}`, role: "head" }, { text: "  " + doneWords(t), role: "faint" }] }];
     const mark = t.mark;
     t.groups.forEach((g, i) => {
+      var _a;
       if ((mark == null ? void 0 : mark.between) && mark.group === i) rows.push(markRow(mark));
       rows.push(foldRow(t, g));
       if (!isOpen(t, g)) return;
       const f = t.rows.get(key(g));
       if (!f) return;
+      const lines = (_a = g.releases) != null ? _a : [];
+      let l = 0;
       const at = mark && !mark.between && mark.group === i ? Math.min(mark.rows, f.tasks.length) : -1;
+      let marked = false;
+      const gap = (n) => {
+        for (; l < lines.length && lines[l].offset <= n; l++) {
+          if (n === at && !marked && lines[l].at < mark.at) {
+            rows.push(markRow(mark));
+            marked = true;
+          }
+          rows.push(lineRow(g, l));
+        }
+        if (n === at && !marked) {
+          rows.push(markRow(mark));
+          marked = true;
+        }
+      };
       f.tasks.forEach((task, n) => {
-        if (n === at) rows.push(markRow(mark));
+        gap(n);
         rows.push(row(project, task, prio, g.kind === "day"));
       });
-      if (at === f.tasks.length) rows.push(markRow(mark));
+      gap(f.tasks.length);
       if (f.next > 0) rows.push({ id: "m:" + key(g), spans: [{ text: `  … ${g.count - f.tasks.length} more`, role: "faint" }] });
     });
     if ((mark == null ? void 0 : mark.between) && mark.group >= t.groups.length) rows.push(markRow(mark));
@@ -236,7 +267,7 @@
     let group = "";
     const list = bar ? [] : shown(t);
     const prio = list.some((x) => !!x.priority && x.status !== "done");
-    const days = !bar && !t.query && byDay(t) && t.groups.length > 0;
+    const days = !bar && !t.query && byDay(t) && (t.groups.length > 0 || t.repo !== "");
     const lists = days || !bar && !!t.query;
     const closedRows = () => t.query ? foundRows(project, t, prio) : doneRows(project, t, prio);
     for (const task of list) {
@@ -280,6 +311,10 @@
     if (bar) keys.push({ key: "b", label: "all tasks" });
     else if (t.doneAll || done + dropped > 0) keys.push({ key: "b", label: t.doneAll ? "hide done" : "done" });
     if (days) keys.push({ key: "enter", label: "open or fold" });
+    if (days && t.repos.length > 0) {
+      const after = nextRepo(t);
+      keys.push({ key: "g", label: after === "" ? "all repos" : after === "none" ? "no repo only" : `${after} only` });
+    }
     const next = PRIOS[(PRIOS.indexOf(t.prio) + 1) % PRIOS.length];
     keys.push({ key: "p", label: next === "" ? "all priorities" : next === "none" ? "no priority only" : `${next} only` });
     const unit = (_c = (_b = t.history) == null ? void 0 : _b.pulse) == null ? void 0 : _c.unit;
@@ -289,6 +324,13 @@
     }
     children.push({ kind: "keys", id: "keys", keys, actions: [{ id: "task.new", target: { project } }] });
     return { kind: "stack", children };
+  }
+  function nextRepo(t) {
+    const names = ["", ...t.repos.map((r) => r.repo)];
+    return names[(names.indexOf(t.repo) + 1) % names.length];
+  }
+  function repoOption(t) {
+    return t.repo ? { repo: t.repo } : {};
   }
   async function load(project, t) {
     var _a, _b, _c;
@@ -339,9 +381,14 @@
     t.picked = { tasks: [], next: 0 };
   }
   async function loadDone(project, t) {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e;
     if (!byDay(t)) return;
-    const res = await $.tasks.done(project, { groups: true, reveal: t.reveal });
+    const res = await $.tasks.done(project, __spreadValues({ groups: true, reveal: t.reveal }, repoOption(t)));
+    t.repos = (_a = res.repos) != null ? _a : [];
+    if (t.repo && !t.repos.some((r) => r.repo === t.repo)) {
+      t.repo = "";
+      return loadDone(project, t);
+    }
     t.groups = res.groups;
     t.total = res.total;
     t.mark = res.mark;
@@ -349,11 +396,11 @@
     t.rows = /* @__PURE__ */ new Map();
     for (const g of t.groups) {
       if (!isOpen(t, g)) continue;
-      const read = (_b = (_a = was.get(key(g))) == null ? void 0 : _a.tasks.length) != null ? _b : 0;
-      if (g.open && read <= ((_c = g.tasks) != null ? _c : []).length) {
-        t.rows.set(key(g), { tasks: (_d = g.tasks) != null ? _d : [], next: g.next });
+      const read = (_c = (_b = was.get(key(g))) == null ? void 0 : _b.tasks.length) != null ? _c : 0;
+      if (g.open && read <= ((_d = g.tasks) != null ? _d : []).length) {
+        t.rows.set(key(g), { tasks: (_e = g.tasks) != null ? _e : [], next: g.next });
       } else {
-        t.rows.set(key(g), await readFold(project, g, 0, Math.max(read, PAGE)));
+        t.rows.set(key(g), await readFold(project, t, g, 0, Math.max(read, PAGE)));
       }
     }
   }
@@ -368,8 +415,8 @@
     const res = await $.tasks.done(project, { query, archived: true, limit: Math.max(read, PAGE) });
     if (t.query === query) t.found = { query, tasks: res.tasks, next: res.next, total: res.total };
   }
-  async function readFold(project, g, offset, limit) {
-    const res = await $.tasks.done(project, { from: g.from, to: g.to, archived: g.archived > 0, offset, limit });
+  async function readFold(project, t, g, offset, limit) {
+    const res = await $.tasks.done(project, __spreadValues({ from: g.from, to: g.to, archived: g.archived > 0, offset, limit }, repoOption(t)));
     return { tasks: res.tasks, next: res.next };
   }
   async function press(project, t, row2) {
@@ -410,12 +457,12 @@
         if (t.toggled.has(k)) t.toggled.delete(k);
         else t.toggled.add(k);
         if (isOpen(t, g) && !t.rows.has(k)) {
-          t.rows.set(k, g.open ? { tasks: (_c = g.tasks) != null ? _c : [], next: g.next } : await readFold(project, g, 0, PAGE));
+          t.rows.set(k, g.open ? { tasks: (_c = g.tasks) != null ? _c : [], next: g.next } : await readFold(project, t, g, 0, PAGE));
         }
       } else {
         const f = t.rows.get(k);
         if (f && f.next > 0) {
-          const more = await readFold(project, g, f.next, PAGE);
+          const more = await readFold(project, t, g, f.next, PAGE);
           t.rows.set(k, { tasks: [...f.tasks, ...more.tasks], next: more.next });
         }
       }
@@ -443,13 +490,14 @@
   $.on("view.opened", async (e) => {
     var _a;
     if (e.view !== VIEW || !e.project) return;
-    const t = (_a = tabs.get(e.project)) != null ? _a : { tasks: [], doneAll: false, prio: "", error: "", groups: [], total: 0, rows: /* @__PURE__ */ new Map(), toggled: /* @__PURE__ */ new Set(), reveal: "", query: "", found: null, history: null, historyAt: "", pick: "", picked: { tasks: [], next: 0 } };
+    const t = (_a = tabs.get(e.project)) != null ? _a : { tasks: [], doneAll: false, prio: "", error: "", groups: [], total: 0, rows: /* @__PURE__ */ new Map(), toggled: /* @__PURE__ */ new Set(), reveal: "", repos: [], repo: "", query: "", found: null, history: null, historyAt: "", pick: "", picked: { tasks: [], next: 0 } };
     tabs.set(e.project, t);
     if (e.task) t.pick = "";
     await load(e.project, t);
     if (e.task && t.tasks.some((x) => x.id === e.task && closed(groupOf(x.status)))) {
       t.doneAll = true;
       t.reveal = e.task;
+      t.repo = "";
       await load(e.project, t);
     }
     await publish(e.project, t);
@@ -476,10 +524,13 @@
       await publish(project, t);
       return;
     }
-    if (e.key !== "b" && e.key !== "p") return;
+    if (e.key !== "b" && e.key !== "p" && e.key !== "g") return;
     if (e.key === "b" && t.pick) t.pick = "";
     else if (e.key === "b") t.doneAll = !t.doneAll;
-    else t.prio = PRIOS[(PRIOS.indexOf(t.prio) + 1) % PRIOS.length];
+    else if (e.key === "g") {
+      t.repo = nextRepo(t);
+      t.rows = /* @__PURE__ */ new Map();
+    } else t.prio = PRIOS[(PRIOS.indexOf(t.prio) + 1) % PRIOS.length];
     await load(project, t);
     await publish(project, t);
   });
