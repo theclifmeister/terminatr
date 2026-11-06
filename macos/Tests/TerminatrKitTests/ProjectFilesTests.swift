@@ -47,6 +47,95 @@ private func lib(_ thread: String, _ name: String, _ day: Int, peer: String = ""
     #expect(LibraryPage.id(files[0]) == "t-0001")
 }
 
+private struct LibraryFixture: Decodable {
+    struct File: Decodable {
+        var thread: String?
+        var task: String?
+        var title: String
+        var repo: String?
+        var peer: String?
+        var message: String?
+        var name: String
+
+        var file: AppAPI.LibraryFile {
+            AppAPI.LibraryFile(thread: thread ?? "", task: task ?? "", title: title, repo: repo ?? "", state: "running", name: name, size: 1,
+                               time: Date(timeIntervalSince1970: 0), peer: peer ?? "", message: message ?? "")
+        }
+    }
+
+    struct Case: Decodable {
+        let library: String
+        let query: String
+        let kind: String
+        let names: [String]
+        let chips: [Chip]
+    }
+
+    /// ["images", 2]: a kind, "" for all, and its count.
+    struct Chip: Decodable, Equatable {
+        let kind: String
+        let count: Int
+
+        init(from decoder: Decoder) throws {
+            var c = try decoder.unkeyedContainer()
+            kind = try c.decode(String.self)
+            count = try c.decode(Int.self)
+        }
+
+        init(kind: String, count: Int) {
+            self.kind = kind
+            self.count = count
+        }
+    }
+
+    struct Filter: Decodable {
+        let files: Int
+        let query: String
+        let shows: Bool
+    }
+
+    let kinds: [String: String]
+    let libraries: [String: [File]]
+    let cases: [Case]
+    let filter: [Filter]
+}
+
+/// The file the TUI's test reads too (internal/tui/libraryfilter_test.go):
+/// change the rule on one side alone and one of the two fails.
+@Test func libraryFiltersAsTheTUI() throws {
+    let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .appendingPathComponent("../../../internal/tui/testdata/library-filter.json").standardized
+    let fx = try JSONDecoder().decode(LibraryFixture.self, from: Data(contentsOf: url))
+    func kind(_ word: String) -> LibraryPage.Kind? {
+        LibraryPage.Kind.allCases.first { $0.rawValue.lowercased() == word }
+    }
+    #expect(fx.cases.count >= 20)
+    for (name, word) in fx.kinds {
+        let got = LibraryPage.kind(name)
+        #expect(got == kind(word), "kind of \(name)")
+    }
+    for c in fx.cases {
+        let files = (fx.libraries[c.library] ?? []).map(\.file)
+        let names = LibraryPage.shown(files, query: c.query, kind: kind(c.kind)).map(\.name)
+        #expect(names == c.names, "\(c.library), \(c.query), \(c.kind)")
+        let chips = LibraryPage.chips(files, query: c.query, kind: kind(c.kind))
+            .map { LibraryFixture.Chip(kind: $0.kind?.rawValue.lowercased() ?? "", count: $0.count) }
+        #expect(chips == c.chips, "\(c.library), \(c.query), \(c.kind)")
+    }
+    for c in fx.filter {
+        let files = (0..<c.files).map { lib("t-0001", "\($0).md", 1) }
+        let shows = LibraryPage.showsFilter(files, query: c.query)
+        #expect(shows == c.shows, "\(c.files) files, \(c.query)")
+    }
+}
+
+@Test func libraryFilterPromptNamesRepoOnlyWithOne() {
+    var f = lib("t-0001", "a.md", 1)
+    #expect(LibraryPage.filterPrompt([f]) == "Filter by name, task or thread")
+    f.repo = "site"
+    #expect(LibraryPage.filterPrompt([f]) == "Filter by name, task, thread or repo")
+}
+
 /// A library.read stand-in over data, chunk bytes at a time; changes
 /// says after how many calls the file changes (its time).
 private actor Chunks {

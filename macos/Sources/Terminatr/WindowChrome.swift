@@ -169,9 +169,8 @@ struct TitleRow: View {
                 }
                 .disabled(m.sessionID == nil)
                 .help("Conversation or Terminal (⇧⌘T)")
-            case .project(_, let server):
-                let tabs = server.isEmpty ? app.projectTabs : ProjectTab.paired
-                ForEach(tabs) { t in
+            case .project:
+                ForEach(selection.map(app.projectTabs) ?? []) { t in
                     TabButton(title: t.rawValue, symbol: t.symbol, icons: icons, on: !reading && app.projectTab == t) {
                         files?.pane.shown = nil
                         app.projectTab = t
@@ -213,6 +212,7 @@ extension ProjectTab {
         case .board: "list.bullet.rectangle"
         case .memory: "bookmark"
         case .library: "books.vertical"
+        case .designs: "square.on.square"
         case .mods: "puzzlepiece.extension"
         }
     }
@@ -399,9 +399,9 @@ struct MainPane<Content: View>: View {
         switch selection {
         case .session(let ref):
             let m = own ?? app.model(ref)
+            let named = ref.naming(in: app.projects, peers: app.peers)
             return Self.head(ref, tab: m.tab, agent: app.session(of: m)?.agent ?? ref.session(in: app.peers)?.agent ?? "",
-                             task: ref.isRemote ? ref.session(in: app.peers)?.task : app.thread(ref)?.task?.ref,
-                             title: app.thread(ref).map { $0.task?.title ?? $0.record.title } ?? "")
+                             task: named.task, title: named.title)
         case .project(let slug, let server):
             let tab = app.projectTab
             return (tab.symbol, tab.rawValue, server.isEmpty ? slug : "\(server) › \(slug)")

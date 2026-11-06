@@ -311,6 +311,8 @@ private final class Chunks: @unchecked Sendable {
     let f: WorktreeRead.Fetch = { p in AppAPI.FilesChunk(name: "f", path: p.path, size: 30 << 20, offset: 0, truncated: true, data: Data([1])) }
     guard case .unavailable(let why) = await WorktreeRead.bytes(f, session: "s", path: "f", ignored: false) else { Issue.record("no refusal"); return }
     #expect(why.contains("Reveal in Finder"))
+    #expect(why.contains(Attachment.size(FileImage.maxBytes)), "names the cap")
+    #expect(!why.contains(Attachment.size(30 << 20)), "not the file's size")
 }
 
 @Test func bytesReadAgainWhenTheFileChangesBetweenChunks() async {

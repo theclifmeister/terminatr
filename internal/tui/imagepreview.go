@@ -131,8 +131,9 @@ const (
 // libTabKeys are the Library tab's keys when it has files.
 const libTabKeys = "enter read · o open · X delete · D delete the thread's · ← → tabs · esc close"
 
-// libHead is the popup's lines above the tab's body.
-const libHead = 2
+// libHeadMost is the most lines the popup keeps above the tab's body: the
+// tab bar and a blank, the kinds, the filter and a blank.
+const libHeadMost = 5
 
 // libFileID is what the server names a library file by: its thread, or
 // the message a linked project sent it with.
@@ -155,7 +156,7 @@ func (pv *projectView) libPreviewCols(m *dash, w int) int {
 	if w < libPreviewWide || !previewable() {
 		return 0
 	}
-	if m.boxRows(box{title: pv.slug, keys: libTabKeys})-libHead < libPreviewRows {
+	if m.boxRows(box{title: pv.slug, keys: libTabKeys})-libHeadMost < libPreviewRows {
 		return 0
 	}
 	for _, f := range pv.library {
@@ -175,7 +176,7 @@ func (pv *projectView) drawLibPreview(m *dash, b *box, w, cols int) {
 	}
 	right := []string{th().Faint.Render(fit(oneLine(f.Name)+" · "+sizeWords(f.Size), cols))}
 	if img := pv.thumbs[thumbKey(f)]; img != nil {
-		right = append(right, img.lines(cols, m.boxRows(*b)-libHead-1)...)
+		right = append(right, img.lines(cols, m.boxRows(*b)-len(b.head)-1)...)
 	}
 	list := w - cols - libPreviewGap
 	for i, r := range right {

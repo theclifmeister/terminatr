@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"path"
-	"path/filepath"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -15,6 +14,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	tmclient "github.com/theclifmeister/terminatr/internal/client"
+	"github.com/theclifmeister/terminatr/internal/filetree"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/textsafe"
 	"github.com/theclifmeister/terminatr/internal/thread"
@@ -1115,32 +1115,8 @@ func fileCaution(e proto.FileEntry) string {
 	switch {
 	case e.Ignored:
 		return "git-ignored: may hold secrets"
-	case secretName(e.Name):
+	case filetree.SecretName(e.Name):
 		return "its name says it may hold secrets"
 	}
 	return ""
-}
-
-// secretName says a file's name is one that usually holds a secret. It
-// is a hint for the eye, not a rule: nothing is refused by it.
-func secretName(name string) bool {
-	n := strings.ToLower(name)
-	if n == ".env" || strings.HasPrefix(n, ".env.") {
-		for _, safe := range []string{".example", ".sample", ".template", ".dist"} {
-			if strings.HasSuffix(n, safe) {
-				return false
-			}
-		}
-		return true
-	}
-	switch n {
-	case ".netrc", ".npmrc", ".pypirc", ".git-credentials", "credentials", "credentials.json",
-		"id_rsa", "id_dsa", "id_ecdsa", "id_ed25519":
-		return true
-	}
-	switch filepath.Ext(n) {
-	case ".pem", ".key", ".p12", ".pfx", ".keystore", ".jks", ".kdbx":
-		return true
-	}
-	return strings.HasPrefix(n, "secrets.") || strings.HasPrefix(n, "secret.")
 }

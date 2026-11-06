@@ -87,6 +87,101 @@ public enum LibraryPage {
         return order.map { Group(id: $0, files: by[$0] ?? []) }
     }
 
+    /// A file's kind, from its name's extension (T1054). The TUI's
+    /// libKinds and libKindOf: internal/tui/testdata/library-filter.json
+    /// pins both.
+    public enum Kind: String, CaseIterable, Sendable {
+        case images = "Images", pages = "Pages", notes = "Notes", data = "Data"
+        case archives = "Archives", video = "Video", code = "Code", other = "Other"
+    }
+
+    private static let kindOf: [String: Kind] = {
+        var out: [String: Kind] = [:]
+        let lists: [(Kind, String)] = [
+            (.images, "png jpg jpeg gif webp heic heif svg bmp tif tiff ico avif"),
+            (.pages, "html htm pdf"),
+            (.notes, "md markdown txt rtf"),
+            (.data, "json jsonl ndjson csv tsv xml yaml yml toml sql sqlite db log"),
+            (.archives, "zip tar gz tgz bz2 xz zst 7z rar dmg"),
+            (.video, "mp4 mov m4v webm mkv avi"),
+            (.code, "go swift py js jsx ts tsx sh zsh bash rb rs c h cc cpp hpp java kt php lua pl css diff patch"),
+        ]
+        for (kind, exts) in lists {
+            for e in exts.split(separator: " ") { out[String(e)] = kind }
+        }
+        return out
+    }()
+
+    public static func kind(_ name: String) -> Kind {
+        guard let dot = name.lastIndex(of: "."), dot != name.startIndex else { return .other }
+        return kindOf[name[name.index(after: dot)...].lowercased()] ?? .other
+    }
+
+    /// A chip: a kind (nil for all) and how many files the filter leaves
+    /// of it.
+    public struct Chip: Identifiable, Sendable, Equatable {
+        public let kind: Kind?
+        public let count: Int
+        public var id: String { kind?.rawValue ?? "All" }
+        public var word: String { kind?.rawValue ?? "All" }
+    }
+
+    private static func words(_ query: String) -> [String] {
+        query.lowercased().split(whereSeparator: \.isWhitespace).map(String.init)
+    }
+
+    /// Whether every word is in the file's name, task, title, thread,
+    /// repository or linked project.
+    private static func matches(_ f: AppAPI.LibraryFile, _ words: [String]) -> Bool {
+        if words.isEmpty { return true }
+        let hay = [f.name, f.task, f.title, f.thread, f.repo, f.peer].joined(separator: "\n").lowercased()
+        return words.allSatisfy(hay.contains)
+    }
+
+    /// The kind that holds: pick, unless the library has fewer than two
+    /// kinds or none of it (say, its last file went).
+    public static func picked(_ files: [AppAPI.LibraryFile], _ pick: Kind?) -> Kind? {
+        guard let pick else { return nil }
+        let kinds = Set(files.map { kind($0.name) })
+        return kinds.contains(pick) && kinds.count >= 2 ? pick : nil
+    }
+
+    /// The files the filter and the kind leave, in their order.
+    public static func shown(_ files: [AppAPI.LibraryFile], query: String, kind pick: Kind?) -> [AppAPI.LibraryFile] {
+        let words = words(query)
+        let pick = picked(files, pick)
+        if words.isEmpty, pick == nil { return files }
+        return files.filter { matches($0, words) && (pick == nil || kind($0.name) == pick) }
+    }
+
+    /// The chips: all, then the kinds the filter leaves files of, and the
+    /// picked kind even with none. Under two kinds, none at all, unless
+    /// one is picked, so it can be let go.
+    public static func chips(_ files: [AppAPI.LibraryFile], query: String, kind pick: Kind?) -> [Chip] {
+        let words = words(query)
+        let pick = picked(files, pick)
+        var count: [Kind: Int] = [:]
+        var all = 0
+        for f in files where matches(f, words) {
+            count[kind(f.name), default: 0] += 1
+            all += 1
+        }
+        let kinds = Kind.allCases.filter { (count[$0] ?? 0) > 0 || $0 == pick }
+        if kinds.count < 2, pick == nil { return [] }
+        return [Chip(kind: nil, count: all)] + kinds.map { Chip(kind: $0, count: count[$0] ?? 0) }
+    }
+
+    /// Whether the filter shows: from 7 files, and for as long as it has
+    /// words.
+    public static func showsFilter(_ files: [AppAPI.LibraryFile], query: String) -> Bool {
+        files.count >= 7 || !query.isEmpty
+    }
+
+    /// The filter field's words: the repository only where a file names one.
+    public static func filterPrompt(_ files: [AppAPI.LibraryFile]) -> String {
+        files.contains { !$0.repo.isEmpty } ? "Filter by name, task, thread or repo" : "Filter by name, task or thread"
+    }
+
     /// What library.read names a file by: its thread, else the message a
     /// linked project sent it with.
     public static func id(_ f: AppAPI.LibraryFile) -> String {
@@ -124,6 +219,7 @@ public enum LibraryPage {
             var changed = false
             do {
                 repeat {
+                    try Task.checkCancellation()
                     let c = try await fetch(params(out.count))
                     if size >= 0, c.size != size || c.mtime != mtime {
                         changed = true

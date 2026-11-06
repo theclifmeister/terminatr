@@ -103,11 +103,13 @@ type MemoryReadResult struct {
 // LibraryFile is a file of a project's library: Thread's report
 // attached it (with the thread's Task, Title and State: running,
 // stopped, resolved or archived), or linked project Peer sent it with
-// Message (State received). It carries no path.
+// Message (State received). Repo is the folder name of the thread's
+// repository in a project with several. It carries no path.
 type LibraryFile struct {
 	Thread  string    `json:"thread,omitempty"`
 	Task    string    `json:"task,omitempty"`
 	Title   string    `json:"title"`
+	Repo    string    `json:"repo,omitempty"`
 	State   string    `json:"state"`
 	Name    string    `json:"name"`
 	Size    int64     `json:"size"`

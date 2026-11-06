@@ -323,7 +323,7 @@ struct SessionInspector: View {
                     if !t.record.branch.isEmpty { FactRow("Branch", t.record.branch, mono: true) }
                     FactRow("PR", t.pr > 0 ? "#\(t.pr)" + (t.checks.isEmpty ? "" : " · checks \(t.checks)") : "none yet")
                     FactRow("Started", t.record.created.formatted(date: .abbreviated, time: .shortened))
-                    if t.record.usage.costUsd > 0 { FactRow("Cost", String(format: "$%.2f", t.record.usage.costUsd)) }
+                    ForEach(t.record.usage.factRows, id: \.label) { FactRow($0.label, $0.value) }
                 }
             }
             if let todos = t.status?.todos, !todos.isEmpty {

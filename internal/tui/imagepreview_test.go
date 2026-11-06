@@ -279,6 +279,45 @@ func TestLibraryPreview80(t *testing.T) {
 	}
 }
 
+// TestLibraryPreviewFiltered: the column starts under the kinds and the
+// filter, which keep the whole width, and follows the file the filter
+// selects.
+func TestLibraryPreviewFiltered(t *testing.T) {
+	colourTerm(t, "truecolor", false)
+	src, m := popupData(t)
+	day := time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)
+	for _, n := range []string{"a.png", "b.md", "c.md", "d.md", "e.md", "f.md", "g.png", "h.json"} {
+		src.library = append(src.library, thread.LibFile{Thread: "t-0002", Task: "T2", Title: "T", Name: n, Size: 9, Time: day})
+	}
+	src.thumbs = map[string][]byte{"t-0002/a.png": testJPEG(t, 80, 40), "t-0002/g.png": testJPEG(t, 80, 40)}
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	settle(m, keyPress(m, "A"))
+	pv := m.top().(*projectView)
+	settle(m, keyPress(m, "8"))
+	lines := strings.Split(screen(m), "\n")
+	chips, caption := -1, -1
+	for i, l := range lines {
+		if strings.Contains(l, "images") && chips < 0 {
+			chips = i
+		}
+		if strings.Contains(l, "a.png · 9 B") {
+			caption = i
+		}
+	}
+	if chips < 0 || caption <= chips {
+		t.Fatalf("chips at %d, caption at %d:\n%s", chips, caption, strings.Join(lines, "\n"))
+	}
+	pv.narrowLib("g.png", "")
+	settle(m, keyPress(m, "down"))
+	out := screen(m)
+	if !strings.Contains(out, "g.png · 9 B") || !strings.Contains(out, halfBlock) || strings.Contains(out, "a.png") {
+		t.Errorf("filtered:\n%s", out)
+	}
+	if got := src.thumbAsked[len(src.thumbAsked)-1]; got != "t-0002/g.png" {
+		t.Errorf("asked %q", got)
+	}
+}
+
 // TestLibraryNoTruecolor: without 24-bit colour no column, no call: the
 // name and size as before; o still opens.
 func TestLibraryNoTruecolor(t *testing.T) {

@@ -97,6 +97,23 @@ import Testing
         #expect(Designs.listing([done], error: nil) == .designs([done]))
     }
 
+    @Test func theOverviewsLine() {
+        let ask = [AppAPI.DesignQuestion(id: "Q1", header: "", question: "?")]
+        let building = AppAPI.Design(name: "a", title: "a", status: "building", tasksDone: 0)
+        let waiting = AppAPI.Design(name: "b", title: "b", status: "designing", tasksDone: 0, questions: ask)
+        let buildingAndAsking = AppAPI.Design(name: "c", title: "c", status: "building", tasksDone: 0, questions: ask)
+        let planned = AppAPI.Design(name: "d", title: "d", status: "planned", tasksDone: 0)
+        let done = AppAPI.Design(name: "e", title: "e", status: "done", tasksDone: 0)
+        let archived = AppAPI.Design(name: "f", title: "f", status: "building", tasksDone: 0, archived: true)
+        #expect(Designs.underWay([]) == nil)
+        #expect(Designs.underWay([planned, done, archived]) == nil)
+        #expect(Designs.underWay([building]) == "1 design building")
+        #expect(Designs.underWay([building, building]) == "2 designs building")
+        #expect(Designs.underWay([waiting]) == "1 design waiting for you")
+        #expect(Designs.underWay([building, waiting, planned]) == "2 designs: 1 building, 1 waiting for you")
+        #expect(Designs.underWay([building, buildingAndAsking]) == "2 designs: 1 building, 1 waiting for you")
+    }
+
     @Test func compatibility() {
         var h = AppAPI.Hello(appApi: 31, tm: "1", build: "", capabilities: [], methods: ["design.list"])
         h.server = AppAPI.Server(version: "1", protocol: 28, caps: ["designs"])

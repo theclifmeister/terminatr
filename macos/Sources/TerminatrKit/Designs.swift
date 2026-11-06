@@ -118,6 +118,22 @@ public enum Designs {
         return all ? "Hide done and archived" : "Show \(hidden) done or archived"
     }
 
+    /// The Overview's one line of designs under way: "2 designs: 1
+    /// building, 1 waiting for you", "2 designs building", "1 design
+    /// waiting for you"; nil with neither. One with open questions is
+    /// waiting, whatever its status, so the counts add up.
+    public static func underWay(_ ds: [AppAPI.Design]) -> String? {
+        let live = shown(ds, all: false)
+        let waiting = live.filter { !$0.questions.isEmpty }.count
+        let building = live.filter { $0.questions.isEmpty && Status($0.status) == .building }.count
+        switch (building, waiting) {
+        case (0, 0): return nil
+        case (_, 0): return "\(count(building, "design")) building"
+        case (0, _): return "\(count(waiting, "design")) waiting for you"
+        default: return "\(count(building + waiting, "design")): \(building) building, \(waiting) waiting for you"
+        }
+    }
+
     /// The designs that need the user first (open questions), then the
     /// ones being built, planned, designed, done, and archived last; by
     /// name within.

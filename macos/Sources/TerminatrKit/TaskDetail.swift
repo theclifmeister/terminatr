@@ -13,12 +13,15 @@ public struct TaskDetail: Equatable, Sendable {
     public let thread: AppAPI.Thread?
     /// Whether task lacks its notes and steps (a board task's copy).
     public let partial: Bool
+    /// What the task's threads used, resolved ones included; nil for none.
+    public let usage: AppAPI.Usage?
 
-    public init(project: String, task: AppAPI.Task, thread: AppAPI.Thread? = nil, partial: Bool = false) {
+    public init(project: String, task: AppAPI.Task, thread: AppAPI.Thread? = nil, partial: Bool = false, usage: AppAPI.Usage? = nil) {
         self.project = project
         self.task = task
         self.thread = thread
         self.partial = partial
+        self.usage = usage
     }
 
     /// Task ref ("T12") of project as the watch has it, nil when the
@@ -29,10 +32,10 @@ public struct TaskDetail: Equatable, Sendable {
             threads.first { !t.thread.isEmpty && $0.record.id == t.thread } ?? threads.first { $0.record.task == t.ref }
         }
         if let t = project.needsYou.first(where: { $0.ref == ref }) ?? threads.lazy.compactMap(\.task).first(where: { $0.ref == ref }) {
-            return TaskDetail(project: project.slug, task: t, thread: thread(of: t))
+            return TaskDetail(project: project.slug, task: t, thread: thread(of: t), usage: project.taskUsage[t.ref])
         }
         if let t = project.board.first(where: { $0.ref == ref }) {
-            return TaskDetail(project: project.slug, task: t, thread: thread(of: t), partial: true)
+            return TaskDetail(project: project.slug, task: t, thread: thread(of: t), partial: true, usage: project.taskUsage[t.ref])
         }
         return nil
     }
@@ -50,7 +53,7 @@ public struct TaskDetail: Equatable, Sendable {
     /// watch's has moved on since (another status or update).
     public func filled(_ full: AppAPI.Task?) -> TaskDetail {
         guard partial, let full, full.ref == task.ref, full.status == task.status, full.updated == task.updated else { return self }
-        return TaskDetail(project: project, task: full, thread: thread)
+        return TaskDetail(project: project, task: full, thread: thread, usage: usage)
     }
 
     /// What a blocked task is blocked on: its latest "blocked (date):"

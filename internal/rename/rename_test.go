@@ -404,3 +404,23 @@ func TestRenameMemberOfProgram(t *testing.T) {
 		t.Errorf("program's channel with core: %s, %v", msg, err)
 	}
 }
+
+// TestProjectForgetsThumbs: the old slug's cached thumbnails go on a
+// rename; another project's stay.
+func TestProjectForgetsThumbs(t *testing.T) {
+	setup(t)
+	d, _ := home.ThumbCacheDir()
+	for _, s := range []string{"demo", "other"} {
+		os.MkdirAll(filepath.Join(d, s, "t-0001"), 0o700)
+		os.WriteFile(filepath.Join(d, s, "t-0001", "x.jpg"), []byte("x"), 0o600)
+	}
+	if _, err := Project(Options{From: "demo", To: "demo2", Caller: human}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(d, "demo")); err == nil {
+		t.Error("old slug's thumbnails stay")
+	}
+	if _, err := os.Stat(filepath.Join(d, "other", "t-0001", "x.jpg")); err != nil {
+		t.Errorf("another project's: %v", err)
+	}
+}

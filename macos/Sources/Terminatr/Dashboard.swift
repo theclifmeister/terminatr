@@ -4,10 +4,10 @@ import TerminatrUI
 
 /// A project in the window's detail (design T746, T748 milestone C, flat
 /// since T1002): its tile, name and goal; its coordinator as the main row,
-/// with Start when none runs; a slim strip of its board's counts; its threads, idle
-/// and stopped ones folded; its designs, each opening in place to its
-/// answers, questions and build (DesignsSection); the first of on deck,
-/// the Board tab having the rest; and the inbox items for the user. Under
+/// with Start when none runs; a slim strip of its board's counts, with one
+/// line of the designs under way when some are, which opens the Designs
+/// tab; its threads, idle and stopped ones folded; the first three on deck,
+/// highest priority first, the Board tab having the rest; and the inbox items for the user. Under
 /// them its repositories. What needs the user, and answering it, is the
 /// inspector's (NeedCards). An empty project offers a next step. A
 /// thread's row shows its thread in the window.
@@ -51,7 +51,8 @@ struct ProjectDashboard: View {
         let deck = Dashboard.onDeck(project), backlog = Dashboard.backlog(project)
         let doneCount = app.listsDone ? Dashboard.doneCount(project) : 0
         if !deck.isEmpty || !backlog.isEmpty || doneCount > 0 {
-            BoardFilter(text: $filter)
+            PaneFilter(prompt: "Filter tasks", label: "Filter the board's tasks",
+                       help: "Shows the tasks whose id or title has these words, the done ones too", text: $filter)
             boardGroups(deck: deck, backlog: backlog, doneCount: doneCount)
         } else {
             Text("Nothing on the board yet: + adds a task.")
@@ -67,6 +68,7 @@ struct ProjectDashboard: View {
         let running = app.coordinatorSession(project.slug) != nil
         CoordinatorRow(project: project, attention: app.coordinator(of: project), busy: app.busy(coordinator: project), running: running)
         StatStrip(stats)
+            .designsLine(DesignsSource(project: project))
         if Dashboard.isEmpty(project, needs: needs.count) {
             NextStepCard(project: project, step: Dashboard.next(project, coordinatorRuns: running))
         }
@@ -77,9 +79,6 @@ struct ProjectDashboard: View {
             section("Agent sessions outside the projects · \(outside.count)") {
                 AdoptableSessions(project: project, sessions: outside)
             }
-        }
-        if app.listsDesigns {
-            DesignsSection(project: project)
         }
         onDeck
         let inbox = project.items.filter(\.forYou)
@@ -154,21 +153,19 @@ struct ProjectDashboard: View {
         }
     }
 
-    /// The first of on deck: the Board tab has them all, with their acts.
+    /// The first of on deck, with their acts: the Board tab has them all.
     @ViewBuilder
     private var onDeck: some View {
         let deck = Dashboard.onDeck(project)
         if !deck.isEmpty {
             section("On deck · \(deck.count)") {
                 HairlineList {
-                    ForEach(deck.prefix(Self.deckShown)) { BoardRow(project: project.slug, task: $0, acts: false) }
+                    ForEach(deck.prefix(Self.deckShown)) { BoardRow(project: project.slug, task: $0) }
                 }
-                if deck.count > Self.deckShown {
-                    Button("\(deck.count - Self.deckShown) more on the Board") { app.projectTab = .board }
-                        .buttonStyle(.link)
-                        .foregroundStyle(theme.action)
-                        .font(theme.sized(Flat.label))
-                }
+                Button(deck.count > Self.deckShown ? "\(deck.count - Self.deckShown) more on the Board" : "Open the Board") { app.projectTab = .board }
+                    .buttonStyle(.link)
+                    .foregroundStyle(theme.action)
+                    .font(theme.sized(Flat.label))
             }
         }
     }
@@ -467,8 +464,11 @@ struct StartButton: View {
 
 /// The board's filter field: words that a task's id or title has (the
 /// TUI's / on the Tasks tab); esc clears it.
-private struct BoardFilter: View {
+struct PaneFilter: View {
     @Environment(\.theme) private var theme
+    let prompt: String
+    let label: String
+    let help: String
     @Binding var text: String
 
     var body: some View {
@@ -476,10 +476,10 @@ private struct BoardFilter: View {
             Image(systemName: "line.3.horizontal.decrease")
                 .foregroundStyle(theme.muted)
                 .accessibilityHidden(true)
-            TextField("Filter tasks", text: $text)
+            TextField(prompt, text: $text)
                 .textFieldStyle(.plain)
                 .onExitCommand { text = "" }
-                .accessibilityLabel("Filter the board's tasks")
+                .accessibilityLabel(label)
             if !text.isEmpty {
                 Button { text = "" } label: { Image(systemName: "xmark.circle.fill") }
                     .buttonStyle(.borderless)
@@ -492,7 +492,7 @@ private struct BoardFilter: View {
         .padding(.horizontal, 11)
         .frame(maxWidth: 320, minHeight: 34)
         .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(theme.line, lineWidth: theme.contrast ? 1.5 : 1))
-        .help("Shows the tasks whose id or title has these words, the done ones too")
+        .help(help)
     }
 }
 
@@ -503,8 +503,6 @@ private struct BoardRow: View {
     @Environment(\.theme) private var theme
     let project: String
     let task: AppAPI.Task
-    /// With its action: the Board's, not the Overview's short list.
-    var acts = true
 
     var body: some View {
         ListRow {
@@ -527,13 +525,9 @@ private struct BoardRow: View {
                     .buttonStyle(.plain)
                     .help("Shows \(task.ref) in full: its steps and notes")
                     PriorityTag(task.priority)
-                    if acts {
-                        TaskActs(project: project, task: task.ref, status: task.status)
-                    }
+                    TaskActs(project: project, task: task.ref, status: task.status)
                 }
-                if acts {
-                    TaskOutcome(project: project, task: task.ref)
-                }
+                TaskOutcome(project: project, task: task.ref)
             }
         }
         .accessibilityElement(children: .combine)
@@ -694,6 +688,7 @@ struct RemoteProjectDashboard: View {
                 .font(theme.sized(Flat.label))
                 .foregroundStyle(theme.muted)
         }
+        .designsLine(DesignsSource(peer: peer, project: project))
         let sessions = project.sessions.compactMap { s in SessionRef(s, of: peer.alias).map { (s, $0) } }
         let others = sessions.filter { !$0.1.isCoordinator }
         // Its coordinator as the main row, as this server's project's.
@@ -727,10 +722,6 @@ struct RemoteProjectDashboard: View {
                     }
                 }
             }
-        }
-        // Its designs (T888), read-only, under the same switch.
-        if app.listsDesigns {
-            DesignsSection(peer: peer, project: project)
         }
         if case .shared(let p) = pages {
             VStack(alignment: .leading, spacing: 7) {

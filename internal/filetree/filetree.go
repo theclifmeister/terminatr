@@ -14,6 +14,11 @@
 // (gitx.Pin), never looking its repository up from the folder and
 // starting no program on its behalf. A git-ignored path answers only
 // when asked for, and an answer git couldn't give refuses.
+//
+// A scope OpenFar opened answers a paired server, and holds more back: text
+// only, never what is git-ignored, and no contents under a name that holds
+// secrets or in a nested checkout (withheld.go), where a link leads as well
+// as by its name.
 package filetree
 
 import (
@@ -47,6 +52,8 @@ var (
 	ErrIgnored = errors.New("git-ignored")
 	ErrGone    = errors.New("no longer there")
 	ErrNotFile = errors.New("not the kind of file asked for")
+	// ErrWithheld: a far scope's listing shows it, and no more.
+	ErrWithheld = errors.New("withheld")
 	// ErrNoRoot: the root is no folder, or no checkout of its repo.
 	ErrNoRoot = errors.New("no folder to read")
 )
@@ -67,6 +74,8 @@ type Scope struct {
 	repo string
 	base string
 	tree *gitx.Tree
+	// far: this scope answers a paired server (OpenFar).
+	far bool
 	// beforeOpen stands in a test for a link swapped after the gate.
 	beforeOpen func()
 }
@@ -93,6 +102,20 @@ func Open(ctx context.Context, root, repo, base string) (*Scope, error) {
 			return nil, fmt.Errorf("%w: %v", ErrNoRoot, err)
 		}
 	}
+	return s, nil
+}
+
+// OpenFar is Open for a paired server: a checkout only, since a plain folder
+// has no git to say what is ignored.
+func OpenFar(ctx context.Context, root, repo, base string) (*Scope, error) {
+	if repo == "" {
+		return nil, fmt.Errorf("%w: not a checkout", ErrNoRoot)
+	}
+	s, err := Open(ctx, root, repo, base)
+	if err != nil {
+		return nil, err
+	}
+	s.far = true
 	return s, nil
 }
 
@@ -174,8 +197,14 @@ func (s *Scope) isIgnored(ctx context.Context, rel string) (bool, error) {
 }
 
 // gate refuses a git-ignored path unless asked for, and when git can't
-// tell.
+// tell. A far scope can't ask, and refuses what is withheld too.
 func (s *Scope) gate(ctx context.Context, rel string, ignored bool) error {
+	if s.far {
+		ignored = false
+		if s.withheld(rel) {
+			return fmt.Errorf("%w: %s", ErrWithheld, rel)
+		}
+	}
 	if ignored {
 		return nil
 	}
@@ -248,6 +277,14 @@ func (s *Scope) read(ctx context.Context, rel string, offset int64, ignored, bin
 	if offset < 0 {
 		return res, fmt.Errorf("%w: offset %d", ErrPath, offset)
 	}
+	if err := s.farName(rel); err != nil {
+		return res, err
+	}
+	binary = binary && !s.far
+	most := int64(proto.MaxFilesRead)
+	if s.far {
+		most = proto.PeerWorktreeMaxRead
+	}
 	real, err := s.resolve(rel)
 	if err != nil {
 		return res, err
@@ -261,7 +298,7 @@ func (s *Scope) read(ctx context.Context, rel string, offset int64, ignored, bin
 		return res, fmt.Errorf("%w: %s", ErrNotFile, rel)
 	}
 	res = proto.FilesReadResult{Name: path.Base(rel), Path: rel, Size: fi.Size(), MTime: fi.ModTime(), Offset: offset,
-		Truncated: fi.Size() > proto.MaxFilesRead}
+		Truncated: fi.Size() > most}
 	head := make([]byte, min(fi.Size(), sniff))
 	n, err := f.ReadAt(head, 0)
 	if err != nil && err != io.EOF {
@@ -273,7 +310,7 @@ func (s *Scope) read(ctx context.Context, rel string, offset int64, ignored, bin
 			return res, nil
 		}
 	}
-	want := min(fi.Size(), proto.MaxFilesRead) - offset
+	want := min(fi.Size(), most) - offset
 	if want <= 0 {
 		return res, nil
 	}
@@ -281,6 +318,11 @@ func (s *Scope) read(ctx context.Context, rel string, offset int64, ignored, bin
 	n, err = f.ReadAt(buf, offset)
 	if n < len(buf) && err != nil && err != io.EOF {
 		return res, fmt.Errorf("%w: %s: %v", ErrGone, rel, err)
+	}
+	if s.far && chunkBinary(buf[:n]) {
+		// Text at its head only: what isn't text doesn't cross.
+		res.Binary = true
+		return res, nil
 	}
 	res.Data = buf[:n]
 	return res, nil
@@ -406,6 +448,12 @@ func (s *Scope) List(ctx context.Context, rel string, o Options, cs *changes.Cha
 	if len(o.Query) > proto.MaxFilesQuery {
 		return res, fmt.Errorf("%w: a search of over %d bytes", ErrPath, proto.MaxFilesQuery)
 	}
+	if s.far {
+		o.Ignored = false
+		if err := s.farName(rel); err != nil {
+			return res, err
+		}
+	}
 	res.Path = rel
 	m := marksOf(cs)
 	if cs != nil {
@@ -415,6 +463,9 @@ func (s *Scope) List(ctx context.Context, rel string, o Options, cs *changes.Cha
 		err = s.find(ctx, rel, o, m, &res)
 	} else {
 		err = s.folder(ctx, rel, o, m, &res)
+	}
+	if s.far && err == nil {
+		s.holdBack(ctx, &res)
 	}
 	return res, err
 }
@@ -483,6 +534,9 @@ func (s *Scope) folder(ctx context.Context, rel string, o Options, m marks, res 
 		ign, cut, err := s.ignoredUnder(ctx, real)
 		if err != nil {
 			return fmt.Errorf("%w: git can't say: %v", ErrIgnored, err)
+		}
+		if cut && s.far {
+			return fmt.Errorf("%w: git can't say: too many", ErrIgnored)
 		}
 		res.Truncated = res.Truncated || cut
 		r, err := os.OpenRoot(s.Root)
@@ -709,31 +763,37 @@ func (s *Scope) Stamp(ctx context.Context, folders []string) string {
 	if s.tree != nil {
 		fp = changes.FingerprintTree(ctx, s.tree)
 	}
-	return s.stamp(fp, folders)
+	return s.stamp(fp, folders, s.farIgnored(ctx))
 }
 
-// stamp is the digest of fingerprint fp and folders' entries.
-func (s *Scope) stamp(fp string, folders []string) string {
+// stamp is the digest of fingerprint fp and folders' entries; ign is what
+// a far scope leaves out of them (farIgnored).
+func (s *Scope) stamp(fp string, folders []string, ign map[string]bool) string {
 	h := sha256.New()
 	if s.tree != nil {
 		io.WriteString(h, fp)
 	}
 	for _, d := range folders {
 		fmt.Fprintf(h, "\x00%s\x00", d)
-		s.stampFolder(h, d)
+		s.stampFolder(h, d, ign)
 	}
 	return hex.EncodeToString(h.Sum(nil))
 }
 
 // stampFolder writes folder rel's entries, sorted by the file system or
-// not as it reads them, into w: names, sizes, times and modes.
-func (s *Scope) stampFolder(w io.Writer, rel string) {
+// not as it reads them, into w: names, sizes, times and modes. To a far
+// scope an ignored or withheld folder doesn't answer, an ignored entry
+// doesn't count and a withheld one counts by its name.
+func (s *Scope) stampFolder(w io.Writer, rel string, ign map[string]bool) {
 	rel, err := CleanPath(rel)
-	if err != nil {
+	if err != nil || s.farName(rel) != nil {
 		return
 	}
 	real, err := s.resolve(rel)
 	if err != nil {
+		return
+	}
+	if s.far && (ign == nil || underIgnored(ign, real) || s.withheld(real)) {
 		return
 	}
 	f, fi, err := s.open(real)
@@ -749,6 +809,15 @@ func (s *Scope) stampFolder(w io.Writer, rel string) {
 	for _, e := range ents {
 		if hiddenName(e.Name()) {
 			continue
+		}
+		if s.far {
+			if underIgnored(ign, path.Join(real, e.Name())) {
+				continue
+			}
+			if withheldName(e.Name()) {
+				fmt.Fprintf(w, "%s\x00", e.Name())
+				continue
+			}
 		}
 		if fi, err := e.Info(); err == nil {
 			fmt.Fprintf(w, "%s %d %d %d\x00", e.Name(), fi.Size(), fi.ModTime().UnixNano(), fi.Mode())
@@ -768,6 +837,7 @@ type Cache struct {
 // stampSeen is a root's last fingerprint for a stamp and what it took.
 type stampSeen struct {
 	fp   string
+	ign  map[string]bool // a far scope's (farIgnored)
 	at   time.Time
 	took time.Duration
 }
@@ -785,23 +855,29 @@ const (
 // stampShare allows; the folders' entries are always read.
 func (c *Cache) Stamp(ctx context.Context, s *Scope, folders []string) string {
 	if s.tree == nil {
-		return s.stamp("", folders)
+		return s.stamp("", folders, nil)
+	}
+	// A near scope keeps no ignored files for a far one to find.
+	key := s.Root
+	if s.far {
+		key += "\x00far"
 	}
 	start := time.Now()
 	c.mu.Lock()
-	had, ok := c.stamps[s.Root]
+	had, ok := c.stamps[key]
 	c.mu.Unlock()
 	if ok && had.fp != "" && start.Sub(had.at) < min(had.took*stampShare, maxStampRest) {
-		return s.stamp(had.fp, folders)
+		return s.stamp(had.fp, folders, had.ign)
 	}
 	fp := changes.FingerprintTree(ctx, s.tree)
+	ign := s.farIgnored(ctx)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.stamps == nil || len(c.stamps) >= maxCached {
 		c.stamps = map[string]stampSeen{}
 	}
-	c.stamps[s.Root] = stampSeen{fp: fp, at: start, took: time.Since(start)}
-	return s.stamp(fp, folders)
+	c.stamps[key] = stampSeen{fp: fp, ign: ign, at: start, took: time.Since(start)}
+	return s.stamp(fp, folders, ign)
 }
 
 type seenChanges struct {

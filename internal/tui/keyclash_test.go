@@ -57,6 +57,7 @@ var popupStates = map[string]func(m *dash){
 	"settings tab":       func(m *dash) { feed(m, keyPress(m, "A")); keyPress(m, "4") },
 	"keys tab":           func(m *dash) { feed(m, keyPress(m, "A")); keyPress(m, "6") },
 	"memory tab":         func(m *dash) { feed(m, keyPress(m, "A")); keyPress(m, "7") },
+	"library tab":        func(m *dash) { feed(m, keyPress(m, "A")); keyPress(m, "8") },
 	"t list, review":     func(m *dash) { feed(m, keyPress(m, "T")) },
 	"t list, blocked":    func(m *dash) { feed(m, keyPress(m, "T")); keyPress(m, "down") },
 	"review task, shown": func(m *dash) { feed(m, keyPress(m, "T")); keyPress(m, "enter") },

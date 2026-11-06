@@ -727,8 +727,19 @@ struct FileBody: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             case .binary(let size, _):
-                change(s?.diff)
-                empty("\(file.name) · \(Attachment.size(size)) has no text to show here. Space opens Quick Look, and Open uses its app.")
+                if case .drawn(let picture) = s?.picture {
+                    if let c = file.caution { line(c, icon: "exclamationmark.triangle", colour: theme.attention) }
+                    if s?.deleted == true { line("Deleted from the worktree: this is what it held.", icon: "trash", colour: theme.attention) }
+                    change(s?.diff)
+                    FileImageView(name: file.name, picture: picture, size: size)
+                } else {
+                    change(s?.diff)
+                    if case .notDrawn(let why) = s?.picture {
+                        empty(FileImage.message(name: file.name, size: size, why: why, hasPath: hasPath))
+                    } else {
+                        empty(FileImage.message(name: file.name, size: size))
+                    }
+                }
             case .gone:
                 empty("\(file.name) is no longer there.")
             case .unavailable(let why):
@@ -739,6 +750,12 @@ struct FileBody: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+    }
+
+    /// Whether Copy Path and Reveal in Finder are in its menu (pathActions).
+    private var hasPath: Bool {
+        if case .worktree(let e, _) = file.source { return model.absolute(e.path) != nil }
+        return false
     }
 
     /// What changed in it since the base: nothing shows of a file with no
@@ -793,6 +810,63 @@ struct FileBody: View {
             .padding(.horizontal, 15)
             .padding(.vertical, 14)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+}
+
+/// An image file, fitted to what room there is and never past its actual
+/// size; its size under it. Nothing to zoom: Space's Quick Look does that.
+private struct FileImageView: View {
+    @Environment(\.theme) private var theme
+    let name: String
+    let picture: FileImage.Drawn
+    let size: Int
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Image(decorative: picture.image, scale: 1)
+                .resizable()
+                .interpolation(.high)
+                .aspectRatio(contentMode: .fit)
+                .background { if !picture.opaque { Checks() } }
+                .frame(maxWidth: picture.pointWidth, maxHeight: picture.pointHeight)
+                .accessibilityLabel(name)
+                .accessibilityValue("\(picture.width) by \(picture.height) pixels")
+                .accessibilityAddTraits(.isImage)
+                .padding(12)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            Text(words)
+                .font(theme.sized(12))
+                .foregroundStyle(theme.muted)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .padding(.horizontal, 13)
+                .padding(.bottom, 8)
+        }
+    }
+
+    private var words: String {
+        var out = "\(picture.width) × \(picture.height) · \(Attachment.size(size))"
+        if picture.frames > 1 { out += " · one of \(picture.frames) frames" }
+        return out
+    }
+
+    /// What's behind an image with clear parts: mid greys, so that neither
+    /// black nor white ink is lost on either theme.
+    private struct Checks: View {
+        var body: some View {
+            Canvas { c, size in
+                let side: CGFloat = 8
+                c.fill(Path(CGRect(origin: .zero, size: size)), with: .color(white: 0.62))
+                var dark = Path()
+                for row in 0...Int(size.height / side) {
+                    for col in 0...Int(size.width / side) where (row + col) % 2 == 0 {
+                        dark.addRect(CGRect(x: CGFloat(col) * side, y: CGFloat(row) * side, width: side, height: side))
+                    }
+                }
+                c.fill(dark, with: .color(white: 0.5))
+            }
+            .accessibilityHidden(true)
+        }
     }
 }
 

@@ -54,6 +54,7 @@ var popupKeys = []keyHelp{
 	{"E", "on the Access tab: the effective access, what a new thread of the project gets, read-only"},
 	{"+ X", "on the overview: add a repository / remove the selected one (asks first)"},
 	{"enter", "on a task (Tasks tab): show it, with what it is blocked on, or how to check it and whether its pull request merged"},
+	{"/ t", "in the Library tab: filter by file name, task, thread or repository (from 7 files) / step through the kinds (with two or more)"},
 	{"enter", "on a file (Library tab): read it, read-only: text as it is, JSON indented, an image in half-blocks with 24-bit colour, other files by name and size"},
 	{"o", "on a file (Library tab, or while reading it): open it in this computer's viewer"},
 	{"X D", "on a file (Library tab): delete it / all of its thread's files (asks first, journaled)"},
