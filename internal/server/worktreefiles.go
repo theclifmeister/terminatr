@@ -157,18 +157,23 @@ func (s *Server) repoVouched(p *project.Project, r *thread.Record) bool {
 
 // filesError is a read's refusal, by its code.
 func filesError(err error) *proto.Error {
+	return proto.Errorf(filesCode(err), "%v", err)
+}
+
+// filesCode is the code of a read's refusal.
+func filesCode(err error) string {
 	code := proto.ErrRefused
 	for _, c := range []struct {
 		err  error
 		code string
-	}{{filetree.ErrPath, proto.ErrInvalidPath}, {filetree.ErrLinkOut, proto.ErrLinkOut}, {filetree.ErrIgnored, proto.ErrIgnored},
+	}{{filetree.ErrPath, proto.ErrInvalidPath}, {filetree.ErrLinkOut, proto.ErrLinkOut}, {filetree.ErrIgnored, proto.ErrIgnored}, {filetree.ErrWithheld, proto.ErrWithheld},
 		{filetree.ErrGone, proto.ErrFileGone}, {filetree.ErrNotFile, proto.ErrNotFile}, {filetree.ErrNoRoot, proto.ErrNoFiles}} {
 		if errors.Is(err, c.err) {
 			code = c.code
 			break
 		}
 	}
-	return proto.Errorf(code, "%v", err)
+	return code
 }
 
 func (s *Server) filesList(p proto.FilesListParams) (any, *proto.Error) {

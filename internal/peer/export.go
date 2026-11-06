@@ -64,6 +64,12 @@ type dispatcher struct {
 	// pages is this server's project pages switch for the peer now, for
 	// a project (§16.17); nil where the server serves no pages.
 	pages func(project string) bool
+	// worktrees is this server's files switch for the peer now, for a
+	// project; nil where the server serves no folders. d.files is the
+	// link's file offers.
+	worktrees func(project string) bool
+	// worktreeLimit is this peer's rate on them.
+	worktreeLimit worktreeRate
 	// nonces are the nonces given the peer for its acts (peer.nonce).
 	nonces nonces
 	// panesHere takes the peer's switches for this server, which it
@@ -84,7 +90,9 @@ type dispatcher struct {
 // pane switch and the conversations switch let the peer (§16.14);
 // peer.name changes only the name this server shows for the peer, never
 // its alias (§16.8); peer.act acts on one of this server's needs only
-// while the needs switch is answer, as the peer's user (§16.16).
+// while the needs switch is answer, as the peer's user (§16.16);
+// peer.worktree.* read a shared project's folders only while the files
+// switch lets the peer.
 func (d *dispatcher) methods() map[string]handler {
 	if d == nil || (d.ex == nil && d.msgs == nil && d.panes == nil && d.files == nil && d.transcripts == nil && d.panesHere == nil && d.named == nil) {
 		return nil
@@ -105,6 +113,7 @@ func (d *dispatcher) methods() map[string]handler {
 		d.needsMethods(m)
 		d.pagesMethods(m)
 		d.designsMethods(m)
+		d.worktreeMethods(m)
 	}
 	if d.msgs != nil {
 		m[proto.MethodPeerMessage] = d.message
@@ -132,6 +141,11 @@ func (d *dispatcher) projects(ctx context.Context, _ json.RawMessage) (any, erro
 	if _, ok := d.ex.(PagesExporter); ok && d.pages != nil {
 		for i := range ps {
 			ps[i].Pages = d.pages(ps[i].Project)
+		}
+	}
+	if _, ok := d.ex.(WorktreeExporter); ok && d.worktrees != nil {
+		for i := range ps {
+			ps[i].Files = d.worktrees(ps[i].Project)
 		}
 	}
 	out := proto.PeerProjects{Projects: ps, Now: time.Now()}

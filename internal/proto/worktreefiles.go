@@ -94,18 +94,20 @@ type FilesListParams struct {
 // FileEntry is a file or folder. Path names it to files.list and
 // files.read. Status is its mark ("" for none, a file deleted still has
 // its entry), Changed says a folder holds marked files. Link: it is a
-// symbolic link; LinkOut: one that doesn't open.
+// symbolic link; LinkOut: one that doesn't open. Withheld: a paired server's
+// listing shows it by name and won't open it; a server's own never says so.
 type FileEntry struct {
-	Name    string    `json:"name"`
-	Path    string    `json:"path"`
-	Kind    string    `json:"kind"`
-	Size    int64     `json:"size,omitempty"`
-	MTime   time.Time `json:"mtime,omitzero"`
-	Status  string    `json:"status,omitempty"`
-	Changed bool      `json:"changed,omitempty"`
-	Ignored bool      `json:"ignored,omitempty"`
-	Link    bool      `json:"link,omitempty"`
-	LinkOut bool      `json:"link_out,omitempty"`
+	Name     string    `json:"name"`
+	Path     string    `json:"path"`
+	Kind     string    `json:"kind"`
+	Size     int64     `json:"size,omitempty"`
+	MTime    time.Time `json:"mtime,omitzero"`
+	Status   string    `json:"status,omitempty"`
+	Changed  bool      `json:"changed,omitempty"`
+	Ignored  bool      `json:"ignored,omitempty"`
+	Link     bool      `json:"link,omitempty"`
+	LinkOut  bool      `json:"link_out,omitempty"`
+	Withheld bool      `json:"withheld,omitempty"`
 }
 
 // FilesListResult is a folder's entries, folders first by name, or a

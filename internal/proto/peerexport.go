@@ -50,6 +50,7 @@ type PeerProject struct {
 	Threads  int    `json:"threads"`
 	Ready    int    `json:"ready"`
 	Pages    bool   `json:"pages,omitempty"`
+	Files    bool   `json:"files,omitempty"`
 }
 
 // PeerWatchParams are the params of peer.watch. Rev is the Rev of the

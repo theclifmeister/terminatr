@@ -160,7 +160,8 @@ func (e peerExport) Library(c caller.Caller, slug string) (proto.PeerLibrary, er
 	return out, nil
 }
 
-// peerLibraryFileOf is f as a paired server may see it.
+// peerLibraryFileOf is f as a paired server may see it: never its repo,
+// as a paired Overview tells only how many a project has.
 func peerLibraryFileOf(f thread.LibFile) proto.PeerLibraryFile {
 	return proto.PeerLibraryFile{Thread: f.Thread, Task: f.Task, Title: f.Title, State: f.State, Name: f.Name, Size: f.Size, Time: f.Time}
 }

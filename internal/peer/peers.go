@@ -58,7 +58,14 @@ type Peer struct {
 	// (docs/SPEC.md §16.17): their board, overview and library,
 	// read-only; never their memory.
 	Pages []string `json:"pages,omitempty"`
+	// Files are the shared projects whose folders the peer may read, the
+	// files switch, off for every project unlisted, the default: their
+	// threads' worktrees and listed repos, read-only.
+	Files []string `json:"files,omitempty"`
 }
+
+// FilesOn says whether p's files switch is on for project.
+func (p Peer) FilesOn(project string) bool { return project != "" && slices.Contains(p.Files, project) }
 
 // PagesOn says whether p's project pages switch is on for project.
 func (p Peer) PagesOn(project string) bool { return project != "" && slices.Contains(p.Pages, project) }
@@ -131,6 +138,11 @@ func (p Peer) check() error {
 	for _, slug := range p.Pages {
 		if !pageSlug.MatchString(slug) {
 			return fmt.Errorf("peer %s: pages %q is not a project", p.Alias, slug)
+		}
+	}
+	for _, slug := range p.Files {
+		if !pageSlug.MatchString(slug) {
+			return fmt.Errorf("peer %s: files %q is not a project", p.Alias, slug)
 		}
 	}
 	u, err := url.Parse(p.Relay)
@@ -328,7 +340,7 @@ func PinTaken(dir string, key ed25519.PublicKey, relayURL, name, as string, take
 				}
 				// Pairing again keeps the switches and the names.
 				p.Panes, p.Conversations, p.Needs, p.Name, p.Told = q.Panes, q.Conversations, q.Needs, q.Name, q.Told
-				p.Pages = q.Pages
+				p.Pages, p.Files = q.Pages, q.Files
 			case q.Alias == as:
 			default:
 				kept = append(kept, q)
