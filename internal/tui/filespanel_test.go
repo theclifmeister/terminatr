@@ -22,6 +22,7 @@ import (
 
 // fakeFiles answers the files methods: folders by path, files by path.
 type fakeFiles struct {
+	thumbs  map[string][]byte // "t-0001/name" -> its thumbnail
 	dirs    map[string][]proto.FileEntry
 	found   map[string][]proto.FileEntry // by query; "" the changed list
 	texts   map[string]proto.FilesReadResult
@@ -72,6 +73,12 @@ func (f *fakeFiles) install(t *testing.T) {
 				return proto.Errorf(proto.ErrFileGone, "no longer there: %s", p.Path)
 			}
 			*res.(*proto.FilesReadResult) = r
+		case proto.LibraryThumbnailParams:
+			data, ok := f.thumbs[p.ID+"/"+p.Name]
+			if !ok {
+				return proto.Errorf(proto.ErrNoThumbnail, "%s has none", p.Name)
+			}
+			res.(*proto.LibraryThumbnailResult).Data = data
 		case proto.FilesDiffParams:
 			f.diffed = append(f.diffed, p)
 			*res.(*proto.FilesDiffResult) = f.diffs[p.Path]

@@ -90,13 +90,26 @@ func (v *msgView) openKey(m *dash) tea.Cmd {
 // openMsgFile reads file name of message id between slug and other and
 // opens a copy of it in this computer's viewer.
 func (m *dash) openMsgFile(slug, other, id, name string) tea.Cmd {
+	src := m.src
+	return m.openCopy(name, func() ([]byte, bool, error) { return src.LinkFileRead(slug, other, id, name, openMax) })
+}
+
+// openLibCopy is openMsgFile for a library file: by its thread, or the
+// message a linked project sent it with.
+func (m *dash) openLibCopy(slug, id, name string) tea.Cmd {
+	src := m.src
+	return m.openCopy(name, func() ([]byte, bool, error) { return src.LibraryRead(slug, id, name, openMax) })
+}
+
+// openCopy opens a copy of file name, as read returns it, in this
+// computer's viewer.
+func (m *dash) openCopy(name string, read func() ([]byte, bool, error)) tea.Cmd {
 	if !openableType(name) {
 		m.msg = oneLine(name) + " isn't a type tm opens (an image, a PDF, text, a document or media): the Library keeps it"
 		return nil
 	}
-	src := m.src
 	return m.act(func() actionMsg {
-		data, truncated, err := src.LinkFileRead(slug, other, id, name, openMax)
+		data, truncated, err := read()
 		if err != nil {
 			return actionMsg{err: err}
 		}
