@@ -50,6 +50,10 @@ public enum Compatibility: Equatable, Sendable {
     /// template: the board's Done fold and New Task's templates need it.
     public static let boardAPI = 20
 
+    /// The app API whose task.done takes a range and answers Done's
+    /// groups, the archive's tasks counted: the board's Done by day.
+    public static let doneGroupsAPI = 57
+
     /// The app API that has task.priority and a task's priority: the
     /// board's priority tags and the task view's Priority menu need it.
     public static let priorityAPI = 42
@@ -252,6 +256,12 @@ public enum Compatibility: Equatable, Sendable {
     /// tm's come in board order, without one, and show as they come.
     public static func listsDone(_ hello: AppAPI.Hello) -> Bool {
         hello.appApi >= boardAPI && hello.methods.contains(AppAPI.Methods.taskDone.name)
+    }
+
+    /// Whether hello's tm answers Done's groups and ranges (DoneLedger);
+    /// an older one lists the board's done tasks whole.
+    public static func groupsDone(_ hello: AppAPI.Hello) -> Bool {
+        hello.appApi >= doneGroupsAPI && listsDone(hello)
     }
 
     /// Whether hello's tm lists task templates and adds a task with one

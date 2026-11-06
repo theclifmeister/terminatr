@@ -1439,10 +1439,40 @@ final class AppModel {
         return false
     }
 
+    /// Whether this tm answers Done's groups and ranges (app API 57).
+    var groupsDone: Bool {
+        if case .connected(let h) = phase { return Compatibility.groupsDone(h) }
+        return false
+    }
+
     /// The done tasks of project's board as task.done answers: newest
-    /// first, or board order from an older tm.
+    /// first, or board order from an older tm. With groupsDone, the
+    /// archive's too, read a page at a time, as the board's filter finds
+    /// them.
     func doneTasks(_ project: String) async throws -> [AppAPI.Task] {
-        try await connected().call(AppAPI.Methods.taskDone, AppAPI.ProjectParams(project: project)).tasks
+        let bridge = try connected()
+        guard groupsDone else {
+            return try await bridge.call(AppAPI.Methods.taskDoneAll, AppAPI.ProjectParams(project: project)).tasks
+        }
+        var out: [AppAPI.Task] = []
+        var offset = 0
+        repeat {
+            let page = try await bridge.call(AppAPI.Methods.taskDone, AppAPI.TaskDoneParams(project: project, archived: true, offset: offset, limit: 500, tz: TimeZone.current.identifier))
+            out += page.tasks
+            offset = page.next
+        } while offset > 0
+        return out
+    }
+
+    /// Done's headings for project, in the viewer's time zone.
+    func doneGroups(_ project: String) async throws -> AppAPI.DoneTasks {
+        try await connected().call(AppAPI.Methods.taskDone, AppAPI.TaskDoneParams(project: project, groups: true, tz: TimeZone.current.identifier))
+    }
+
+    /// limit of group's rows from offset, the archive read only when the
+    /// group holds archived tasks.
+    func doneRows(_ project: String, _ group: AppAPI.DoneGroup, offset: Int = 0, limit: Int = DoneLedger.page) async throws -> AppAPI.DoneTasks {
+        try await connected().call(AppAPI.Methods.taskDone, AppAPI.TaskDoneParams(project: project, from: group.from, to: group.to, archived: group.archived > 0, offset: offset, limit: limit, tz: TimeZone.current.identifier))
     }
 
     /// Whether this tm answers a project's daily numbers (app API 58).

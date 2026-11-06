@@ -119,6 +119,22 @@ func (l *liveActions) Project(slug string) bool {
 	return err == nil
 }
 
+func (l *liveActions) ArchivedTask(slug, ref string) *tasks.Task {
+	id, ok := tasks.ParseRef(ref)
+	if !ok {
+		return nil
+	}
+	p, err := project.Open(slug)
+	if err != nil {
+		return nil
+	}
+	a, err := p.Tasks().LoadArchive()
+	if err != nil {
+		return nil
+	}
+	return a.Find(id)
+}
+
 func (l *liveActions) Task(slug, ref string) *tasks.Task {
 	b, ok := l.boards[slug]
 	if !ok {

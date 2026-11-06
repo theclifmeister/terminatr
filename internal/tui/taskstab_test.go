@@ -234,3 +234,30 @@ func feed(m *dash, cmd tea.Cmd) {
 		m.Update(msg)
 	}
 }
+
+// TestArchivedTaskShows: enter on an archived row of Done opens the task
+// over the popup, marked, and no key acts on it.
+func TestArchivedTaskShows(t *testing.T) {
+	_, m := panelDash(t)
+	pv := &projectView{slug: "alpha"}
+	m.push(pv)
+	old := &tasks.Task{ID: 9, Title: "Long gone", Status: tasks.Done, Archived: true}
+	msg := bindingMsg{
+		b:        binding{mod: "tasks-tab", action: widget.Action{ID: "task.show", Target: map[string]string{"project": "alpha", "task": "T9"}}},
+		board:    &tasks.Board{},
+		archived: old,
+	}
+	drain(t, m, m.runBinding(msg))
+	tv, ok := m.top().(*taskView)
+	if !ok || tv.id != 9 {
+		t.Fatalf("opened %T", m.top())
+	}
+	if out := tv.render(m); !strings.Contains(out, "archived") || !strings.Contains(out, "Long gone") || strings.Contains(out, "send back") {
+		t.Errorf("the task:\n%s", out)
+	}
+	for _, k := range []string{"X", "D", "A", "P", "c"} {
+		if cmd := tv.key(m, tea.KeyPressMsg{Code: rune(k[0]), Text: k}); cmd != nil {
+			t.Errorf("%s acted on an archived task", k)
+		}
+	}
+}

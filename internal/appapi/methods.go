@@ -175,7 +175,7 @@ func init() {
 		// The board's done tasks, which projects.watch leaves out, for
 		// the board's Show Done, and the task templates of the
 		// project's mods for New Task (app API 20).
-		unary(proto.MethodTaskDone, false, taskDoneParams, doneTasksOf),
+		unary(proto.MethodTaskDone, false, taskDoneListParams, doneTasksOf),
 		unary(proto.MethodTaskTemplates, false, taskDoneParams, templatesOf),
 		// What a project's link waits on the user for, answered in place
 		// (app API 16; the server's caps say link-act), with tm link's
@@ -543,6 +543,10 @@ func historyParams(p ProjectParams) proto.HistoryParams {
 
 func taskDoneParams(p ProjectParams) proto.TaskDoneParams {
 	return proto.TaskDoneParams{Project: p.Project}
+}
+
+func taskDoneListParams(p TaskDoneParams) proto.TaskDoneParams {
+	return proto.TaskDoneParams{Project: p.Project, Groups: p.Groups, From: p.From, To: p.To, Archived: p.Archived, Offset: p.Offset, Limit: p.Limit, TZ: p.TZ}
 }
 
 func projectActiveParams(p ProjectActiveParams) proto.ProjectActiveParams {

@@ -1,43 +1,407 @@
 {
-  "name": "b shows the done tasks, newest by when they finished, each bound to task.send-back",
+  "name": "b shows Done by day: open days with their rows, older work folded, each row bound to task.send-back",
   "answers": [
-    { "method": "tasks.list", "params": { "slug": "demo" },
+    {
+      "method": "tasks.list",
+      "params": {
+        "slug": "demo"
+      },
       "result": [
-        { "id": "T6", "title": "Old", "status": "done", "steps_done": 1, "steps_total": 1, "steps": [{ "text": "Ship", "done": true }], "updated": "2026-10-30", "done_at": "2020-09-01", "done_label": "1 Sep 2020", "priority": "must" },
-        { "id": "T7", "title": "Newer", "status": "done", "steps_done": 0, "steps_total": 0, "steps": [], "updated": "2026-10-01", "done_at": "2020-10-01T10:00:00Z", "done_label": "10:00" },
-        { "id": "T8", "title": "Undated", "status": "done", "steps_done": 0, "steps_total": 0, "steps": [], "updated": "2020-09-15" }
-      ] }
+        {
+          "id": "T6",
+          "title": "Old",
+          "status": "done",
+          "steps_done": 1,
+          "steps_total": 1,
+          "steps": [
+            {
+              "text": "Ship",
+              "done": true
+            }
+          ],
+          "updated": "2026-10-30",
+          "done_at": "2020-09-01",
+          "done_label": "1 Sep 2020",
+          "priority": "must"
+        },
+        {
+          "id": "T7",
+          "title": "Newer",
+          "status": "done",
+          "steps_done": 0,
+          "steps_total": 0,
+          "steps": [],
+          "updated": "2026-10-01",
+          "done_at": "2020-10-01T10:00:00Z",
+          "done_label": "10:00"
+        },
+        {
+          "id": "T8",
+          "title": "Undated",
+          "status": "done",
+          "steps_done": 0,
+          "steps_total": 0,
+          "steps": [],
+          "updated": "2020-09-15"
+        }
+      ]
+    },
+    {
+      "method": "tasks.done",
+      "params": {
+        "slug": "demo",
+        "options": {
+          "groups": true,
+          "reveal": ""
+        }
+      },
+      "result": {
+        "tasks": [],
+        "total": 3,
+        "next": 0,
+        "groups": [
+          {
+            "kind": "day",
+            "title": "Thu 1 Oct 2020",
+            "from": "2020-10-01",
+            "to": "2020-10-01",
+            "count": 1,
+            "archived": 0,
+            "open": true,
+            "tasks": [
+              {
+                "id": "T7",
+                "title": "Newer",
+                "status": "done",
+                "steps_done": 0,
+                "steps_total": 0,
+                "steps": [],
+                "updated": "2026-10-01",
+                "done_at": "2020-10-01T10:00:00Z",
+                "done_label": "10:00"
+              }
+            ],
+            "next": 0
+          },
+          {
+            "kind": "day",
+            "title": "Tue 15 Sep 2020",
+            "from": "2020-09-15",
+            "to": "2020-09-15",
+            "count": 1,
+            "archived": 0,
+            "open": true,
+            "tasks": [
+              {
+                "id": "T8",
+                "title": "Undated",
+                "status": "done",
+                "steps_done": 0,
+                "steps_total": 0,
+                "steps": [],
+                "updated": "2020-09-15"
+              }
+            ],
+            "next": 0
+          },
+          {
+            "kind": "day",
+            "title": "Tue 1 Sep 2020",
+            "from": "2020-09-01",
+            "to": "2020-09-01",
+            "count": 1,
+            "archived": 0,
+            "open": true,
+            "tasks": [
+              {
+                "id": "T6",
+                "title": "Old",
+                "status": "done",
+                "steps_done": 1,
+                "steps_total": 1,
+                "steps": [
+                  {
+                    "text": "Ship",
+                    "done": true
+                  }
+                ],
+                "updated": "2026-10-30",
+                "done_at": "2020-09-01",
+                "done_label": "1 Sep 2020",
+                "priority": "must"
+              }
+            ],
+            "next": 0
+          }
+        ]
+      }
+    }
   ],
   "events": [
-    { "name": "view.opened", "project": "demo",
-      "data": { "view": "tasks", "slot": "project.tab", "project": "demo", "width": 70, "height": 20 } },
-    { "name": "ui.key", "project": "demo",
-      "data": { "view": "tasks", "widget": "tasks", "key": "b", "target": { "project": "demo" } } }
+    {
+      "name": "view.opened",
+      "project": "demo",
+      "data": {
+        "view": "tasks",
+        "slot": "project.tab",
+        "project": "demo",
+        "width": 70,
+        "height": 20
+      }
+    },
+    {
+      "name": "ui.key",
+      "project": "demo",
+      "data": {
+        "view": "tasks",
+        "widget": "tasks",
+        "key": "b",
+        "target": {
+          "project": "demo"
+        }
+      }
+    }
   ],
   "expect": {
     "calls": [
-      { "method": "tasks.list", "params": { "slug": "demo" } },
-      { "method": "ui.view.set", "params": { "view": "tasks",
-          "widget": { "kind": "stack", "children": [
-            { "kind": "table", "rows": [{ "id": "g:done", "head": true }] },
-            { "kind": "text", "text": "… 3 done (b shows them)" },
-            { "kind": "keys", "keys": [{ "key": "b", "label": "done" }, { "key": "p", "label": "must only" }] }
-          ] } } },
-      { "method": "ui.view.set", "params": { "view": "tasks",
-          "widget": { "kind": "stack", "children": [
-            { "kind": "table", "rows": [
-              { "id": "g:done", "head": true },
-              { "id": "T7", "cells": [[{ "text": "T7" }], [{ "text": "Newer" }], [{ "icon": "done", "role": "good" }, { "text": " 10:00", "role": "good" }], []], "actions": [
-                  { "id": "task.show", "target": { "project": "demo", "task": "T7" } },
-                  { "id": "task.send-back", "target": { "project": "demo", "task": "T7" } }] },
-              { "id": "T8", "cells": [[{ "text": "T8" }], [{ "text": "Undated" }], [{ "icon": "done", "role": "good" }, { "text": " done", "role": "good" }], []] },
-              { "id": "T6", "cells": [[{ "text": "T6" }], [{ "text": "Old" }], [{ "icon": "done", "role": "good" }, { "text": " 1 Sep 2020", "role": "good" }], [{ "text": "1/1", "role": "faint" }]],
-                "actions": [
-                  { "id": "task.show", "target": { "project": "demo", "task": "T6" } },
-                  { "id": "task.send-back", "target": { "project": "demo", "task": "T6" } }] }
-            ] },
-            { "kind": "keys", "keys": [{ "key": "b", "label": "hide done" }, { "key": "p", "label": "must only" }] }
-          ] } } }
+      {
+        "method": "tasks.list",
+        "params": {
+          "slug": "demo"
+        }
+      },
+      {
+        "method": "ui.view.set",
+        "params": {
+          "view": "tasks",
+          "widget": {
+            "kind": "stack",
+            "children": [
+              {
+                "kind": "table",
+                "rows": [
+                  {
+                    "id": "g:done",
+                    "head": true
+                  }
+                ]
+              },
+              {
+                "kind": "text",
+                "text": "… 3 done (b shows them)"
+              },
+              {
+                "kind": "keys",
+                "keys": [
+                  {
+                    "key": "b",
+                    "label": "done"
+                  },
+                  {
+                    "key": "p",
+                    "label": "must only"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      },
+      {
+        "method": "tasks.list",
+        "params": {
+          "slug": "demo"
+        }
+      },
+      {
+        "method": "tasks.done",
+        "params": {
+          "slug": "demo",
+          "options": {
+            "groups": true
+          }
+        }
+      },
+      {
+        "method": "ui.view.set",
+        "params": {
+          "view": "tasks",
+          "widget": {
+            "kind": "stack",
+            "children": [
+              {
+                "kind": "table",
+                "rows": [
+                  {
+                    "id": "g:done",
+                    "head": true,
+                    "spans": [
+                      {
+                        "text": "DONE · 3",
+                        "role": "head"
+                      },
+                      {
+                        "text": "  newest first   b hides   ⏎ opens",
+                        "role": "faint"
+                      }
+                    ]
+                  },
+                  {
+                    "id": "f:2020-10-01:2020-10-01",
+                    "spans": [
+                      {
+                        "text": "Thu 1 Oct 2020"
+                      },
+                      {
+                        "text": " · 1",
+                        "role": "faint"
+                      }
+                    ]
+                  },
+                  {
+                    "id": "T7",
+                    "cells": [
+                      [
+                        {
+                          "text": "T7"
+                        }
+                      ],
+                      [
+                        {
+                          "text": "Newer"
+                        }
+                      ],
+                      [
+                        {
+                          "icon": "done",
+                          "role": "good"
+                        },
+                        {
+                          "text": " 10:00",
+                          "role": "good"
+                        }
+                      ],
+                      []
+                    ],
+                    "actions": [
+                      {
+                        "id": "task.show",
+                        "target": {
+                          "project": "demo",
+                          "task": "T7"
+                        }
+                      },
+                      {
+                        "id": "task.send-back",
+                        "target": {
+                          "project": "demo",
+                          "task": "T7"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "f:2020-09-15:2020-09-15"
+                  },
+                  {
+                    "id": "T8",
+                    "cells": [
+                      [
+                        {
+                          "text": "T8"
+                        }
+                      ],
+                      [
+                        {
+                          "text": "Undated"
+                        }
+                      ],
+                      [
+                        {
+                          "icon": "done",
+                          "role": "good"
+                        },
+                        {
+                          "text": " done",
+                          "role": "good"
+                        }
+                      ],
+                      []
+                    ]
+                  },
+                  {
+                    "id": "f:2020-09-01:2020-09-01"
+                  },
+                  {
+                    "id": "T6",
+                    "cells": [
+                      [
+                        {
+                          "text": "T6"
+                        }
+                      ],
+                      [
+                        {
+                          "text": "Old"
+                        }
+                      ],
+                      [
+                        {
+                          "icon": "done",
+                          "role": "good"
+                        },
+                        {
+                          "text": " done",
+                          "role": "good"
+                        }
+                      ],
+                      [
+                        {
+                          "text": "1/1",
+                          "role": "faint"
+                        }
+                      ]
+                    ],
+                    "actions": [
+                      {
+                        "id": "task.show",
+                        "target": {
+                          "project": "demo",
+                          "task": "T6"
+                        }
+                      },
+                      {
+                        "id": "task.send-back",
+                        "target": {
+                          "project": "demo",
+                          "task": "T6"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "kind": "keys",
+                "keys": [
+                  {
+                    "key": "b",
+                    "label": "hide done"
+                  },
+                  {
+                    "key": "enter",
+                    "label": "open or fold"
+                  },
+                  {
+                    "key": "p",
+                    "label": "must only"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
     ]
   }
 }
