@@ -31,6 +31,8 @@ func fillAll(v reflect.Value) {
 		v.SetBool(true)
 	case reflect.Int, reflect.Int64:
 		v.SetInt(7)
+	case reflect.Uint8:
+		v.SetUint(7)
 	case reflect.Pointer:
 		v.Set(reflect.New(v.Type().Elem()))
 		fillAll(v.Elem())

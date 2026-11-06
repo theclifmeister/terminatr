@@ -185,7 +185,7 @@ func TestParseHunks(t *testing.T) {
 		"@@ -1,2 +0,0 @@\n--- a/f\n-@@ -9 +9 @@\n" +
 		"@@ -5 +3 @@ func x\n-old\n\\ No newline at end of file\n+new\n\\ No newline at end of file\n" +
 		"@@ -9,0 +8,2 @@\n+a\n+b\n"
-	got, binary, cut := parseHunks(patch, false)
+	got, binary, cut := parseHunks(patch, false, maxDiffWire)
 	want := []proto.FilesHunk{
 		{Old: 1, New: 1, Removed: []string{"-- a/f", "@@ -9 +9 @@"}},
 		{Old: 5, New: 3, Added: 1, Removed: []string{"old"}},
@@ -194,14 +194,14 @@ func TestParseHunks(t *testing.T) {
 	if binary || cut || !reflect.DeepEqual(got, want) {
 		t.Errorf("%+v %v %v", got, binary, cut)
 	}
-	got, _, cut = parseHunks("@@ -1,2 +1 @@\n-a\n-b\n+c\n@@ -9,3 +9 @@\n-d\n-e", true)
+	got, _, cut = parseHunks("@@ -1,2 +1 @@\n-a\n-b\n+c\n@@ -9,3 +9 @@\n-d\n-e", true, maxDiffWire)
 	if !cut || len(got) != 1 || got[0].Added != 1 {
 		t.Errorf("a cut in a hunk: %+v %v", got, cut)
 	}
-	if _, binary, _ := parseHunks("diff --git a/f b/f\nBinary files a/f and b/f differ\n", false); !binary {
+	if _, binary, _ := parseHunks("diff --git a/f b/f\nBinary files a/f and b/f differ\n", false, maxDiffWire); !binary {
 		t.Error("binary")
 	}
-	if got, binary, cut := parseHunks("", false); got != nil || binary || cut {
+	if got, binary, cut := parseHunks("", false, maxDiffWire); got != nil || binary || cut {
 		t.Errorf("empty: %+v", got)
 	}
 }
