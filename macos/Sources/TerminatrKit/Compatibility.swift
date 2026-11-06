@@ -203,7 +203,9 @@ public enum Compatibility: Equatable, Sendable {
             && (hello.server?.caps ?? []).contains("sessions-watch")
     }
 
-    /// Whether hello's tm lists the board's done tasks (task.done).
+    /// Whether hello's tm lists the board's done tasks (task.done). Since
+    /// app API 54 they come newest first with each one's doneAt; an older
+    /// tm's come in board order, without one, and show as they come.
     public static func listsDone(_ hello: AppAPI.Hello) -> Bool {
         hello.appApi >= boardAPI && hello.methods.contains(AppAPI.Methods.taskDone.name)
     }

@@ -458,6 +458,9 @@ func (m *dash) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if c := m.modViewsChanged(); c != nil {
 		cmd = tea.Batch(cmd, c)
 	}
+	if c := m.libThumbFetch(); c != nil {
+		cmd = tea.Batch(cmd, c)
+	}
 	if m.view == nil {
 		return m, cmd
 	}
@@ -584,7 +587,7 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			if msg.libOK {
 				pv.library, pv.libErr, pv.libOK = msg.library, msg.libErr, true
-				pv.sel[tabLibrary] = min(pv.sel[tabLibrary], max(len(pv.library)-1, 0))
+				pv.sel[tabLibrary] = min(pv.sel[tabLibrary], max(len(pv.libRows())-1, 0))
 				pv.designs, pv.desErr, pv.desOK = msg.designs, msg.desErr, true
 				pv.sel[tabDesigns] = min(pv.sel[tabDesigns], max(len(pv.shownDesigns())-1, 0))
 			}
@@ -599,6 +602,10 @@ func (m *dash) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case loadedMsg:
 		return m, msg.then(m)
+	case libThumbMsg:
+		msg.pv.thumbBusy = false
+		msg.pv.keepThumb(msg.key, msg.img)
+		return m, nil
 	case actionMsg:
 		m.busy = false
 		m.agentsOK = false // an action may have installed or removed one

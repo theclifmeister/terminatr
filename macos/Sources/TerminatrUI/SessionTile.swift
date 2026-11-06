@@ -186,7 +186,8 @@ public struct PageTile: View {
                 .minimumScaleFactor(0.8)
                 .pageLeading(11.5)
         }
-        .padding(.horizontal, Spacing.hair)
+        // Side by side, none: six cells share a list column 292 wide (T1068).
+        .padding(.horizontal, wide ? Spacing.hair : 0)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, minHeight: tapTarget, alignment: wide ? .leading : .center)
         .padding(.leading, wide ? 13 - Spacing.hair : 0)

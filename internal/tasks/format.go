@@ -18,7 +18,9 @@ import (
 // one "## <group>" heading per non-empty group, and per task a
 // "### T<n> <title>" heading, a metadata line straight after it, notes, and
 // a trailing run of "- [ ]"/"- [x]" steps. A task with a priority has a
-// "priority: must" line straight after the metadata line (priorityLine).
+// "priority: must" line straight after the metadata line (priorityLine),
+// and a done task a "done_at: …" line after that and any parts line
+// (doneAtLine).
 
 var (
 	taskHeading = regexp.MustCompile(`^### T([0-9]+) (.*\S)\s*$`)
@@ -27,6 +29,11 @@ var (
 	// the metadata line: older tm, which refuses a metadata key it
 	// doesn't know, reads it as the notes' first line and writes it back.
 	priorityLine = regexp.MustCompile(`^priority: (must|should|could)\s*$`)
+	// doneAtLine is when a done task finished (Task.DoneAt), on its own
+	// line after the priority and parts lines, for the same reason. It
+	// comes last so that an older tm, reading it as the notes' first
+	// line, still finds those two.
+	doneAtLine = regexp.MustCompile(`^done_at: ([0-9]{4}-[0-9]{2}-[0-9]{2}(?:T[0-9]{2}:[0-9]{2}:[0-9]{2}Z)?)\s*$`)
 )
 
 // partsKey starts an umbrella task's parts line (programs, §5.3), on
@@ -99,6 +106,7 @@ func Parse(data []byte) (*Board, error) {
 			cur.Notes, cur.Steps = splitBody(curBody)
 			cur.Priority, cur.Notes = splitPriority(cur.Notes)
 			cur.Parts, cur.Notes = splitParts(cur.Notes)
+			cur.DoneAt, cur.Notes = splitDoneAt(cur.Notes)
 			b.Tasks = append(b.Tasks, cur)
 		}
 		cur, curBody = nil, nil
@@ -201,6 +209,16 @@ func splitPriority(notes string) (Priority, string) {
 		return NoPriority, notes
 	}
 	return Priority(m[1]), trimBlankLines(rest)
+}
+
+// splitDoneAt takes the done_at line off the top of a task's notes.
+func splitDoneAt(notes string) (string, string) {
+	first, rest, _ := strings.Cut(notes, "\n")
+	m := doneAtLine.FindStringSubmatch(first)
+	if m == nil {
+		return "", notes
+	}
+	return m[1], trimBlankLines(rest)
 }
 
 // splitParts takes the parts line off the top of a task's notes.
@@ -349,6 +367,9 @@ func writeTask(w *bytes.Buffer, t *Task, slug string) {
 			parts[i] = crossLink(slug, x)
 		}
 		w.WriteString(partsKey + strings.Join(parts, ", ") + "\n")
+	}
+	if t.DoneAt != "" {
+		w.WriteString("done_at: " + t.DoneAt + "\n")
 	}
 	if t.Notes != "" {
 		w.WriteString("\n" + t.Notes + "\n")

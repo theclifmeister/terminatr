@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -324,8 +325,47 @@ func TestTaskDone(t *testing.T) {
 	defer app.Close()
 	var res TaskDone
 	if err := app.Call(proto.MethodTaskDone, proto.TaskDoneParams{Project: "web"}, &res); err != nil || len(res.Tasks) != 2 ||
-		res.Tasks[0].Title != "Shipped" || res.Tasks[1].Title != "Also shipped" || res.Tasks[0].Notes != "" || res.Tasks[1].Steps != nil {
+		res.Tasks[0].Title != "Also shipped" || res.Tasks[1].Title != "Shipped" || res.Tasks[0].Steps != nil || res.Tasks[1].Notes != "" ||
+		res.Tasks[0].DoneAt == "" {
 		t.Fatalf("task.done: %+v %v", res, err)
+	}
+	// Newest first by when each finished: not by priority, not by id, not
+	// by updated; a task no journal line or thread dates comes by its day.
+	if err := os.WriteFile(pr.Tasks().TasksPath(), []byte(`# Tasks
+
+## Done
+
+### T1 Must, oldest
+status: done · updated: 2026-11-01
+priority: must
+done_at: 2026-10-01T10:00:00Z
+
+### T2 Newest
+status: done · updated: 2026-10-01
+done_at: 2026-11-02T10:00:00Z
+
+### T3 By its day
+status: done · updated: 2026-10-20
+done_at: 2026-10-20
+
+### T4 Nothing but updated
+status: done · updated: 2026-10-25
+
+### T5 Not done
+status: open · updated: 2026-11-03
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var dated TaskDone
+	if err := app.Call(proto.MethodTaskDone, proto.TaskDoneParams{Project: "web"}, &dated); err != nil {
+		t.Fatal(err)
+	}
+	var ids []int
+	for _, x := range dated.Tasks {
+		ids = append(ids, x.ID)
+	}
+	if !slices.Equal(ids, []int{2, 4, 3, 1}) || dated.Tasks[0].DoneAt != "2026-11-02T10:00:00Z" || dated.Tasks[1].DoneAt != "" || dated.Tasks[2].DoneAt != "2026-10-20" {
+		t.Fatalf("task.done's order: %v %+v", ids, dated.Tasks)
 	}
 	var perr *proto.Error
 	if err := app.Call(proto.MethodTaskDone, proto.TaskDoneParams{Project: "nope"}, nil); !errors.As(err, &perr) || perr.Code != proto.ErrBadParams {

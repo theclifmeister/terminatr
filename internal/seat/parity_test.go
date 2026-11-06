@@ -42,7 +42,7 @@ var coordinatorOnly = map[string]string{
 
 	// A director has no such thing.
 	"cli/project.go printStartup":             "a program has its own: tm program context",
-	"cli/threadreport.go ownThread":           "threads report; a director has none (it fails earlier: no such project)",
+	"cli/threadreport.go ownThread":           "threads report; a director has none (openThreadProject refuses it first)",
 	"link/queue.go send":                      "a project's links; a program's channel is program.Send",
 	"server/active.go dormantRole":            "a program has no active setting; programswitch keeps directors",
 	"server/coordsleep.go asleepList":         "user decision 2026-11-03: directors never sleep",
@@ -90,6 +90,8 @@ var coordinatorOnly = map[string]string{
 	"server/peerneeds.go peerNeeds":           "peers: same",
 	"server/peerpane.go OpenPane":             "peers: same",
 	"server/peertranscript.go OpenTranscript": "peers: same",
+	"server/peerworktree.go WorktreeRepos":    "peers: a director has no repo to read, and answers as a session that isn't there",
+	"server/peerworktree.go worktreeSession":  "peers: same",
 	"server/remotepane.go find":               "peers: same",
 	"tui/networktree.go theirCoord":           "peers: same",
 	"tui/peerdash.go remoteCoord":             "peers: same",

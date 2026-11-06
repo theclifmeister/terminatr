@@ -2,6 +2,7 @@ package tui
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"slices"
@@ -482,5 +483,27 @@ func TestLibraryFold(t *testing.T) {
 	pv.narrowLib("", "")
 	if f, ok := pv.selLib(); !ok || f.Name != "t-0037-19.png" {
 		t.Errorf("after the filter: on %+v %v", f, ok)
+	}
+}
+
+// TestLibraryFoldReload: the selection counts rows, not files, so when a
+// reload leaves fewer rows than files it still lands on one.
+func TestLibraryFoldReload(t *testing.T) {
+	at := time.Date(time.Now().Year(), 3, 15, 12, 0, 0, 0, time.UTC)
+	many := groupOf("t-0037", "T37", "done", "Many", "", "running", 37, at)
+	few := groupOf("t-0001", "T1", "started", "Few", "", "running", 3, at.Add(-time.Hour))
+	src, m := popupData(t)
+	src.library = append(append([]thread.LibFile{}, many...), few...)
+	feed(m, keyPress(m, "A"))
+	pv := m.top().(*projectView)
+	keyPress(m, "8")
+	pv.sel[tabLibrary] = len(pv.libRows()) - 1
+	if f, ok := pv.selLib(); !ok || f.Thread != "t-0001" {
+		t.Fatalf("selected %+v %v", f, ok)
+	}
+	// The board didn't load: only the library is new, as it reloads.
+	m.Update(boardMsg{slug: pv.slug, err: errors.New("no board"), libOK: true, library: many})
+	if got := len(pv.libRows()); got != 7 || pv.sel[tabLibrary] != 6 || !pv.onLibFold() {
+		t.Errorf("after the reload: %d rows, on %d", got, pv.sel[tabLibrary])
 	}
 }

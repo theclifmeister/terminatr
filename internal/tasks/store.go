@@ -179,12 +179,40 @@ func (s *Store) mutate(fn func(b *Board) error) error {
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w; fix the file by hand, tm won't rewrite it", s.TasksPath(), err)
 		}
+		was := make(map[int]Status, len(b.Tasks))
+		for _, t := range b.Tasks {
+			was[t.ID] = t.Status
+		}
+		nextID := b.NextID
 		if err := fn(b); err != nil {
 			return nil, err
 		}
+		s.stampDone(b, was, nextID)
 		b.Slug = s.linkSlug()
 		return b.Render(), nil
 	})
+}
+
+// stampDone keeps DoneAt true to a write: a task that just became done
+// finished now, whichever command moved it, and a task that isn't done
+// has no finish. was holds the tasks' statuses before the write, and a
+// task not in it with an id from nextID on is new; one below that came
+// back from the archive, and keeps what it has.
+func (s *Store) stampDone(b *Board, was map[int]Status, nextID int) {
+	now := time.Now
+	if s.Now != nil {
+		now = s.Now
+	}
+	for _, t := range b.Tasks {
+		if t.Status != Done {
+			t.DoneAt = ""
+			continue
+		}
+		st, ok := was[t.ID]
+		if ok && st != Done || !ok && t.ID >= nextID {
+			t.DoneAt = now().UTC().Format(time.RFC3339)
+		}
+	}
 }
 
 // edit loads one live task under the lock, checks the caller and applies

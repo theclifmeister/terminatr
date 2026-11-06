@@ -78,7 +78,7 @@ func (c *client) commandItems() []aitem {
 	}
 	var out []aitem
 	for _, mc := range c.cmds {
-		if !mc.InMenu() || !mc.Runs(c.focus.info.Project) {
+		if !mc.InMenu() || !mc.Runs(c.focus.info.Project) || c.focus.info.Server != "" {
 			continue
 		}
 		key := ""
@@ -101,9 +101,13 @@ func (c *client) runCommand(mc mod.ModCommand) {
 		info = c.focus.info
 	}
 	slug := info.Project
-	run := mc.Runs(slug)
+	// A paired server's pane has that server's project: the local
+	// project of the same name's commands don't run on it.
+	run := mc.Runs(slug) && info.Server == ""
 	if run {
 		c.flash = "ran " + mc.Title
+	} else if info.Server != "" {
+		c.flash = mc.Title + " (" + mc.Mod + ") doesn't run on a paired server's pane"
 	} else {
 		c.flash = mc.Title + " (" + mc.Mod + ") doesn't run for " + slug
 	}

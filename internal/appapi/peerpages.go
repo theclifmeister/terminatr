@@ -69,7 +69,7 @@ func peerPagesOf(p proto.PeerPages) PeerPages {
 		Tasks: make([]Task, 0, len(p.Tasks)), Truncated: p.Truncated}
 	for _, t := range p.Tasks {
 		task := Task{ID: t.ID, Ref: (&tasks.Task{ID: t.ID}).Ref(), Title: t.Title, Status: t.Status, Thread: t.Thread,
-			Created: t.Created, Updated: t.Updated}
+			Created: t.Created, Updated: t.Updated, DoneAt: t.DoneAt}
 		for i, s := range t.Steps {
 			task.Steps = append(task.Steps, Step{N: i + 1, Text: s.Text, Done: s.Done})
 		}

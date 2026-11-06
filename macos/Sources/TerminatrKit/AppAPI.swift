@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 53
+    public static let version = 54
 
     public struct AdoptRequestParams: Codable, Sendable, Hashable {
         public var id: String
@@ -4130,9 +4130,10 @@ public enum AppAPI {
         public var owner: String
         public var created: String
         public var updated: String
+        public var doneAt: String
         public var after: [TaskDep]
 
-        public init(id: Int, ref: String, title: String, status: String, priority: String = "", notes: String = "", steps: [Step] = [], thread: String = "", owner: String = "", created: String = "", updated: String = "", after: [TaskDep] = []) {
+        public init(id: Int, ref: String, title: String, status: String, priority: String = "", notes: String = "", steps: [Step] = [], thread: String = "", owner: String = "", created: String = "", updated: String = "", doneAt: String = "", after: [TaskDep] = []) {
             self.id = id
             self.ref = ref
             self.title = title
@@ -4144,6 +4145,7 @@ public enum AppAPI {
             self.owner = owner
             self.created = created
             self.updated = updated
+            self.doneAt = doneAt
             self.after = after
         }
 
@@ -4159,6 +4161,7 @@ public enum AppAPI {
             case owner
             case created
             case updated
+            case doneAt = "done_at"
             case after
         }
     }
@@ -6946,6 +6949,7 @@ extension AppAPI.Task {
         self.owner = try c.decodeIfPresent(String.self, forKey: .owner) ?? ""
         self.created = try c.decodeIfPresent(String.self, forKey: .created) ?? ""
         self.updated = try c.decodeIfPresent(String.self, forKey: .updated) ?? ""
+        self.doneAt = try c.decodeIfPresent(String.self, forKey: .doneAt) ?? ""
         self.after = try c.decodeIfPresent([AppAPI.TaskDep].self, forKey: .after) ?? []
     }
 }

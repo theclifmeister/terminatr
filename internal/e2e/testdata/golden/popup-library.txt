@@ -34,7 +34,7 @@
       │                                                                                                          │
       │                                                                                                          │
       │                                                                                                          │
- ─────│ enter read · X delete · D delete the thread's · ← → tabs · esc close                                     │
+ ─────│ enter read · o open · X delete · D delete the thread's · ← → tabs · esc close                            │
  demo ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────╯──────
  0 threads · coordinator not runn… │
  tab sidebar · ? help              │
