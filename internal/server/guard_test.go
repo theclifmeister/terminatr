@@ -1383,7 +1383,7 @@ func TestDroppedGuardEvent(t *testing.T) {
 	pre := map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": map[string]any{"command": "ls"}}
 	for _, name := range []string{"claude", "codex"} {
 		res := s.hookEvent(proto.HookEventParams{Session: "s-9", Agent: name, Event: "PreToolUse", Payload: pre})
-		if !strings.Contains(res.Stdout, `"permissionDecision":"deny"`) || !strings.Contains(res.Stdout, "tm couldn't check this call") {
+		if !strings.Contains(res.Stdout, `"permissionDecision":"deny"`) || !strings.Contains(res.Stdout, "tm couldn't check this call (its server has no such session)") {
 			t.Errorf("%s: %q", name, res.Stdout)
 		}
 	}
