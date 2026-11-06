@@ -664,8 +664,9 @@ final class AppModel {
         projects.first { $0.slug == slug }
     }
 
+    /// ref's thread on this server; nil for a paired server's.
     func thread(_ ref: SessionRef) -> AppAPI.Thread? {
-        project(ref.project)?.threads.first { $0.record.id == ref.thread }
+        ref.ownThread(in: projects)
     }
 
     /// The needs of a project (its badge, its dashboard's Needs you).

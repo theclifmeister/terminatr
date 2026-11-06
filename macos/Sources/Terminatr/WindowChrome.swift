@@ -395,9 +395,9 @@ struct MainPane<Content: View>: View {
         switch selection {
         case .session(let ref):
             let m = own ?? app.model(ref)
+            let named = ref.naming(in: app.projects, peers: app.peers)
             return Self.head(ref, tab: m.tab, agent: app.session(of: m)?.agent ?? ref.session(in: app.peers)?.agent ?? "",
-                             task: ref.isRemote ? ref.session(in: app.peers)?.task : app.thread(ref)?.task?.ref,
-                             title: app.thread(ref).map { $0.task?.title ?? $0.record.title } ?? "")
+                             task: named.task, title: named.title)
         case .project(let slug, let server):
             let tab = app.projectTab
             return (tab.symbol, tab.rawValue, server.isEmpty ? slug : "\(server) › \(slug)")
