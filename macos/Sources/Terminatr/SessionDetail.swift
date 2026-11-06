@@ -105,6 +105,7 @@ struct SessionWindow: View {
         .overlay { WindowEdge() }
         .background { WindowButtons() }
         .ignoresSafeArea()
+        .ownsSectionFocus()
         .foregroundStyle(theme.ink)
         .navigationTitle(app.title(ref))
         .onDisappear { model.stop() }

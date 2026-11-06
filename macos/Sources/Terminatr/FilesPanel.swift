@@ -13,6 +13,7 @@ import TerminatrUI
 struct FilesPanel: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
+    @Environment(SectionFocusOwner.self) private var sections
     let model: FilesModel
     let place: FilesPlace
     /// A session window's own session model.
@@ -60,6 +61,9 @@ struct FilesPanel: View {
                 model.wantsFocus = false
                 treeFocused = true
             }
+        }
+        .onChange(of: sections.ask?.id) {
+            if sections.ask?.section == .files { treeFocused = true }
         }
     }
 
