@@ -50,6 +50,16 @@ type libFixture struct {
 		More  int    `json:"more"`
 		Fewer bool   `json:"fewer"`
 	} `json:"fold"`
+	Biggest []struct {
+		Library string   `json:"library"`
+		Query   string   `json:"query"`
+		Kind    string   `json:"kind"`
+		Names   []string `json:"names"`
+	} `json:"biggest"`
+	Sort []struct {
+		Files int  `json:"files"`
+		Shows bool `json:"shows"`
+	} `json:"sort"`
 }
 
 func TestLibraryFilterFixture(t *testing.T) {

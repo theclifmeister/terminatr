@@ -57,9 +57,7 @@ public enum LibraryPage {
 
         /// "T12 · Fix the build", or "from web" for a linked project's.
         public var title: String {
-            guard let f = files.first else { return id }
-            if !f.peer.isEmpty { return "from \(f.peer)" }
-            return [f.task, f.title].filter { !$0.isEmpty }.joined(separator: " · ")
+            files.first.map(LibraryPage.source) ?? id
         }
 
         /// "t-0003 · archived" (its thread and state), or how many a
@@ -108,6 +106,39 @@ public enum LibraryPage {
             let f = LibraryPage.fold(files.count, open: open, query: query)
             return (Array(files.prefix(f.rows)), f.more, f.fewer)
         }
+    }
+
+    /// How the page lists (T1056): by group, newest first, or flat, biggest
+    /// first.
+    public enum Sort: String, CaseIterable, Sendable {
+        case newest = "Newest", biggest = "Biggest"
+    }
+
+    /// Whether a library has anything to sort: two files. The TUI's
+    /// libShowsSort.
+    public static func showsSort(_ files: [AppAPI.LibraryFile]) -> Bool { files.count >= 2 }
+
+    /// Whether it lists biggest first: asked for, and for as long as the
+    /// library has two files.
+    public static func isFlat(_ files: [AppAPI.LibraryFile], _ sort: Sort) -> Bool {
+        sort == .biggest && showsSort(files)
+    }
+
+    /// The files by size, the biggest first; equal sizes keep their order,
+    /// the list's, newest first. The TUI's libBiggestFirst, the offset
+    /// because Swift's sort doesn't promise to be stable.
+    public static func biggestFirst(_ files: [AppAPI.LibraryFile]) -> [AppAPI.LibraryFile] {
+        files.enumerated()
+            .sorted { $0.element.size != $1.element.size ? $0.element.size > $1.element.size : $0.offset < $1.offset }
+            .map(\.element)
+    }
+
+    /// What a file came with: "T12 · Fix the build", its thread when it has
+    /// neither, or "from web" for a linked project's.
+    public static func source(_ f: AppAPI.LibraryFile) -> String {
+        if !f.peer.isEmpty { return "from \(f.peer)" }
+        let s = [f.task, f.title].filter { !$0.isEmpty }.joined(separator: " · ")
+        return s.isEmpty ? f.thread : s
     }
 
     /// How many rows a folded group shows.

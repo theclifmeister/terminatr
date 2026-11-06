@@ -98,10 +98,7 @@ func libDay(t time.Time) string {
 // status, then the rest. When the kinds don't fit they become a count.
 func libHeading(files []thread.LibFile, w int) (title, meta string) {
 	f := files[0]
-	head := "from " + oneLine(f.Peer)
-	if f.Peer == "" {
-		head = joinSp(f.Task, oneLine(f.Title))
-	}
+	head := libSource(f)
 	if f.Peer == "" && f.TaskStatus != "" {
 		status := oneLine(f.TaskStatus)
 		_, look := stateLook(status)
@@ -150,10 +147,21 @@ type libShownGroup struct {
 	rows  []libRow
 }
 
-// libShownGroups are the listed groups, in order.
+// libShownGroups are the listed groups, in order: biggest first, one
+// with no fold, whose heading doesn't show.
 func (pv *projectView) libShownGroups() []libShownGroup {
 	files := pv.libFiles()
 	var out []libShownGroup
+	if pv.libFlat() {
+		if len(files) == 0 {
+			return nil
+		}
+		g := libShownGroup{files: files}
+		for _, f := range files {
+			g.rows = append(g.rows, libRow{f: f})
+		}
+		return []libShownGroup{g}
+	}
 	for start := 0; start < len(files); {
 		end := start + 1
 		for end < len(files) && files[end].Group() == files[start].Group() {

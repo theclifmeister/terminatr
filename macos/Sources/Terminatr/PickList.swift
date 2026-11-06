@@ -11,6 +11,8 @@ struct PickList<ID: Hashable, Content: View>: View {
     /// The rows' ids, top to bottom: what ↑ and ↓ walk.
     let order: [ID]
     var name: String
+    /// Scrolls to the pick when the list appears: the Library's new order.
+    var reveal = false
     @ViewBuilder var content: Content
     /// A pick takes the keys here, so ↑ and ↓ go on from it.
     @FocusState private var focused: Bool
@@ -29,6 +31,9 @@ struct PickList<ID: Hashable, Content: View>: View {
             .focusEffectDisabled()
             .focused($focused)
             .onChange(of: selection) { focused = true }
+            .onAppear {
+                if reveal, let selection { proxy.scrollTo(selection) }
+            }
             .onMoveCommand { direction in
                 guard let next = PickStep.next(order, from: selection, up: direction == .up, down: direction == .down) else { return }
                 selection = next
