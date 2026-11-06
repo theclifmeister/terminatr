@@ -32,7 +32,10 @@ func TestSmokeFilesPanel(t *testing.T) {
 	y := -1
 	w.WaitUntil("the sidebar's thread row", wait, func(sc string) bool { y = treeRow(sc, "demo", "t-0001"); return y >= 0 })
 	w.Click(8, y)
-	w.WaitFor("worktree", wait)
+	// The panel's own row: its data has come. "worktree" alone is on the
+	// screen already, in the agent's cwd, and F before the data says "no
+	// files here".
+	w.WaitFor("worktree  ", wait)
 
 	// A click on the panel gives it the keyboard, then F its Files view.
 	w.Click(150, 27)

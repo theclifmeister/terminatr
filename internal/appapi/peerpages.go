@@ -83,7 +83,7 @@ func peerPagesOf(p proto.PeerPages) PeerPages {
 func peerLibraryOf(l proto.PeerLibrary) Library {
 	out := Library{Files: make([]LibraryFile, 0, len(l.Files))}
 	for _, f := range l.Files {
-		out.Files = append(out.Files, LibraryFile{Thread: f.Thread, Task: f.Task, Title: f.Title, State: f.State,
+		out.Files = append(out.Files, LibraryFile{Thread: f.Thread, Task: f.Task, TaskStatus: f.TaskStatus, Title: f.Title, State: f.State,
 			Name: f.Name, Size: f.Size, Time: f.Time})
 	}
 	return out

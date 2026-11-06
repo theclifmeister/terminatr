@@ -400,7 +400,13 @@ func filesLay(fv *filesView, w int, focused bool) ([]string, []infoHit) {
 		}
 		if r.lib != nil && r.lib.Group() != group {
 			group = r.lib.Group()
-			add(libGroup(*r.lib, groups[group], w))
+			if fv.program != "" {
+				title, meta := libHeading(groupFiles(rows, group), w)
+				add(title)
+				add(meta)
+			} else {
+				add(libGroup(*r.lib, groups[group], w))
+			}
 		}
 		fv.lineOf[i] = len(lines)
 		l := fileRowLine(r, w, fv.unfolded(r.e.Path))
@@ -428,6 +434,17 @@ func filesLay(fv *filesView, w int, focused bool) ([]string, []infoHit) {
 		add(th().Faint.Render("… more files than show here"))
 	}
 	return lines, hits
+}
+
+// groupFiles are the files of group among rows.
+func groupFiles(rows []fileRow, group string) []thread.LibFile {
+	var out []thread.LibFile
+	for _, r := range rows {
+		if r.lib != nil && r.lib.Group() == group {
+			out = append(out, *r.lib)
+		}
+	}
+	return out
 }
 
 // libPlaceWords is the heading over a member's files in a program's list.
@@ -598,7 +615,7 @@ func programFiles(paths tmclient.Paths, slug string) ([]thread.LibFile, string, 
 	}
 	out := make([]thread.LibFile, 0, len(res.Files))
 	for _, f := range res.Files {
-		out = append(out, thread.LibFile{Thread: f.Thread, Task: f.Task, Title: f.Title, Repo: f.Repo, State: f.State,
+		out = append(out, thread.LibFile{Thread: f.Thread, Task: f.Task, TaskStatus: f.TaskStatus, Title: f.Title, Repo: f.Repo, State: f.State,
 			Name: f.Name, Size: f.Size, Time: f.Time, Peer: f.Peer, Message: f.Message, Project: f.Project, Server: f.Server})
 	}
 	return out, res.Note, nil

@@ -183,7 +183,7 @@ struct PhoneComposer: View {
     private var working: Bool { running && !ref.isRemote }
 
     /// Whether the composer takes files here.
-    private var attaches: Bool { model.attaches(ref) }
+    private var attaches: Bool { model.attaches(ref) || model.holdsFiles(ref) }
 
     /// The line over the composer, if any.
     private var note: (text: String, failed: Bool)? {

@@ -438,6 +438,13 @@ type Task struct {
 	// this board's and other projects', with another program member's
 	// dependency state while programs are on.
 	After []TaskDep `json:"after,omitempty"`
+	// WaitsFor (app API 55; the board's tasks, projects.watch with
+	// detail) are the tasks it still comes after ("T10", or another
+	// project's "acme-api/T12"): none once they are done, dropped or
+	// archived. Waiters are the open tasks of the board that come after
+	// it. Both come from the after field.
+	WaitsFor []string `json:"waits_for,omitempty"`
+	Waiters  int      `json:"waiters,omitempty"`
 }
 
 // Step is one step of a task.
@@ -699,11 +706,19 @@ type Peer struct {
 	// (PeerNeedActParams.Picks); without, such a question is answered
 	// in its pane there.
 	Picks bool `json:"picks,omitempty"`
+	// Uploads: its sessions take files for a prompt (session.upload,
+	// session.prompt's files) while Panes is write; without, the composer
+	// offers none. An older tm here doesn't say it either.
+	Uploads bool `json:"uploads,omitempty"`
 	// Version and RTT (T1032) are its tm's release, as far as known, and
 	// the link's last ping in milliseconds while up; a change of RTT
 	// alone doesn't change Gen.
 	Version string  `json:"version,omitempty"`
 	RTT     float64 `json:"rtt_ms,omitempty"`
+	// Worktree (app API 56): its tm can share its folders; a project's
+	// Files says whether it does with this server. Without, it runs an
+	// older tm, and is never asked.
+	Worktree bool `json:"worktree,omitempty"`
 }
 
 // PeerProject is a project a paired server shares: its goal line,
@@ -737,6 +752,11 @@ type PeerProject struct {
 	// board, overview and library read through peer.pages-read and
 	// peer.library-list.
 	Pages bool `json:"pages,omitempty"`
+	// Files (app API 56): that server's files switch for this one is on
+	// for the project, as its last project list said: its sessions' folders
+	// read through the files methods, which ask it each time. Only a flag:
+	// a device reaches none of those methods.
+	Files bool `json:"files,omitempty"`
 	// Program (app API 44) is the program on this server the project is
 	// a member of, while programs are on: the "· acme" tag. It is listed
 	// both under its program and under this server.
@@ -951,7 +971,7 @@ func projectOf(p server.SideProject) Project {
 
 func taskOf(t server.SideTask) Task {
 	out := Task{ID: t.ID, Ref: (&tasks.Task{ID: t.ID}).Ref(), Title: t.Title, Status: string(t.Status), Priority: string(t.Priority), Notes: t.Notes,
-		Thread: t.Thread, Owner: t.Owner, Created: t.Created, Updated: t.Updated, DoneAt: t.DoneAt}
+		Thread: t.Thread, Owner: t.Owner, Created: t.Created, Updated: t.Updated, DoneAt: t.DoneAt, WaitsFor: t.WaitsFor, Waiters: t.Waiters}
 	for _, s := range t.Steps {
 		out.Steps = append(out.Steps, Step{N: s.N, Text: s.Text, Done: s.Done})
 	}
@@ -1032,8 +1052,8 @@ func peerListOf(l proto.PeerList) PeerList {
 	for _, p := range l.Peers {
 		peer := Peer{Alias: p.Alias, Name: p.Name, ID: p.ID, State: p.State, Reason: p.Reason, Since: p.Since,
 			Projects: make([]PeerProject, 0, len(p.Projects)), ShareWaits: proto.ShareWaits([]proto.PeerMirror{p}),
-			Pane: p.Pane, Panes: p.Panes, Transcript: p.Transcript, Conversations: p.Conversations, Needs: p.Needs, Picks: p.NeedPicks,
-			Version: textsafe.Line(p.Version, 40), RTT: p.RTT}
+			Pane: p.Pane, Panes: p.Panes, Transcript: p.Transcript, Conversations: p.Conversations, Needs: p.Needs, Picks: p.NeedPicks, Uploads: p.Uploads,
+			Version: textsafe.Line(p.Version, 40), RTT: p.RTT, Worktree: p.Worktree}
 		for _, q := range p.Shares {
 			if !q.Out && q.Pending() {
 				peer.ShareRequests = append(peer.ShareRequests, shareRequestOf(q))
@@ -1042,7 +1062,7 @@ func peerListOf(l proto.PeerList) PeerList {
 		offset := time.Duration(p.Offset) * time.Millisecond
 		for _, pp := range p.Projects {
 			pr := PeerProject{Project: pp.Project, Goal: pp.Goal, Paused: pp.Paused, NeedsYou: pp.NeedsYou,
-				Threads: pp.Threads, Ready: pp.Ready, Stale: pp.Stale, Synced: pp.Synced, Sessions: []PeerSession{}, Pages: pp.Pages,
+				Threads: pp.Threads, Ready: pp.Ready, Stale: pp.Stale, Synced: pp.Synced, Sessions: []PeerSession{}, Pages: pp.Pages, Files: pp.Files,
 				Watched: []PeerThread{}, Needs: []PeerNeed{}, Program: progs[p.Alias+"/"+pp.Project]}
 			if pp.Watch != nil {
 				for _, w := range pp.Watch.Threads {
@@ -1605,7 +1625,7 @@ type (
 		Path    string `json:"path"`
 	}
 	// LibraryProgram names a program in library.list, library.read and
-	// library.thumbnail (app API 55), in place of a project; absent
+	// library.thumbnail (app API 59), in place of a project; absent
 	// from an app that doesn't ask, so a tm that doesn't know it isn't
 	// sent it. A tagged struct because a bare field would go out empty.
 	LibraryProgram struct {
@@ -1671,7 +1691,7 @@ type MemoryText struct {
 
 // Library is library.list's result, newest file first; a program's in its
 // order (the director's own, then each member's), with what it leaves out
-// for now in Note (app API 55).
+// for now in Note (app API 59).
 type Library struct {
 	Files []LibraryFile `json:"files"`
 	Note  string        `json:"note,omitempty"`
@@ -1679,26 +1699,28 @@ type Library struct {
 
 // LibraryFile is a file a thread's report attached (Thread, with its
 // Task, Title and State: running, stopped, resolved or archived), or
-// one linked project Peer sent with Message (State received). Repo is the
-// folder name of the thread's repository in a project with several (app
-// API 53; the Library's filter finds by it). A coordinator's or director's
-// own file has "seat" for its Thread (app API 55). In a program's listing
-// Project is the member it is in and Server that member's paired server,
-// both empty for the director's own. library.read names it by Thread, else
-// Message, and Name.
+// one linked project Peer sent with Message (State received). TaskStatus is
+// the status of the thread's task, "" for none (app API 55; the Library's
+// heading says it). Repo is the folder name of the thread's repository in
+// a project with several (app API 53; the Library's filter finds by it and
+// its heading names it). A coordinator's or director's own file has "seat"
+// for its Thread (app API 59). In a program's listing Project is the member
+// it is in and Server that member's paired server, both empty for the
+// director's own. library.read names it by Thread, else Message, and Name.
 type LibraryFile struct {
-	Thread  string    `json:"thread,omitempty"`
-	Task    string    `json:"task,omitempty"`
-	Title   string    `json:"title"`
-	Repo    string    `json:"repo,omitempty"`
-	State   string    `json:"state"`
-	Name    string    `json:"name"`
-	Size    int64     `json:"size"`
-	Time    time.Time `json:"time"`
-	Peer    string    `json:"peer,omitempty"`
-	Message string    `json:"message,omitempty"`
-	Project string    `json:"project,omitempty"`
-	Server  string    `json:"server,omitempty"`
+	Thread     string    `json:"thread,omitempty"`
+	Task       string    `json:"task,omitempty"`
+	TaskStatus string    `json:"task_status,omitempty"`
+	Title      string    `json:"title"`
+	Repo       string    `json:"repo,omitempty"`
+	State      string    `json:"state"`
+	Name       string    `json:"name"`
+	Size       int64     `json:"size"`
+	Time       time.Time `json:"time"`
+	Peer       string    `json:"peer,omitempty"`
+	Message    string    `json:"message,omitempty"`
+	Project    string    `json:"project,omitempty"`
+	Server     string    `json:"server,omitempty"`
 }
 
 // LibraryChunk is library.read's result: Data from Offset (at most
@@ -1727,7 +1749,7 @@ func memoryTextOf(r proto.MemoryReadResult) MemoryText {
 func libraryOf(r proto.LibraryListResult) Library {
 	out := Library{Files: []LibraryFile{}, Note: r.Note}
 	for _, f := range r.Files {
-		out.Files = append(out.Files, LibraryFile{Thread: f.Thread, Task: f.Task, Title: f.Title, Repo: f.Repo, State: f.State,
+		out.Files = append(out.Files, LibraryFile{Thread: f.Thread, Task: f.Task, TaskStatus: f.TaskStatus, Title: f.Title, Repo: f.Repo, State: f.State,
 			Name: f.Name, Size: f.Size, Time: f.Time, Peer: f.Peer, Message: f.Message, Project: f.Project, Server: f.Server})
 	}
 	return out

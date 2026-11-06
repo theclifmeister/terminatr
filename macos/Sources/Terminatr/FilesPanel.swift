@@ -374,22 +374,30 @@ struct FilesPanel: View {
                     .accessibilityAddTraits(.isHeader)
             }
             ForEach(section.groups) { g in
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(g.title)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    Spacer(minLength: 0)
-                    Text(g.detail)
-                        .lineLimit(1)
-                        .fixedSize()
+                if place.isProgram {
+                    // A director's list has the Library's heading.
+                    LibraryHeading(g)
+                        .padding(.horizontal, 8)
+                        .padding(.top, 9)
+                        .padding(.bottom, 3)
+                } else {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(g.title)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        Spacer(minLength: 0)
+                        Text(g.detail)
+                            .lineLimit(1)
+                            .fixedSize()
+                    }
+                    .font(theme.sized(12))
+                    .foregroundStyle(theme.muted)
+                    .padding(.horizontal, 8)
+                    .padding(.top, 9)
+                    .padding(.bottom, 3)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityAddTraits(.isHeader)
                 }
-                .font(theme.sized(12))
-                .foregroundStyle(theme.muted)
-                .padding(.horizontal, 8)
-                .padding(.top, 9)
-                .padding(.bottom, 3)
-                .accessibilityElement(children: .combine)
-                .accessibilityAddTraits(.isHeader)
                 ForEach(g.files, id: \.self) { a in
                     let f = OpenedFile(.attached(a))
                     AttachedNode(file: a, on: model.cursor == f.id) {

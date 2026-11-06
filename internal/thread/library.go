@@ -21,6 +21,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/mdfile"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
 	"github.com/theclifmeister/terminatr/internal/project"
+	"github.com/theclifmeister/terminatr/internal/tasks"
 	"github.com/theclifmeister/terminatr/internal/thumb"
 )
 
@@ -39,7 +40,10 @@ import (
 type LibFile struct {
 	Thread string `json:"thread"`
 	Task   string `json:"task,omitempty"`
-	Title  string `json:"title"`
+	// TaskStatus is that task's status, on the board or in its archive; ""
+	// for a thread with no task, or a task no longer there.
+	TaskStatus string `json:"task_status,omitempty"`
+	Title      string `json:"title"`
 	// Repo is the folder name of the thread's repository, in a project with
 	// several (a filter finds by it); never a path.
 	Repo string `json:"repo,omitempty"`
@@ -77,6 +81,7 @@ func Library(p *project.Project) ([]LibFile, error) {
 	if err != nil {
 		return nil, err
 	}
+	status := taskStatuses(p)
 	live := map[string]bool{}
 	for _, r := range recs {
 		live[r.ID] = true
@@ -92,7 +97,7 @@ func Library(p *project.Project) ([]LibFile, error) {
 			if err != nil {
 				continue
 			}
-			f := LibFile{Thread: r.ID, Task: r.Task, Title: r.Title, State: r.State,
+			f := LibFile{Thread: r.ID, Task: r.Task, TaskStatus: status[r.Task], Title: r.Title, State: r.State,
 				Name: e.Name(), Size: fi.Size(), Time: fi.ModTime()}
 			if several {
 				f.Repo = repoName(r.Repo)
@@ -106,7 +111,7 @@ func Library(p *project.Project) ([]LibFile, error) {
 			continue // archived, then not yet removed: the folder is the truth
 		}
 		for _, f := range archivedLibrary(p, a.ID) {
-			f.Task, f.Title, f.State = a.Task, a.Title, "archived"
+			f.Task, f.TaskStatus, f.Title, f.State = a.Task, status[a.Task], a.Title, "archived"
 			if !several {
 				f.Repo = ""
 			}
@@ -125,6 +130,23 @@ func Library(p *project.Project) ([]LibFile, error) {
 		return a.Name < b.Name
 	})
 	return out, nil
+}
+
+// taskStatuses is every task's status by its ref, the archive's too: a
+// board that can't be read leaves the headings without one.
+func taskStatuses(p *project.Project) map[string]string {
+	out := map[string]string{}
+	s := p.Tasks()
+	for _, load := range []func() (*tasks.Board, error){s.LoadArchive, s.Load} {
+		b, err := load()
+		if err != nil {
+			continue
+		}
+		for _, t := range b.Tasks {
+			out[t.Ref()] = string(t.Status)
+		}
+	}
+	return out
 }
 
 // archiveLibCache remembers an archive's library listing while its

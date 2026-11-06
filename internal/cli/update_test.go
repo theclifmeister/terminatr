@@ -13,15 +13,77 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/proto"
 	"github.com/theclifmeister/terminatr/internal/update"
 )
+
+// TestUpdateByRole: a coordinator installs but never restarts; a thread and
+// a director only check; the human does all of it.
+func TestUpdateByRole(t *testing.T) {
+	coordinator := caller.Caller{Kind: caller.Coordinator, Project: "demo"}
+	thread := caller.Caller{Kind: caller.Thread, Project: "demo", Thread: "t-0001"}
+	director := caller.Caller{Kind: caller.Director, Project: "acme"}
+	installed := func(r *updateRig) bool {
+		b, _ := os.ReadFile(r.exe)
+		return strings.Contains(string(b), "v0.2.0")
+	}
+	for _, who := range []caller.Caller{thread, director} {
+		for _, args := range [][]string{{}, {"--yes"}, {"--yes", "--restart"}, {"--app"}, {"--force"}} {
+			r := newUpdateRig(t, "v0.2.0", "v0.2.0", "bin", true)
+			r.who = who
+			r.u.TTY = true
+			code, _, errs := r.run(t, "y\ny\n", args...)
+			if code != ExitRefused || !strings.Contains(errs, "coordinator-only") || installed(r) || len(r.restarts) != 0 {
+				t.Errorf("%s tm update %v: %d %q installed %v restarts %v", who.Kind, args, code, errs, installed(r), r.restarts)
+			}
+		}
+		r := newUpdateRig(t, "v0.2.0", "v0.2.0", "bin", true)
+		r.who = who
+		if code, out, errs := r.run(t, "", "--check"); code != ExitOK || !strings.Contains(out, "v0.2.0") {
+			t.Errorf("%s --check: %d %q %q", who.Kind, code, out, errs)
+		}
+	}
+
+	// A coordinator's --restart is refused before anything is installed.
+	r := newUpdateRig(t, "v0.2.0", "v0.2.0", "bin", true)
+	r.who = coordinator
+	if code, _, errs := r.run(t, "", "--yes", "--restart"); code != ExitRefused || !strings.Contains(errs, "human-only") || installed(r) || len(r.restarts) != 0 {
+		t.Fatalf("coordinator --restart: %d %q installed %v restarts %v", code, errs, installed(r), r.restarts)
+	}
+	// Its install goes through, and on a terminal it isn't asked to restart.
+	r = newUpdateRig(t, "v0.2.0", "v0.2.0", "bin", true)
+	r.who = coordinator
+	r.u.TTY = true
+	code, out, errs := r.run(t, "y\n", "--yes")
+	if code != ExitOK || !installed(r) || len(r.restarts) != 0 || strings.Contains(errs, "Restart the server now") || !strings.Contains(out, "The restart is the user's") {
+		t.Fatalf("coordinator --yes: %d restarts %v\n%s%s", code, r.restarts, out, errs)
+	}
+
+	// The server's view narrows the environment's: an agent with its
+	// session's variables unset is still that agent.
+	r = newUpdateRig(t, "v0.2.0", "v0.2.0", "bin", true)
+	var out2, errb bytes.Buffer
+	e := &Env{Stdin: strings.NewReader(""), Stdout: &out2, Stderr: &errb, Getenv: func(string) string { return "" },
+		Caller: caller.Caller{Kind: caller.Human}, Identify: func() (caller.Caller, bool) { return thread, true }}
+	if code := e.report("tm update", updateCmd(e, []string{"--yes"}, r.u)); code != ExitRefused || installed(r) {
+		t.Fatalf("narrowed to a thread: %d installed %v %q", code, installed(r), errb.String())
+	}
+	// With no server to answer, the user's own terminal still updates.
+	r = newUpdateRig(t, "v0.2.0", "v0.2.0", "bin", false)
+	e = &Env{Stdin: strings.NewReader(""), Stdout: &out2, Stderr: &errb, Getenv: func(string) string { return "" },
+		Caller: caller.Caller{Kind: caller.Human}, Identify: func() (caller.Caller, bool) { return caller.Caller{}, false }}
+	if code := e.report("tm update", updateCmd(e, []string{"--yes"}, r.u)); code != ExitOK || !installed(r) {
+		t.Fatalf("human with no server: %d installed %v %q", code, installed(r), errb.String())
+	}
+}
 
 type updateRig struct {
 	u        *updater
 	exe      string
 	restarts []bool
 	brews    [][]string
+	who      caller.Caller
 }
 
 // newUpdateRig serves release tag with a tm whose `version` prints
@@ -86,7 +148,7 @@ func newUpdateRig(t *testing.T, tag, version, sub string, server bool) *updateRi
 func (r *updateRig) run(t *testing.T, stdin string, args ...string) (int, string, string) {
 	t.Helper()
 	var out, errb bytes.Buffer
-	e := &Env{Stdin: strings.NewReader(stdin), Stdout: &out, Stderr: &errb, Getenv: func(string) string { return "" }}
+	e := &Env{Stdin: strings.NewReader(stdin), Stdout: &out, Stderr: &errb, Getenv: func(string) string { return "" }, Caller: r.who}
 	code := e.report("tm update", updateCmd(e, args, r.u))
 	return code, out.String(), errb.String()
 }

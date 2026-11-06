@@ -401,7 +401,7 @@ type SessionPromptParams struct {
 	// Files are the refs session.upload gave, of files in the session's
 	// project's uploads/: the server names each by its path after Text
 	// (an "Attached: <path>" line), so Text may be empty with files. At
-	// most MaxPromptFiles; a paired server's session takes none.
+	// most MaxPromptFiles; a paired server's session's, on that server.
 	Files []string `json:"files,omitempty"`
 }
 
@@ -409,7 +409,8 @@ type SessionPromptParams struct {
 // (the Mac app's composer, docs/SPEC.md §3.8) in its project's uploads/,
 // chunk by chunk (SessionUploadParams), and answers its ref once the
 // last chunk is in: session.prompt's Files name it. The human's only;
-// a session in a project, of this server.
+// a session in a project, of this server or a paired server's (which stores
+// it, docs/SPEC.md §16.12).
 const MethodSessionUpload = "session.upload"
 
 // Bounds of session.upload: a file of at most MaxUpload bytes, sent

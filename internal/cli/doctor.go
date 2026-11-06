@@ -12,6 +12,7 @@ import (
 	"github.com/theclifmeister/terminatr/internal/agent"
 	"github.com/theclifmeister/terminatr/internal/client"
 	"github.com/theclifmeister/terminatr/internal/doctor"
+	"github.com/theclifmeister/terminatr/internal/project"
 	"github.com/theclifmeister/terminatr/internal/service"
 	"github.com/theclifmeister/terminatr/internal/update"
 	"github.com/theclifmeister/terminatr/internal/version"
@@ -37,6 +38,11 @@ func doctorCmd(e *Env, args []string) error {
 	}
 	if err != nil || len(pos) > 0 {
 		return srvUsage("doctor", doctorUsage)
+	}
+	if *fix {
+		if err := e.doctorFixAllowed(); err != nil {
+			return err
+		}
 	}
 	p, err := client.ResolvePaths()
 	if err != nil {
@@ -130,6 +136,16 @@ func doctorCmd(e *Env, args []string) error {
 		fmt.Fprintf(e.Stdout, "  done  %s\n", f.Desc)
 	}
 	return failed
+}
+
+// doctorFixAllowed: --fix removes worktrees and branches and restarts the
+// server, so it is the human's. The checks stay open to every caller.
+func (e *Env) doctorFixAllowed() error {
+	e.identifyBriefly()
+	if e.Caller.IsAgent() {
+		return &project.Error{Code: "human-only", Msg: "tm doctor --fix is the user's, in their own terminal: tell them what tm doctor found"}
+	}
+	return nil
 }
 
 // doctorNameWidth is the least width of the name column: the longest

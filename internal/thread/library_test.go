@@ -1,6 +1,7 @@
 package thread
 
 import (
+	"maps"
 	"os"
 	"strings"
 	"testing"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/project"
+	"github.com/theclifmeister/terminatr/internal/tasks"
 )
 
 func libFixture(t *testing.T) *project.Project {
@@ -111,6 +113,49 @@ func TestLibraryRepo(t *testing.T) {
 	p.Repos = []string{"/work/api", "/work/site"}
 	if got := repos(); got["old.md"] != "api" || got["new.md"] != "site" || got["plain.md"] != "" {
 		t.Errorf("several repos: %v", got)
+	}
+}
+
+// TestLibraryTaskStatus: a file carries its task's status, a task on the
+// board or in its archive and an archived thread's too; no task, or a task
+// that's gone, carries none.
+func TestLibraryTaskStatus(t *testing.T) {
+	p := libFixture(t)
+	day := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
+	human := caller.Caller{Kind: caller.Human}
+	if _, err := p.Tasks().Add(human, []tasks.NewTask{{Title: "On the board"}, {Title: "Archived thread"}, {Title: "Task archived"}}); err != nil {
+		t.Fatal(err)
+	}
+	for id, st := range map[int]tasks.Status{1: tasks.Review, 2: tasks.Done, 3: tasks.Done} {
+		if _, err := p.Tasks().SetStatus(human, id, st, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := p.Tasks().Archive(human, 3); err != nil {
+		t.Fatal(err)
+	}
+	a, _ := Create(p, Record{Title: "A", Task: "T1", State: Running})
+	b, _ := Create(p, Record{Title: "B", Task: "T2", State: Resolved, ResolvedAt: day})
+	c, _ := Create(p, Record{Title: "C", Task: "T3", State: Running})
+	d, _ := Create(p, Record{Title: "D", State: Running})
+	e, _ := Create(p, Record{Title: "E", Task: "T999", State: Running})
+	for name, id := range map[string]string{"a.md": a.ID, "b.md": b.ID, "c.md": c.ID, "d.md": d.ID, "e.md": e.ID} {
+		addLib(t, p, id, name, "x", day)
+	}
+	if err := Archive(p, b); err != nil {
+		t.Fatal(err)
+	}
+	files, err := Library(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for _, f := range files {
+		got[f.Name] = f.TaskStatus
+	}
+	want := map[string]string{"a.md": "review", "b.md": "done", "c.md": "done", "d.md": "", "e.md": ""}
+	if !maps.Equal(got, want) {
+		t.Errorf("statuses %v, want %v", got, want)
 	}
 }
 

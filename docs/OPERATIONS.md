@@ -657,7 +657,7 @@ Panes write for studio: it can watch and type into the coordinator and thread pa
 
 ### Remote conversations
 
-The Mac app on `studio` also shows a paired server's coordinator or thread as a conversation, as it shows its own: the Conversation tab with tool runs, search and the todo list. It follows the panes switch above: at `view` it reads, and the composer says `View only`; at `write` the composer types into the session's pane on `mini` (a paste and Enter, as typing in its Terminal tab does, so a thread's first prompt tells its coordinator there). A question card from `mini` shows that a question is open and says `Answer in Terminal`. On top of the panes switch, `mini` has a conversations switch per paired server, on by default:
+The Mac app on `studio` also shows a paired server's coordinator or thread as a conversation, as it shows its own: the Conversation tab with tool runs, search and the todo list. It follows the panes switch above: at `view` it reads, and the composer says `View only`; at `write` the composer types into the session's pane on `mini` (a paste and Enter, as typing in its Terminal tab does, so a thread's first prompt tells its coordinator there). At `write` it also takes files, an image, a PDF or a text file up to 25 MB: they are stored in the project's `uploads/` on `mini`, and the prompt names them by their path there, so the agent reads them as usual. Turning the switch down stops an upload at its next chunk, and a dropped link fails it with nothing left behind: Retry sends it again. Both servers need a tm that has this, or the paperclip doesn't show. A question card from `mini` shows that a question is open and says `Answer in Terminal`. On top of the panes switch, `mini` has a conversations switch per paired server, on by default:
 
 ```
 $ tm peer conversations studio off
@@ -893,7 +893,7 @@ Each group prints as soon as it is checked. The code-host checks are the slow on
 
 It exits 1 only when a check fails; warnings don't count. `--json` prints the results for scripts.
 
-`tm doctor --fix` lists what it would remove or restart and asks before doing anything. `--yes` skips the question, and you need it when you're not on a terminal. Worktrees with uncommitted changes and unmerged branches are always kept. A branch whose PR was squash-merged looks unmerged to git; delete it yourself with `git branch -D`.
+`tm doctor --fix` is yours: run it in your own terminal, since tm refuses it from an agent's session. It lists what it would remove or restart and asks before doing anything. `--yes` skips the question, and you need it when you're not on a terminal. Worktrees with uncommitted changes and unmerged branches are always kept. A branch whose PR was squash-merged looks unmerged to git; delete it yourself with `git branch -D`.
 
 ## Logs
 

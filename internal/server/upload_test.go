@@ -115,28 +115,28 @@ func TestUploads(t *testing.T) {
 	if perr != nil {
 		t.Fatal(perr)
 	}
-	if _, _, perr := u.add(id, "s-2", 0, []byte("ab"), now); perr == nil {
+	if _, _, perr := u.add(id, "s-2", "", 0, []byte("ab"), now); perr == nil {
 		t.Error("another session's chunk taken")
 	}
-	if _, _, perr := u.add(id, "s-1", 1, []byte("ab"), now); perr == nil {
+	if _, _, perr := u.add(id, "s-1", "", 1, []byte("ab"), now); perr == nil {
 		t.Error("a chunk at the wrong offset taken")
 	}
-	if got, up, perr := u.add(id, "s-1", 0, []byte("ab"), now); perr != nil || up != nil || got != 2 {
+	if got, up, perr := u.add(id, "s-1", "", 0, []byte("ab"), now); perr != nil || up != nil || got != 2 {
 		t.Fatalf("first chunk: %d %v %v", got, up, perr)
 	}
-	if got, up, perr := u.add(id, "s-1", 2, []byte("cd"), now); perr != nil || up == nil || got != 4 || string(up.data) != "abcd" {
+	if got, up, perr := u.add(id, "s-1", "", 2, []byte("cd"), now); perr != nil || up == nil || got != 4 || string(up.data) != "abcd" {
 		t.Fatalf("last chunk: %d %v %v", got, up, perr)
 	}
-	if _, _, perr := u.add(id, "s-1", 4, nil, now); perr == nil {
+	if _, _, perr := u.add(id, "s-1", "", 4, nil, now); perr == nil {
 		t.Error("a finished upload still taken")
 	}
 	// Too much data, and idle ones dropped.
 	id, _ = u.begin(&upload{session: "s-1", size: 2, at: now})
-	if _, _, perr := u.add(id, "s-1", 0, []byte("abc"), now); perr == nil {
+	if _, _, perr := u.add(id, "s-1", "", 0, []byte("abc"), now); perr == nil {
 		t.Error("more than the size taken")
 	}
 	id, _ = u.begin(&upload{session: "s-1", size: 2, at: now})
-	if _, _, perr := u.add(id, "s-1", 0, []byte("a"), now.Add(uploadIdle+time.Second)); perr == nil {
+	if _, _, perr := u.add(id, "s-1", "", 0, []byte("a"), now.Add(uploadIdle+time.Second)); perr == nil {
 		t.Error("an idle upload kept")
 	}
 	// The bounds.

@@ -109,7 +109,7 @@ func TestSmokeProjectPopup(t *testing.T) {
 		t.Fatal(err)
 	}
 	os.MkdirAll(thread.Path(p, done.ID, "library"), 0o755)
-	at := time.Date(2026, 10, 7, 12, 0, 0, 0, time.UTC)
+	at := time.Date(time.Now().Year(), 10, 7, 12, 0, 0, 0, time.UTC) // this year: the heading says no year
 	for name, text := range map[string]string{"options.md": "# Options\n\nUse the first one.\n", "data.json": `{"a":[1,2]}`} {
 		f := thread.Path(p, done.ID, "library", name)
 		os.WriteFile(f, []byte(text), 0o644)

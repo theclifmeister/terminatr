@@ -114,18 +114,19 @@ type MemoryReadResult struct {
 // the member it is in and Server that member's paired server, both empty
 // for the director's own. It carries no path.
 type LibraryFile struct {
-	Thread  string    `json:"thread,omitempty"`
-	Task    string    `json:"task,omitempty"`
-	Title   string    `json:"title"`
-	Repo    string    `json:"repo,omitempty"`
-	State   string    `json:"state"`
-	Name    string    `json:"name"`
-	Size    int64     `json:"size"`
-	Time    time.Time `json:"time"`
-	Peer    string    `json:"peer,omitempty"`
-	Message string    `json:"message,omitempty"`
-	Project string    `json:"project,omitempty"`
-	Server  string    `json:"server,omitempty"`
+	Thread     string    `json:"thread,omitempty"`
+	Task       string    `json:"task,omitempty"`
+	TaskStatus string    `json:"task_status,omitempty"`
+	Title      string    `json:"title"`
+	Repo       string    `json:"repo,omitempty"`
+	State      string    `json:"state"`
+	Name       string    `json:"name"`
+	Size       int64     `json:"size"`
+	Time       time.Time `json:"time"`
+	Peer       string    `json:"peer,omitempty"`
+	Message    string    `json:"message,omitempty"`
+	Project    string    `json:"project,omitempty"`
+	Server     string    `json:"server,omitempty"`
 }
 
 // LibrarySeatID is the library id of a coordinator's or director's own

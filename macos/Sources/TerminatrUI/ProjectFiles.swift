@@ -154,6 +154,57 @@ public struct LibraryChips: View {
     }
 }
 
+/// A Library group's heading (T1055): its title and task's status, then
+/// where its files came from, their day, kinds and size.
+public struct LibraryHeading: View {
+    @Environment(\.theme) private var theme
+    let group: LibraryPage.Group
+
+    public init(_ group: LibraryPage.Group) {
+        self.group = group
+    }
+
+    public var body: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            HStack(alignment: .firstTextBaseline, spacing: 7) {
+                Text(group.title)
+                    .font(theme.sized(Flat.text, .medium))
+                    .foregroundStyle(theme.ink)
+                    .lineLimit(1)
+                if !group.status.isEmpty {
+                    let tone = tone(group.status)
+                    Text(group.status)
+                        .font(theme.mono(.caption2))
+                        .foregroundStyle(tone)
+                        .lineLimit(1)
+                        .fixedSize()
+                        .padding(.horizontal, 4)
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 3).strokeBorder(tone, lineWidth: theme.contrast ? 1.5 : 1)
+                        }
+                }
+            }
+            Text(group.facts())
+                .font(theme.sized(Flat.label))
+                .foregroundStyle(theme.muted)
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
+    }
+
+    private func tone(_ status: String) -> Color {
+        switch status {
+        case "done": theme.good
+        case "review": theme.approval
+        case "started": theme.action
+        case "blocked": theme.attention
+        default: theme.muted
+        }
+    }
+}
+
 /// A library file in the Library page: its name, size and date.
 public struct LibraryFileRow: View {
     @Environment(\.theme) private var theme
