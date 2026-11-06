@@ -107,6 +107,61 @@ func TestConnectWaitsForAStartingServer(t *testing.T) {
 	}
 }
 
+// TestConnectRunningLeavesLeftovers: with no server holding the lock,
+// ConnectRunning says none runs and removes nothing, so asking the server
+// a question can't do tm doctor --fix's work unasked. Connect does remove
+// them.
+func TestConnectRunningLeavesLeftovers(t *testing.T) {
+	p := testPaths(t)
+	files := []string{p.Socket, p.HumanSocket(), p.PID}
+	for _, sock := range []string{p.Socket, p.HumanSocket()} {
+		// A socket file nothing listens on, as a crash leaves it.
+		l, err := net.ListenUnix("unix", &net.UnixAddr{Name: sock, Net: "unix"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		l.SetUnlinkOnClose(false)
+		l.Close()
+	}
+	if err := os.WriteFile(p.PID, []byte("1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ConnectRunning(p); !errors.Is(err, ErrNotRunning) {
+		t.Fatalf("ConnectRunning: %v", err)
+	}
+	for _, f := range files {
+		if _, err := os.Stat(f); err != nil {
+			t.Errorf("ConnectRunning removed %s: %v", f, err)
+		}
+	}
+	if _, err := Connect(p, false); !errors.Is(err, ErrNotRunning) {
+		t.Fatalf("Connect: %v", err)
+	}
+	for _, f := range files {
+		if _, err := os.Stat(f); !os.IsNotExist(err) {
+			t.Errorf("Connect left %s: %v", f, err)
+		}
+	}
+}
+
+// TestConnectRunningWaitsForAStartingServer: a server holding the lock but
+// not yet listening is waited for, as Connect does, so a caller's check
+// doesn't fall back to its environment during a start.
+func TestConnectRunningWaitsForAStartingServer(t *testing.T) {
+	p := testPaths(t)
+	lk, err := flock.TryLock(p.Lock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lk.Unlock()
+	serveHello(t, p.Socket, 300*time.Millisecond)
+	c, err := ConnectRunning(p)
+	if err != nil {
+		t.Fatalf("ConnectRunning: %v", err)
+	}
+	c.Close()
+}
+
 // TestForceKill: with no server holding the lock, ForceKill removes
 // what a crashed one left and says none runs; with the lock held and
 // the pid file naming no live process it kills nothing and removes
