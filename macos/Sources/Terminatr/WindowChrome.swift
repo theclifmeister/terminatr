@@ -476,7 +476,7 @@ struct StatusBar: View {
             if app.isConnected, app.compatibility.message != nil {
                 VersionBadge()
             }
-            Button { app.palette.toggle() } label: {
+            Button { app.togglePalette() } label: {
                 HStack(spacing: 6) {
                     Text("⌘K").foregroundStyle(theme.faint)
                     Text("commands")

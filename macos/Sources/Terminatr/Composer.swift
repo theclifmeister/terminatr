@@ -29,7 +29,7 @@ struct Composer: View {
     @State private var queuedNote = false
     @State private var busy = false
     @State private var interrupting = false
-    @State private var tray = ComposerTray()
+    private var tray: ComposerTray { model.tray }
     @State private var dropping = false
     @State private var pasteMonitor: Any?
     @FocusState private var focused: Bool
@@ -73,7 +73,6 @@ struct Composer: View {
         }
         .onAppear {
             if autofocus { focused = true }
-            tray.call = { [model] p in try await model.upload(p) }
             takeDraft()
             watchPaste()
         }
@@ -209,8 +208,8 @@ struct Composer: View {
         return (blank && tray.refs.isEmpty) || tray.uploading
     }
 
-    /// Whether the composer takes files: this server's sessions, a tm
-    /// with session.upload.
+    /// Whether the composer takes files: a tm with session.upload, and for
+    /// a paired server's session, that server's word (AppModel.attaches).
     private var attaches: Bool { app.attaches(model.ref) }
 
     private var running: Bool { session?.state == "working" }

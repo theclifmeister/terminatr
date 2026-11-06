@@ -1,7 +1,7 @@
 import Foundation
 
 extension AppAPI.Methods {
-    /// task.done as a tm before app API 55 takes it, the project alone: its
+    /// task.done as a tm before app API 57 takes it, the project alone: its
     /// bridge refuses params it doesn't know, which TaskDoneParams sends.
     public static let taskDoneAll = AppAPI.Call<AppAPI.ProjectParams, AppAPI.DoneTasks>("task.done", write: false)
 }
@@ -11,7 +11,7 @@ extension AppAPI.DoneGroup {
     public var key: String { "\(from):\(to)" }
 }
 
-/// What a board shows of Done by day (app API 55; design board-library,
+/// What a board shows of Done by day (app API 57; design board-library,
 /// B3): the groups tm heads it with, which of them the user opened or
 /// folded, and the rows read of each open one. tm decides the groups, so
 /// every surface says the same days in the same words.

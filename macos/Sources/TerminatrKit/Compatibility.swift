@@ -31,7 +31,7 @@ public enum Compatibility: Equatable, Sendable {
 
     /// The app API whose task.done takes a range and answers Done's
     /// groups, the archive's tasks counted: the board's Done by day.
-    public static let doneGroupsAPI = 55
+    public static let doneGroupsAPI = 57
 
     /// The app API that has task.priority and a task's priority: the
     /// board's priority tags and the task view's Priority menu need it.
@@ -80,6 +80,21 @@ public enum Compatibility: Equatable, Sendable {
     /// director's only from directorFilesAPI.
     public static func takesFiles(_ hello: AppAPI.Hello, for ref: SessionRef) -> Bool {
         takesFiles(hello) && (!ref.director || hello.appApi >= directorFilesAPI)
+    }
+
+    /// How many files a composer sends at once to a paired server's session:
+    /// its server holds at most four of this one's in memory, and they share
+    /// a link with the panes.
+    public static let remoteFilesAtOnce = 2
+
+    /// Whether hello's tm takes files for a prompt to ref's session, with
+    /// peer the paired server a paired session is on: while its link is up,
+    /// its tm says it takes them and its pane switch here is write. That
+    /// server checks each again.
+    public static func takesFiles(_ hello: AppAPI.Hello, for ref: SessionRef, peer: AppAPI.Peer?) -> Bool {
+        guard ref.isRemote else { return takesFiles(hello, for: ref) }
+        guard takesFiles(hello), let peer else { return false }
+        return peer.uploads && peer.panes == "type" && peer.state == "up"
     }
 
     /// The app API that has guard.refusals and guard.decide: Settings ›

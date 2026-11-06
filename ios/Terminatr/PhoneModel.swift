@@ -707,10 +707,15 @@ final class PhoneModel {
     }
 
     /// Whether the composer takes files for ref's session (session.upload,
-    /// app API 15, at the write level): this server's sessions only.
+    /// app API 15, at the write level); a paired server's session's while
+    /// that server says so, its pane switch here at write too.
     func attaches(_ ref: SessionRef) -> Bool {
-        !ref.isRemote && hello.map { Compatibility.takesFiles($0, for: ref) } == true && can(AppAPI.Methods.sessionUpload.name)
+        hello.map { Compatibility.takesFiles($0, for: ref, peer: peers.first { $0.alias == ref.server }) } == true && can(AppAPI.Methods.sessionUpload.name)
     }
+
+    /// Whether ref's composer holds files, which it shows whatever became of
+    /// the link or the level since.
+    func holdsFiles(_ ref: SessionRef) -> Bool { trays[ref]?.files.isEmpty == false }
 
     /// ref's composer files, sent in phone-sized chunks to whichever
     /// session runs it when each chunk goes; one the link's drop cut
@@ -722,6 +727,7 @@ final class PhoneModel {
             return try await self.upload(ref, p)
         }
         t.dropped = { Self.isDrop($0) }
+        if ref.isRemote { t.atOnce = Compatibility.remoteFilesAtOnce }
         if source == .demo { t.keep(ComposerFile(name: "login-dark.png", size: 182_406, state: .ready(ref: "demo-login-dark.png"))) }
         trays[ref] = t
         return t

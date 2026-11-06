@@ -165,12 +165,17 @@ type Task struct {
 	// known.
 	DoneAt    string `json:"done_at,omitempty"`
 	DoneLabel string `json:"done_label,omitempty"`
-	// Mod API 1.15: the task is in the archive, off the board
+	// Mod API 1.15: the tasks it still comes after ("T10", or another
+	// project's "acme-api/T12"), none once they are done or dropped, and
+	// how many open tasks of the board come after it.
+	WaitsFor []string `json:"waits_for,omitempty"`
+	Waiters  int      `json:"waiters,omitempty"`
+	// Mod API 1.16: the task is in the archive, off the board
 	// ($.tasks.done): task.show still opens it, no other action does.
 	Archived bool `json:"archived,omitempty"`
 }
 
-// DoneOptions are $.tasks.done's options (mod API 1.15). Groups asks for
+// DoneOptions are $.tasks.done's options (mod API 1.16). Groups asks for
 // Done's headings, reveal (a task, "T12") opening the one that holds it;
 // otherwise from and to narrow the list to days (YYYY-MM-DD, both
 // inclusive, "none" for what nothing dates), archived reads the archive
@@ -185,7 +190,7 @@ type DoneOptions struct {
 	Limit    int    `json:"limit,omitempty"`
 }
 
-// DoneTasks is $.tasks.done's answer (mod API 1.15): the page and how
+// DoneTasks is $.tasks.done's answer (mod API 1.16): the page and how
 // many tasks the range holds, next the offset to read on from (0 at the
 // end); with groups, the headings and how many tasks they hold.
 type DoneTasks struct {
@@ -195,7 +200,7 @@ type DoneTasks struct {
 	Next   int         `json:"next"`
 }
 
-// DoneGroup is one heading of Done (mod API 1.15): kind day, week, month
+// DoneGroup is one heading of Done (mod API 1.16): kind day, week, month
 // or undated; its title in tm's words; its days, from to to; how many
 // tasks it holds and how many of those are archived. An open one comes
 // with its first tasks, next the offset to read on from (0: all there).
@@ -383,7 +388,7 @@ var Methods = []Method{
 	{Name: "tasks.list", Params: []Param{{Name: "slug", Type: typ[string]()}}, Result: typ[[]Task](), Needs: mod.PermProjectRead,
 		Doc: "A project's tasks, in board order."},
 	{Name: "tasks.done", Params: []Param{{Name: "slug", Type: typ[string]()}, {Name: "options", Type: typ[DoneOptions](), Optional: true}}, Result: typ[DoneTasks](), Needs: mod.PermProjectRead,
-		Doc: "A project's done tasks, newest first (mod API 1.15), from tm's task records only, no git, in the server's time zone: with options.groups Done's headings, the newest 7 days with work (at most 30 rows open), then older work by week, then by month, the archive's tasks counted; empty spans have no heading. Otherwise a page of the tasks, by days from options.from to options.to, the archive's too with options.archived."},
+		Doc: "A project's done tasks, newest first (mod API 1.16), from tm's task records only, no git, in the server's time zone: with options.groups Done's headings, the newest 7 days with work (at most 30 rows open), then older work by week, then by month, the archive's tasks counted; empty spans have no heading. Otherwise a page of the tasks, by days from options.from to options.to, the archive's too with options.archived."},
 	{Name: "designs.list", Params: []Param{{Name: "slug", Type: typ[string]()}}, Result: typ[[]Design](), Needs: mod.PermProjectRead,
 		Doc: "A project's designs (mod API 1.10), by name: those tm design set recorded and those a task names (archived tasks too), each with its status from its build tasks, its design task, page, decided answers and open questions. A task's design and after (tasks.list) say which tasks build which."},
 	{Name: "thread.get", Params: []Param{{Name: "project", Type: typ[string]()}, {Name: "thread", Type: typ[string]()}}, Result: typ[*proto.WatchThread](), Needs: mod.PermProjectRead,

@@ -58,11 +58,11 @@ private func group(_ title: String, _ from: String, _ to: String, count: Int, op
 }
 
 /// A tm before Done's groups lists the board's done tasks whole, with the
-/// project alone as its params; 55 answers the groups.
-@Test func doneGroupsNeedAPI55() {
-    var h = AppAPI.Hello(appApi: 54, tm: "v0.82.0", build: "x", methods: [AppAPI.Methods.taskDone.name])
+/// project alone as its params; 57 answers the groups.
+@Test func doneGroupsNeedAPI57() {
+    var h = AppAPI.Hello(appApi: 56, tm: "v0.82.0", build: "x", methods: [AppAPI.Methods.taskDone.name])
     #expect(Compatibility.listsDone(h) && !Compatibility.groupsDone(h))
-    h.appApi = 55
+    h.appApi = 57
     #expect(Compatibility.groupsDone(h))
     #expect(AppAPI.Methods.taskDoneAll.name == AppAPI.Methods.taskDone.name)
 }
@@ -76,7 +76,7 @@ private func group(_ title: String, _ from: String, _ to: String, count: Int, op
     #expect(Dashboard.finishedTime("", calendar: c) == "")
 }
 
-/// What a tm before app API 55 reads: only the project.
+/// What a tm before app API 57 reads: only the project.
 @Test func theOldParamsAreTheProjectAlone() throws {
     let old = try JSONSerialization.jsonObject(with: JSONEncoder().encode(AppAPI.ProjectParams(project: "web"))) as? [String: Any]
     #expect(old?.count == 1)

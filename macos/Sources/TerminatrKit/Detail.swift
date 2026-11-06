@@ -55,7 +55,7 @@ public enum Dashboard {
     }
 
     /// The time of day in doneAt, in the viewer's time zone, for a row
-    /// under its day's heading (app API 55); empty when only the day is
+    /// under its day's heading (app API 57); empty when only the day is
     /// known.
     public static func finishedTime(_ at: String, calendar: Calendar = .current) -> String {
         guard at.count > 10, let t = try? Date(at, strategy: .iso8601) else { return "" }

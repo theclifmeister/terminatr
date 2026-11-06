@@ -355,7 +355,7 @@ func (s *Server) modMethods(b *modbroker.Broker) {
 			return nil, err
 		}
 		items, _ := p.Inbox()
-		return modTasks(board, items), nil
+		return modTasks(p.Slug, board, items), nil
 	})
 	b.Handle("tasks.done", mod.PermProjectRead, func(_ context.Context, c *modbroker.Call) (any, error) {
 		var o struct {
@@ -568,8 +568,9 @@ func (s *Server) modRaise(_ context.Context, c *modbroker.Call) (any, error) {
 
 // modTasks is $.tasks.list's answer: board's tasks, in board order, with
 // what the unhandled items ask about each.
-func modTasks(board *tasks.Board, items []project.Item) []ModTask {
+func modTasks(slug string, board *tasks.Board, items []project.Item) []ModTask {
 	out := []ModTask{}
+	waits := boardWaits(nil, slug, board)
 	for _, t := range board.Tasks {
 		steps := make([]modapi.TaskStep, 0, len(t.Steps))
 		for _, st := range t.Steps {
@@ -578,7 +579,8 @@ func modTasks(board *tasks.Board, items []project.Item) []ModTask {
 		out = append(out, ModTask{ID: t.Ref(), Title: t.Title, Status: string(t.Status),
 			StepsDone: t.StepsDone(), StepsTotal: len(t.Steps), Thread: t.Thread,
 			Steps: steps, Updated: t.Updated, Asked: project.TaskAsked(items, t.Ref()),
-			Design: t.Design, After: taskRefs(t.After), Priority: string(t.Priority), DoneAt: t.DoneAt, DoneLabel: tasks.DoneLabel(t.DoneAt, time.Now()), Archived: t.Archived})
+			Design: t.Design, After: taskRefs(t.After), Priority: string(t.Priority), DoneAt: t.DoneAt, DoneLabel: tasks.DoneLabel(t.DoneAt, time.Now()),
+			WaitsFor: waits.After[t.ID], Waiters: waits.Waiters[t.ID], Archived: t.Archived})
 	}
 	return out
 }
@@ -593,7 +595,15 @@ func modDone(p *project.Project, o modapi.DoneOptions, now time.Time) (modapi.Do
 		return out, err
 	}
 	items, _ := p.Inbox()
-	rows := func(ts []*tasks.Task) []ModTask { return modTasks(&tasks.Board{Tasks: ts}, items) }
+	// A done task waits for nothing, and only part of the board is here
+	// to say otherwise.
+	rows := func(ts []*tasks.Task) []ModTask {
+		out := modTasks(p.Slug, &tasks.Board{Tasks: ts}, items)
+		for i := range out {
+			out[i].WaitsFor, out[i].Waiters = nil, 0
+		}
+		return out
+	}
 	if !o.Groups {
 		page, total, next := tasks.PageDone(done, now.Location(), o.From, o.To, o.Offset, o.Limit)
 		out.Tasks, out.Total, out.Next = rows(page), total, next

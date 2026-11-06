@@ -434,13 +434,20 @@ type Task struct {
 	// (2026-11-06T09:10:44Z), or a day (2026-11-06) when only that is
 	// known; absent when nothing dates it, and from an older tm.
 	DoneAt string `json:"done_at,omitempty"`
-	// Archived (app API 55) is set on a task in the archive, off the
+	// Archived (app API 57) is set on a task in the archive, off the
 	// board: it shows, and nothing acts on it.
 	Archived bool `json:"archived,omitempty"`
 	// After (app API 44; task.get only) are the tasks it comes after,
 	// this board's and other projects', with another program member's
 	// dependency state while programs are on.
 	After []TaskDep `json:"after,omitempty"`
+	// WaitsFor (app API 55; the board's tasks, projects.watch with
+	// detail) are the tasks it still comes after ("T10", or another
+	// project's "acme-api/T12"): none once they are done, dropped or
+	// archived. Waiters are the open tasks of the board that come after
+	// it. Both come from the after field.
+	WaitsFor []string `json:"waits_for,omitempty"`
+	Waiters  int      `json:"waiters,omitempty"`
 }
 
 // Step is one step of a task.
@@ -702,6 +709,10 @@ type Peer struct {
 	// (PeerNeedActParams.Picks); without, such a question is answered
 	// in its pane there.
 	Picks bool `json:"picks,omitempty"`
+	// Uploads: its sessions take files for a prompt (session.upload,
+	// session.prompt's files) while Panes is write; without, the composer
+	// offers none. An older tm here doesn't say it either.
+	Uploads bool `json:"uploads,omitempty"`
 	// Version and RTT (T1032) are its tm's release, as far as known, and
 	// the link's last ping in milliseconds while up; a change of RTT
 	// alone doesn't change Gen.
@@ -954,7 +965,7 @@ func projectOf(p server.SideProject) Project {
 
 func taskOf(t server.SideTask) Task {
 	out := Task{ID: t.ID, Ref: (&tasks.Task{ID: t.ID}).Ref(), Title: t.Title, Status: string(t.Status), Priority: string(t.Priority), Notes: t.Notes,
-		Thread: t.Thread, Owner: t.Owner, Created: t.Created, Updated: t.Updated, DoneAt: t.DoneAt, Archived: t.Archived}
+		Thread: t.Thread, Owner: t.Owner, Created: t.Created, Updated: t.Updated, DoneAt: t.DoneAt, Archived: t.Archived, WaitsFor: t.WaitsFor, Waiters: t.Waiters}
 	for _, s := range t.Steps {
 		out.Steps = append(out.Steps, Step{N: s.N, Text: s.Text, Done: s.Done})
 	}
@@ -1035,7 +1046,7 @@ func peerListOf(l proto.PeerList) PeerList {
 	for _, p := range l.Peers {
 		peer := Peer{Alias: p.Alias, Name: p.Name, ID: p.ID, State: p.State, Reason: p.Reason, Since: p.Since,
 			Projects: make([]PeerProject, 0, len(p.Projects)), ShareWaits: proto.ShareWaits([]proto.PeerMirror{p}),
-			Pane: p.Pane, Panes: p.Panes, Transcript: p.Transcript, Conversations: p.Conversations, Needs: p.Needs, Picks: p.NeedPicks,
+			Pane: p.Pane, Panes: p.Panes, Transcript: p.Transcript, Conversations: p.Conversations, Needs: p.Needs, Picks: p.NeedPicks, Uploads: p.Uploads,
 			Version: textsafe.Line(p.Version, 40), RTT: p.RTT}
 		for _, q := range p.Shares {
 			if !q.Out && q.Pending() {
@@ -1201,7 +1212,7 @@ func taskAddedOf(r proto.TaskAddResult) TaskAdded {
 	return TaskAdded{Task: r.Task, Existing: r.Existing}
 }
 
-// TaskDoneParams are task.done's params (app API 55; only project
+// TaskDoneParams are task.done's params (app API 57; only project
 // before). Groups asks for Done's headings instead of a list; From and To
 // narrow the list to days, both inclusive; Archived reads the archive
 // too; Offset and Limit take a page (Limit 0: all). The days are TZ's, an
@@ -1219,7 +1230,7 @@ type TaskDoneParams struct {
 
 // DoneTasks is task.done's result: done tasks, newest first since app API
 // 54 (board order before), without their notes and steps. Since app API
-// 55: Groups are Done's headings when asked for, Total how many tasks they
+// 57: Groups are Done's headings when asked for, Total how many tasks they
 // or the range hold, Next the offset to read on from (0 at the end).
 type DoneTasks struct {
 	Tasks  []Task      `json:"tasks"`
@@ -1228,7 +1239,7 @@ type DoneTasks struct {
 	Next   int         `json:"next,omitempty"`
 }
 
-// DoneGroup is one heading of Done (app API 55): kind day, week, month or
+// DoneGroup is one heading of Done (app API 57): kind day, week, month or
 // undated; its title in tm's words; its days, from to to; how many tasks
 // it holds and how many of those are archived. An open one comes with its
 // first tasks; Next is the offset to read on from (0: all there).

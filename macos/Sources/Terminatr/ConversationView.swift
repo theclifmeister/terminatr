@@ -186,7 +186,9 @@ struct ConversationTab: View {
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .modifier(Flash(n: flash))
-                        if let remote, !remote.sends {
+                        if let remote, !remote.sends, model.tray.files.isEmpty {
+                            // With files on it the composer stays, to say what
+                            // became of them.
                             ViewOnlyLine(server: model.ref.server)
                         } else {
                             Composer(model: model, session: session)

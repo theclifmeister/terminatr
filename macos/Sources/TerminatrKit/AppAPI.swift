@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 55
+    public static let version = 57
 
     public struct AdoptRequestParams: Codable, Sendable, Hashable {
         public var id: String
@@ -1944,10 +1944,11 @@ public enum AppAPI {
         public var conversations: String
         public var needs: String
         public var picks: Bool
+        public var uploads: Bool
         public var version: String
         public var rttMs: Double
 
-        public init(alias: String, name: String = "", id: String = "", state: String, reason: String = "", since: Date? = nil, projects: [PeerProject] = [], shareWaits: Int = 0, shareRequests: [ShareRequest] = [], pane: Bool = false, panes: String = "", transcript: Bool = false, conversations: String = "", needs: String = "", picks: Bool = false, version: String = "", rttMs: Double = 0) {
+        public init(alias: String, name: String = "", id: String = "", state: String, reason: String = "", since: Date? = nil, projects: [PeerProject] = [], shareWaits: Int = 0, shareRequests: [ShareRequest] = [], pane: Bool = false, panes: String = "", transcript: Bool = false, conversations: String = "", needs: String = "", picks: Bool = false, uploads: Bool = false, version: String = "", rttMs: Double = 0) {
             self.alias = alias
             self.name = name
             self.id = id
@@ -1963,6 +1964,7 @@ public enum AppAPI {
             self.conversations = conversations
             self.needs = needs
             self.picks = picks
+            self.uploads = uploads
             self.version = version
             self.rttMs = rttMs
         }
@@ -1983,6 +1985,7 @@ public enum AppAPI {
             case conversations
             case needs
             case picks
+            case uploads
             case version
             case rttMs = "rtt_ms"
         }
@@ -4175,8 +4178,10 @@ public enum AppAPI {
         public var doneAt: String
         public var archived: Bool
         public var after: [TaskDep]
+        public var waitsFor: [String]
+        public var waiters: Int
 
-        public init(id: Int, ref: String, title: String, status: String, priority: String = "", notes: String = "", steps: [Step] = [], thread: String = "", owner: String = "", created: String = "", updated: String = "", doneAt: String = "", archived: Bool = false, after: [TaskDep] = []) {
+        public init(id: Int, ref: String, title: String, status: String, priority: String = "", notes: String = "", steps: [Step] = [], thread: String = "", owner: String = "", created: String = "", updated: String = "", doneAt: String = "", archived: Bool = false, after: [TaskDep] = [], waitsFor: [String] = [], waiters: Int = 0) {
             self.id = id
             self.ref = ref
             self.title = title
@@ -4191,6 +4196,8 @@ public enum AppAPI {
             self.doneAt = doneAt
             self.archived = archived
             self.after = after
+            self.waitsFor = waitsFor
+            self.waiters = waiters
         }
 
         enum CodingKeys: String, CodingKey {
@@ -4208,6 +4215,8 @@ public enum AppAPI {
             case doneAt = "done_at"
             case archived
             case after
+            case waitsFor = "waits_for"
+            case waiters
         }
     }
 
@@ -6037,6 +6046,7 @@ extension AppAPI.Peer {
         self.conversations = try c.decodeIfPresent(String.self, forKey: .conversations) ?? ""
         self.needs = try c.decodeIfPresent(String.self, forKey: .needs) ?? ""
         self.picks = try c.decodeIfPresent(Bool.self, forKey: .picks) ?? false
+        self.uploads = try c.decodeIfPresent(Bool.self, forKey: .uploads) ?? false
         self.version = try c.decodeIfPresent(String.self, forKey: .version) ?? ""
         self.rttMs = try c.decodeIfPresent(Double.self, forKey: .rttMs) ?? 0
     }
@@ -7047,6 +7057,8 @@ extension AppAPI.Task {
         self.doneAt = try c.decodeIfPresent(String.self, forKey: .doneAt) ?? ""
         self.archived = try c.decodeIfPresent(Bool.self, forKey: .archived) ?? false
         self.after = try c.decodeIfPresent([AppAPI.TaskDep].self, forKey: .after) ?? []
+        self.waitsFor = try c.decodeIfPresent([String].self, forKey: .waitsFor) ?? []
+        self.waiters = try c.decodeIfPresent(Int.self, forKey: .waiters) ?? 0
     }
 }
 
