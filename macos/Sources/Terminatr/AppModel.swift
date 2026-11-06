@@ -130,6 +130,14 @@ final class AppModel {
     var filter = ""
     /// Whether the command palette (⌘K) shows.
     var palette = false
+    /// ⌘K and the buttons: opens or closes the palette. It lives on the main
+    /// window, which takes the keys for it: an ask from a session window
+    /// would leave its field with no keys until a click (T1076).
+    func togglePalette() {
+        palette.toggle()
+        if palette { showWindow?() }
+    }
+
     /// Whether the palette shows a session's cards or composer (its
     /// act): ⌘↩ is its cards' then, bumping paletteChoice.
     var paletteActing = false
