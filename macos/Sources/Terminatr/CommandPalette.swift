@@ -13,6 +13,7 @@ import TerminatrUI
 struct CommandPalette: View {
     @Environment(AppModel.self) private var app
     @Environment(\.theme) private var theme
+    @Environment(SectionFocusOwner.self) private var sections
     @State private var query = ""
     @State private var at = 0
     @State private var acting: (item: PaletteItem, ref: SessionRef, prompt: Bool)?
@@ -35,6 +36,8 @@ struct CommandPalette: View {
         .solid(RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(theme.line, lineWidth: 1))
         .onChange(of: acting == nil) { _, searching in app.paletteActing = !searching }
+        // Before the field's focus lands, which is after this pass.
+        .onAppear { sections.cover() }
         .onDisappear { app.paletteActing = false }
         .confirmationDialog(delegating.map { "Delegate \($0.title)?" } ?? "", isPresented: Binding(get: { delegating != nil }, set: { if !$0 { delegating = nil } }),
                             presenting: delegating) { item in
@@ -175,6 +178,11 @@ struct CommandPalette: View {
     private func go(_ r: PaletteItem) {
         app.palette = false
         if let c = r.command {
+            // These take the keyboard themselves.
+            switch c {
+            case .filter, .find, .files: sections.forget()
+            default: break
+            }
             run(c)
         } else if let t = r.task {
             app.showTask(project: t.project, task: t.task)
