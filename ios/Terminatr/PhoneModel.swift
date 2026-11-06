@@ -953,7 +953,11 @@ final class PhoneModel {
     func title(_ ref: SessionRef) -> String {
         if ref.director { return "Director" }
         if ref.isCoordinator { return "Coordinator" }
-        return project(ref.project)?.threads.first { $0.record.id == ref.thread }?.record.title ?? ref.thread
+        if ref.isRemote {
+            let title = ref.peerThread(in: peers)?.title ?? ""
+            return title.isEmpty ? ref.thread : title
+        }
+        return ref.ownThread(in: projects)?.record.title ?? ref.thread
     }
 
     /// A ref's thread as it is named: its task's ref ("T14"), else its id.

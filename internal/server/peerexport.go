@@ -26,6 +26,8 @@ type peerExport struct {
 	// act runs an act on a need for a paired server's user, once Act
 	// checked it (peerneeds.go).
 	act func(c caller.Caller, n proto.PeerNeed, p proto.PeerAct) (proto.PeerActResult, *proto.Error)
+	// worktrees is what the folders paired servers read keep (peerworktree.go).
+	worktrees *peerWorktrees
 }
 
 // peerExport is the server's peer.Exporter.
@@ -37,8 +39,9 @@ func (s *Server) peerExport() peerExport {
 			ch := s.watch.add()
 			return ch, func() { s.watch.remove(ch) }
 		},
-		approval: s.peerApproval,
-		act:      s.peerAct,
+		approval:  s.peerApproval,
+		act:       s.peerAct,
+		worktrees: &peerWorktrees{logf: s.log.Printf},
 	}
 }
 

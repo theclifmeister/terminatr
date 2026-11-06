@@ -200,6 +200,9 @@ func (m *Manager) add(id *Identity, cert tls.Certificate, p Peer) {
 	if _, ok := m.opts.Export.(PagesExporter); ok {
 		d.pages = l.pagesOn
 	}
+	if _, ok := m.opts.Export.(WorktreeExporter); ok {
+		d.worktrees = func(project string) bool { return m.filesOn(p.ID(), project) }
+	}
 	if m.opts.noPaneLevel {
 		d.panesHere = nil
 	}
@@ -241,6 +244,9 @@ func (m *Manager) caps() []string {
 		}
 		if _, ok := m.opts.Export.(DesignsExporter); ok {
 			caps = append(caps, CapPageDesigns)
+		}
+		if _, ok := m.opts.Export.(WorktreeExporter); ok {
+			caps = append(caps, CapWorktree)
 		}
 	}
 	if m.opts.Messages != nil {

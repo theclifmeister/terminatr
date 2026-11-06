@@ -613,3 +613,31 @@ func TestSideServerHeaderLongHost(t *testing.T) {
 		t.Errorf("the host name isn't cut with an ellipsis:\n%s", out)
 	}
 }
+
+// T1037: a paired thread with the id and project of a local one keeps its
+// own title, in the status bar's title; it has no local fallback.
+func TestPaneTitleByServer(t *testing.T) {
+	local := proto.SessionInfo{ID: "s-1", Role: proto.RoleThread, Project: "demo", Thread: "t-0001"}
+	paired := local
+	paired.ID, paired.Server = "mini/s-1", "mini"
+	c := &client{side: &sidebar{
+		projects: []ProjectData{{Slug: "demo", Threads: []ThreadRow{{Record: &thread.Record{ID: "t-0001", Title: "Fix the login"}}}}},
+		peers: []proto.PeerMirror{{Alias: "mini", Projects: []proto.PeerMirrorProject{{
+			PeerProject: proto.PeerProject{Project: "demo"},
+			Watch:       &proto.ProjectWatch{Project: "demo", Threads: []proto.WatchThread{{ID: "t-0001", Title: "Port the billing job"}}},
+		}}}},
+	}}
+	for _, tc := range []struct {
+		in   proto.SessionInfo
+		want string
+	}{
+		{local, "Fix the login"},
+		{paired, "Port the billing job"},
+		{proto.SessionInfo{ID: "x", Role: proto.RoleThread, Project: "demo", Thread: "t-0001", Server: "studio"}, ""},
+	} {
+		c.focus = &pane{info: tc.in}
+		if got := c.paneTitle(); got != tc.want {
+			t.Errorf("paneTitle of %q on %q = %q, want %q", tc.in.Thread, tc.in.Server, got, tc.want)
+		}
+	}
+}

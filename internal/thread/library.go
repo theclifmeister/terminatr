@@ -15,6 +15,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/BurntSushi/toml"
+
 	"github.com/theclifmeister/terminatr/internal/caller"
 	"github.com/theclifmeister/terminatr/internal/mdfile"
 	"github.com/theclifmeister/terminatr/internal/plat/fsx"
@@ -35,6 +37,9 @@ type LibFile struct {
 	Thread string `json:"thread"`
 	Task   string `json:"task,omitempty"`
 	Title  string `json:"title"`
+	// Repo is the folder name of the thread's repository, in a project with
+	// several (a filter finds by it); never a path.
+	Repo string `json:"repo,omitempty"`
 	// State is the thread's: running, stopped, resolved or archived;
 	// received for a linked project's file.
 	State   string    `json:"state"`
@@ -58,6 +63,7 @@ func (f LibFile) Group() string {
 // file first (ties by thread, then name).
 func Library(p *project.Project) ([]LibFile, error) {
 	var out []LibFile
+	several := len(p.Repos) > 1
 	recs, err := List(p)
 	if err != nil {
 		return nil, err
@@ -77,8 +83,12 @@ func Library(p *project.Project) ([]LibFile, error) {
 			if err != nil {
 				continue
 			}
-			out = append(out, LibFile{Thread: r.ID, Task: r.Task, Title: r.Title, State: r.State,
-				Name: e.Name(), Size: fi.Size(), Time: fi.ModTime()})
+			f := LibFile{Thread: r.ID, Task: r.Task, Title: r.Title, State: r.State,
+				Name: e.Name(), Size: fi.Size(), Time: fi.ModTime()}
+			if several {
+				f.Repo = repoName(r.Repo)
+			}
+			out = append(out, f)
 		}
 	}
 	arch, _ := ListArchived(p)
@@ -88,6 +98,9 @@ func Library(p *project.Project) ([]LibFile, error) {
 		}
 		for _, f := range archivedLibrary(p, a.ID) {
 			f.Task, f.Title, f.State = a.Task, a.Title, "archived"
+			if !several {
+				f.Repo = ""
+			}
 			out = append(out, f)
 		}
 	}
@@ -114,7 +127,16 @@ type cachedLib struct {
 	files []LibFile
 }
 
-// archivedLibrary lists the library files in thread id's tarball.
+// repoName is a repository path's folder name, "" for none.
+func repoName(dir string) string {
+	if dir == "" {
+		return ""
+	}
+	return filepath.Base(filepath.Clean(dir))
+}
+
+// archivedLibrary lists the library files in thread id's tarball, each
+// with the repository its thread.toml names.
 func archivedLibrary(p *project.Project, id string) []LibFile {
 	ap := archivePath(p, id)
 	fi, err := os.Stat(ap)
@@ -127,12 +149,21 @@ func archivedLibrary(p *project.Project, id string) []LibFile {
 		}
 	}
 	var out []LibFile
-	_ = walkArchive(ap, func(h *tar.Header, _ io.Reader) error {
+	repo := ""
+	_ = walkArchive(ap, func(h *tar.Header, body io.Reader) error {
 		if name, ok := libraryName(id, h); ok {
 			out = append(out, LibFile{Thread: id, Name: name, Size: h.Size, Time: h.ModTime})
+		} else if path.Clean(h.Name) == id+"/thread.toml" {
+			var r Record
+			if _, err := toml.NewDecoder(io.LimitReader(body, maxArchivedFile)).Decode(&r); err == nil {
+				repo = repoName(r.Repo)
+			}
 		}
 		return nil
 	})
+	for i := range out {
+		out[i].Repo = repo
+	}
 	archiveLibCache.Store(ap, cachedLib{fi.ModTime(), fi.Size(), out})
 	return out
 }

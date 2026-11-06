@@ -2,31 +2,16 @@ import SwiftUI
 import TerminatrKit
 import TerminatrUI
 
-/// A project's designs on its screen (T864), as the TUI's Designs tab
-/// and the Mac dashboard's list them (design.list, app API 31): under a
-/// SectionHeading, one DesignTile each, those with open questions first
-/// (Designs.ordered), each opening its DesignScreen. Read again when
-/// the board or the link changes. A project without designs says so,
-/// apart from a read that failed (Designs.listing). A paired server's
-/// project's designs (T888, peer.design-list) show the same, read-only,
-/// or "Not shared by <server>".
-struct DesignsTiles: View {
-    @Environment(PhoneModel.self) private var model
-    @Environment(\.navigate) private var navigate
-    @Environment(\.theme) private var theme
+/// Where a project's designs read from (T864, T888), and what reads them
+/// again when it changes: its Designs page and its screen's line alike, as
+/// the Mac's DesignsSource.
+struct DesignsSource {
     let slug: String
     /// The paired server's alias, for one of its projects; nil for this
     /// server's.
     let peer: String?
     /// What reads them again when it changes.
     let key: AnyHashable
-    /// nil until design.list answered.
-    @State private var designs: [AppAPI.Design]?
-    @State private var error: String?
-    /// That server doesn't share them.
-    @State private var notShared = false
-    /// Whether the done and archived designs show too.
-    @State private var all = false
 
     init(project: AppAPI.Project, sessions: [AppAPI.Session], generation: Int) {
         slug = project.slug
@@ -43,31 +28,100 @@ struct DesignsTiles: View {
         key = PeerDesignsRead(project: project, generation: generation)
     }
 
+    enum Read {
+        case designs([AppAPI.Design])
+        case failed(String)
+        /// That server doesn't share them.
+        case notShared
+    }
+
+    @MainActor
+    func read(_ model: PhoneModel) async -> Read {
+        do {
+            guard let peer else { return .designs(try await model.designs(slug)) }
+            guard model.readsPeerDesigns else { return .notShared }
+            return .designs(try await model.peerDesigns(peer, slug))
+        } catch {
+            let state: PeerPages.State<Int> = PeerPages.state(error)
+            return peer != nil && state == .notShared ? .notShared : .failed(Dashboard.words(error))
+        }
+    }
+}
+
+/// A project's Designs page (T864, T1068), scrolling under its bar. A paired
+/// server's opens through PeerPageScreen, which draws the bar for it.
+struct DesignsScreen: View {
+    @Environment(PhoneModel.self) private var model
+    let slug: String
+
+    var body: some View {
+        DesignsPage(source: model.project(slug).map { DesignsSource(project: $0, sessions: model.sessions, generation: model.generation) },
+                    route: .designs(slug))
+            .pageBar("Designs")
+            .backdrop()
+    }
+}
+
+/// The page's list, in a scroll view that returns to the design it opened.
+struct DesignsPage: View {
+    @Environment(PhoneModel.self) private var model
+    let source: DesignsSource?
+    let route: Route
+
+    var body: some View {
+        ScrollView {
+            if let source {
+                DesignsTiles(source: source)
+                    .padding(Spacing.gutter)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .refreshable { await model.refresh() }
+        .keepsPlace(route: route)
+    }
+}
+
+/// A project's designs (T864), as the TUI's Designs tab and the Mac's list
+/// them (design.list, app API 31): one DesignTile each, those with open
+/// questions first (Designs.ordered), each opening its DesignScreen. Read
+/// again when the board or the link changes. A project without designs says
+/// so, apart from a read that failed (Designs.listing). A paired server's
+/// project's designs (T888, peer.design-list) show the same, read-only, or
+/// "Not shared by <server>".
+struct DesignsTiles: View {
+    @Environment(PhoneModel.self) private var model
+    @Environment(\.navigate) private var navigate
+    @Environment(\.theme) private var theme
+    let source: DesignsSource
+    /// nil until design.list answered.
+    @State private var designs: [AppAPI.Design]?
+    @State private var error: String?
+    /// That server doesn't share them.
+    @State private var notShared = false
+    /// Whether the done and archived designs show too.
+    @State private var all = false
+
     var body: some View {
         // A ZStack, not a Group: its task runs while it shows nothing.
         ZStack(alignment: .topLeading) {
             Color.clear.frame(height: 0)
             VStack(alignment: .leading, spacing: Spacing.row + 2) {
                 if notShared {
-                    SectionHeading("Designs", detail: "")
-                    quietCard(PeerPages.notShared(by: model.peers.first(where: { $0.alias == peer }).map(PeerPages.server) ?? peer ?? ""))
+                    quietCard(PeerPages.notShared(by: model.peers.first(where: { $0.alias == source.peer }).map(PeerPages.server) ?? source.peer ?? ""))
                 } else {
                     switch Designs.listing(designs, error: error) {
                     case .reading:
                         EmptyView()
                     case .none:
-                        SectionHeading("Designs", detail: "")
                         quietCard(Designs.noneYet)
                     case .failed(let error):
-                        SectionHeading("Designs", detail: "")
                         Failure(text: "The designs didn't load: \(error)")
                     case .designs(let designs):
                         let shown = Designs.shown(designs, all: all)
-                        SectionHeading("Designs", detail: "\(shown.count)")
                         if !shown.isEmpty {
                             TileGroup {
                                 ForEach(Array(Designs.ordered(shown).enumerated()), id: \.element.name) { i, d in
-                                    let route = peer.map { Route.peerDesign(alias: $0, project: slug, name: d.name) } ?? Route.design(slug, name: d.name)
+                                    let route = source.peer.map { Route.peerDesign(alias: $0, project: source.slug, name: d.name) } ?? Route.design(source.slug, name: d.name)
                                     PlainRouteLink(value: route) {
                                         DesignTile(d, rule: i > 0, selected: navigate.opens(route, on: model))
                                     }
@@ -84,26 +138,20 @@ struct DesignsTiles: View {
                 }
             }
         }
-        .task(id: key) {
-            do {
-                if let peer {
-                    guard model.readsPeerDesigns else {
-                        notShared = true
-                        return
-                    }
-                    designs = try await model.peerDesigns(peer, slug)
-                } else {
-                    designs = try await model.designs(slug)
-                }
+        // Kept, so a list laid out afresh (the columns move on when a design
+        // opens) has its rows at once, and its scroll place with them.
+        .kept($designs, "designs \(model.key) \(source.peer ?? "")/\(source.slug)")
+        .kept($all, "designs all \(model.key) \(source.peer ?? "")/\(source.slug)")
+        .task(id: source.key) {
+            switch await source.read(model) {
+            case .designs(let read):
+                designs = read
                 error = nil
                 notShared = false
-            } catch {
-                let state: PeerPages.State<Int> = PeerPages.state(error)
-                if peer != nil && state == .notShared {
-                    notShared = true
-                } else {
-                    self.error = Dashboard.words(error)
-                }
+            case .notShared:
+                notShared = true
+            case .failed(let why):
+                error = why
             }
         }
     }
@@ -115,6 +163,51 @@ struct DesignsTiles: View {
             .padding(Spacing.card)
             .frame(maxWidth: .infinity, alignment: .leading)
             .surface(in: RoundedRectangle(cornerRadius: Radius.tile, style: .continuous))
+    }
+}
+
+extension View {
+    /// This view with its project's line of designs under way below it
+    /// (T1068), opening route; nil source, no line.
+    func designsLine(_ source: DesignsSource?, opens route: Route) -> some View {
+        modifier(DesignsLine(source: source, route: route))
+    }
+}
+
+/// One small line, "6 designs: 4 building, 2 waiting for you", which opens the
+/// project's Designs page; nothing with neither, or until they are read. A
+/// modifier, so a project with no line leaves no gap on its screen.
+private struct DesignsLine: ViewModifier {
+    @Environment(PhoneModel.self) private var model
+    @Environment(\.theme) private var theme
+    let source: DesignsSource?
+    let route: Route
+    @State private var line: String?
+
+    func body(content: Content) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            content
+            if let line {
+                PlainRouteLink(value: route) {
+                    Text(line)
+                        .font(theme.sized(Flat.label))
+                        .foregroundStyle(theme.action)
+                        .frame(maxWidth: .infinity, minHeight: tapTarget, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Opens the project's designs")
+            }
+        }
+        .task(id: source?.key) {
+            guard let source else { return }
+            switch await source.read(model) {
+            case .designs(let designs): line = Designs.underWay(designs)
+            case .notShared: line = nil
+            // A link that dropped: the last line stands, as the list's rows do.
+            case .failed: break
+            }
+        }
     }
 }
 
