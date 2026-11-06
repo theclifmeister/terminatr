@@ -130,6 +130,14 @@ final class AppModel {
     var filter = ""
     /// Whether the command palette (⌘K) shows.
     var palette = false
+    /// ⌘K and the buttons: opens or closes the palette. It lives on the main
+    /// window, which takes the keys for it: an ask from a session window
+    /// would leave its field with no keys until a click (T1076).
+    func togglePalette() {
+        palette.toggle()
+        if palette { showWindow?() }
+    }
+
     /// Whether the palette shows a session's cards or composer (its
     /// act): ⌘↩ is its cards' then, bumping paletteChoice.
     var paletteActing = false
@@ -140,9 +148,10 @@ final class AppModel {
     /// Started shows it again).
     var welcome = false
     /// Whether this tm takes files for a prompt to ref's session
-    /// (session.upload, app API 15; a director's from app API 46).
+    /// (session.upload, app API 15; a director's from app API 46; a paired
+    /// server's while it says so, at the write level).
     func attaches(_ ref: SessionRef) -> Bool {
-        if case .connected(let h) = phase { return !ref.isRemote && Compatibility.takesFiles(h, for: ref) }
+        if case .connected(let h) = phase { return Compatibility.takesFiles(h, for: ref, peer: peer(ref.server)) }
         return false
     }
 

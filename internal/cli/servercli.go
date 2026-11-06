@@ -91,10 +91,32 @@ func warnSSH(w io.Writer, goos string, getenv func(string) string) {
 	}
 }
 
-// identifyWait bounds serverHuman's question to the server: a hung
-// server is what tm server stop --force is for, so it must not hold the
-// command up.
+// identifyWait bounds identifyBriefly's question to the server: a hung
+// server is what tm server stop --force and tm doctor --fix are for, so it
+// must not hold the command up.
 var identifyWait = 5 * time.Second
+
+// identifyBriefly narrows the caller to what the server sees, for the
+// commands that repair or replace a server (tm server stop, tm doctor
+// --fix, tm update's install): a server that is hung or down doesn't
+// answer within identifyWait, and the environment's caller stands.
+func (e *Env) identifyBriefly() {
+	if e.Identify == nil || e.Identified || e.Caller.IsAgent() {
+		return
+	}
+	who := make(chan caller.Caller, 1)
+	go func() {
+		if c, ok := e.Identify(); ok {
+			who <- c
+		}
+	}()
+	select {
+	case c := <-who:
+		e.Caller = caller.Narrower(e.Caller, c)
+		e.Identified = true
+	case <-time.After(identifyWait):
+	}
+}
 
 // serverHuman refuses stopping, restarting or installing the server to
 // anyone but the human. Who it is comes from the server when one answers
@@ -102,20 +124,7 @@ var identifyWait = 5 * time.Second
 // start must not dial), else from the environment: the user's own
 // terminal still gets through to a server that is hung or down.
 func (e *Env) serverHuman() error {
-	if e.Identify != nil && !e.Identified && !e.Caller.IsAgent() {
-		who := make(chan caller.Caller, 1)
-		go func() {
-			if c, ok := e.Identify(); ok {
-				who <- c
-			}
-		}()
-		select {
-		case c := <-who:
-			e.Caller = caller.Narrower(e.Caller, c)
-			e.Identified = true
-		case <-time.After(identifyWait):
-		}
-	}
+	e.identifyBriefly()
 	if e.Caller.IsAgent() {
 		return &project.Error{Code: "human-only", Msg: "stopping or restarting the server and installing its service are the user's, in their own terminal"}
 	}

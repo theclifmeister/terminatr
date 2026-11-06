@@ -67,6 +67,9 @@ type PeerMirror struct {
 	// projects can be invited into a program here (the programs design
 	// §9.1).
 	Program bool `json:"program,omitempty"`
+	// Uploads: the peer's sessions take files for a prompt (its hello lists
+	// session-upload), while Panes is write.
+	Uploads bool `json:"uploads,omitempty"`
 	// Offset is the peer's clock minus this server's, in milliseconds,
 	// as last measured; the peer's times (a session's created, the
 	// ticker's) less Offset are this server's. Unset (and 0) until a

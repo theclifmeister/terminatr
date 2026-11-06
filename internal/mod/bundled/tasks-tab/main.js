@@ -65,10 +65,20 @@
     const role = { must: "warn", should: void 0, could: "faint" };
     return [{ text: p, role: role[p] }];
   }
+  function waitWords(t) {
+    var _a, _b;
+    const refs = (_a = t.waits_for) != null ? _a : [];
+    const out = [];
+    if (refs.length > 0) out.push("after " + refs.slice(0, 2).join(", ") + (refs.length > 2 ? ` +${refs.length - 2}` : ""));
+    if (((_b = t.waiters) != null ? _b : 0) > 0) out.push(`${t.waiters} wait`);
+    return out.join(" · ");
+  }
   function row(project, t, prio) {
     var _a, _b;
     const rest = [];
     if (t.asked) rest.push({ text: "asked the coordinator", role: "warn" });
+    const waits = waitWords(t);
+    if (waits) rest.push({ text: (rest.length > 0 ? "  " : "") + waits, role: "faint" });
     const more = [t.steps_total > 0 ? `${t.steps_done}/${t.steps_total}` : "", (_a = t.thread) != null ? _a : ""].filter((s) => s !== "").join(" ");
     if (more) rest.push({ text: (rest.length > 0 ? "  " : "") + more, role: "faint" });
     const r = {

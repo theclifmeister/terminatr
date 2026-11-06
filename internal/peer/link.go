@@ -36,11 +36,13 @@ func backoff(n int) time.Duration {
 
 // link keeps one peer's link up: dial, TLS, hello, serve, and again.
 type link struct {
-	peer  Peer
-	id    *Identity
-	cert  tls.Certificate
-	t     Transport
-	hello Hello
+	// uploads paces the files going to the peer's sessions.
+	uploads uploadPace
+	peer    Peer
+	id      *Identity
+	cert    tls.Certificate
+	t       Transport
+	hello   Hello
 	// methods answer the peer's requests (the peer dispatcher's).
 	methods map[string]handler
 	logf    func(string, ...any)
@@ -365,6 +367,13 @@ func (l *link) once(ctx context.Context) (up bool, err error) {
 	l.sess = nil
 	l.mu.Unlock()
 	return true, err
+}
+
+// sessionNow is the link's session while it is up.
+func (l *link) sessionNow() *session {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.sess
 }
 
 // errNotUp: a call on a link that isn't up.
