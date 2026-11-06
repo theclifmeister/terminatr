@@ -735,7 +735,7 @@ struct FileBody: View {
                 } else {
                     change(s?.diff)
                     if case .notDrawn(let why) = s?.picture {
-                        empty(FileImage.message(name: file.name, size: size, why: why))
+                        empty(FileImage.message(name: file.name, size: size, why: why, hasPath: hasPath))
                     } else {
                         empty(FileImage.message(name: file.name, size: size))
                     }
@@ -750,6 +750,12 @@ struct FileBody: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+    }
+
+    /// Whether Copy Path and Reveal in Finder are in its menu (pathActions).
+    private var hasPath: Bool {
+        if case .worktree(let e, _) = file.source { return model.absolute(e.path) != nil }
+        return false
     }
 
     /// What changed in it since the base: nothing shows of a file with no

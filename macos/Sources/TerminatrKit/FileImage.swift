@@ -61,11 +61,15 @@ public enum FileImage {
     }
 
     /// What shows for a file with no text and no image, and why not an image
-    /// when it was meant to be one.
-    public static func message(name: String, size: Int, why: String? = nil) -> String {
+    /// when it was meant to be one. Quick Look and Open read through the same
+    /// cap, so an image over it is told only what still works: a worktree
+    /// file's path (hasPath), as an attached file's stays with the server.
+    public static func message(name: String, size: Int, why: String? = nil, hasPath: Bool = false, maxBytes: Int = maxBytes) -> String {
         let lead = "\(name) · \(Attachment.size(size)) has no text to show here."
         let reason = why.map { " Its image doesn't show: \($0.hasSuffix(".") ? String($0.dropLast()) : $0)." } ?? ""
-        return lead + reason + " Space opens Quick Look, and Open uses its app."
+        guard why != nil, size > maxBytes else { return lead + reason + " Space opens Quick Look, and Open uses its app." }
+        let then = hasPath ? "Copy Path and Reveal in Finder, in its menu, find the file." : "It can't open from here."
+        return lead + reason + " Quick Look and Open stop at the same limit. " + then
     }
 
     /// The image in d, from bytes that are data: a file's header is believed

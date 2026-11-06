@@ -160,6 +160,24 @@ private func crc(_ d: Data) -> [UInt8] {
     #expect(FileImage.message(name: "a.png", size: 2000, why: "Update it.").contains("doesn't show: Update it. Space"))
 }
 
+@Test func anImageOverTheCapIsToldOnlyWhatStillWorks() {
+    let cap = FileImage.tooBig(5000, maxBytes: 1000)
+    let tree = FileImage.message(name: "a.png", size: 5000, why: cap, hasPath: true, maxBytes: 1000)
+    #expect(tree.contains("it's over the \(Attachment.size(1000)) tm reads"))
+    #expect(tree.contains("Copy Path and Reveal in Finder"))
+    #expect(!tree.contains("Space opens"))
+    #expect(!tree.contains("Open uses"))
+    let attached = FileImage.message(name: "a.png", size: 5000, why: cap, maxBytes: 1000)
+    #expect(attached.contains("can't open from here"))
+    #expect(!attached.contains("Reveal in Finder"))
+    #expect(!attached.contains("Space opens"))
+    // Under the cap they still read it: too many pixels, or damaged.
+    let readable = FileImage.message(name: "a.png", size: 500, why: "it's damaged", hasPath: true, maxBytes: 1000)
+    #expect(readable.contains("Space opens Quick Look"))
+    // A file that was never meant as an image keeps its words, whatever its size.
+    #expect(FileImage.message(name: "a.zip", size: 5000, maxBytes: 1000).contains("Space opens Quick Look"))
+}
+
 @Test func aDecodeNobodyWantsIsDropped() async {
     let png = encoded("public.png")
     let decoder = FileImageDecoder()
