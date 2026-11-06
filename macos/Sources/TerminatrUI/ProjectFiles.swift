@@ -205,7 +205,8 @@ public struct LibraryHeading: View {
     }
 }
 
-/// A library file in the Library page: its name, size and date.
+/// A library file in the Library page: on the Mac its own title, when it
+/// has one, with its name beside it (T1061); its size and date.
 public struct LibraryFileRow: View {
     @Environment(\.theme) private var theme
     let file: AppAPI.LibraryFile
@@ -216,16 +217,37 @@ public struct LibraryFileRow: View {
 
     public var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
+            #if os(macOS)
+            if !file.docTitle.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(file.docTitle)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Text(file.name)
+                        .font(theme.mono(.caption))
+                        .foregroundStyle(theme.muted)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            } else {
+                Text(file.name)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            #else
             Text(file.name)
                 .lineLimit(1)
                 .truncationMode(.middle)
+            #endif
             Spacer(minLength: 8)
             Text(Attachment.size(file.size))
                 .font(theme.mono(.caption))
                 .foregroundStyle(theme.muted)
+                .fixedSize()
             Text(file.time, format: .dateTime.month(.abbreviated).day())
                 .font(theme.body(.caption))
                 .foregroundStyle(theme.muted)
+                .fixedSize()
         }
         .accessibilityElement(children: .combine)
     }

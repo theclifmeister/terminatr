@@ -173,7 +173,7 @@ func TestPagesAreCleaned(t *testing.T) {
 		t.Errorf("task 2: %+v", t1)
 	}
 	lib := cleanLibrary(proto.PeerLibrary{Files: []proto.PeerLibraryFile{
-		{Thread: "t-0001", Name: "a\nb.md" + osc52, Size: -4, State: "x y", TaskStatus: "a b" + osc52}, {Thread: "../x", Name: "c"}, {Thread: "t-0002"},
+		{Thread: "t-0001", DocTitle: "a\nb" + osc52, Name: "a\nb.md" + osc52, Size: -4, State: "x y", TaskStatus: "a b" + osc52}, {Thread: "../x", Name: "c"}, {Thread: "t-0002"},
 	}})
 	if hasEscape(t, lib) || len(lib.Files) != 1 || strings.Contains(lib.Files[0].Name, "\n") || lib.Files[0].Size != 0 || lib.Files[0].State != "" || lib.Files[0].TaskStatus != "" {
 		t.Errorf("library: %+v", lib)

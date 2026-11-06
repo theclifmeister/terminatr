@@ -144,18 +144,22 @@ type PeerLibrary struct {
 }
 
 // PeerLibraryFile is one of them: the thread that attached it (with its
-// task, title and state), its name, size and time.
+// task, title and state), its name, its own title, size and time. Never a
+// published link: a design's page stays home (below).
 type PeerLibraryFile struct {
 	Thread string `json:"thread"`
 	Task   string `json:"task,omitempty"`
 	// TaskStatus is the task's status; a paired tm too old to send it
 	// leaves the heading without one.
-	TaskStatus string    `json:"task_status,omitempty"`
-	Title      string    `json:"title"`
-	State      string    `json:"state"`
-	Name       string    `json:"name"`
-	Size       int64     `json:"size"`
-	Time       time.Time `json:"time"`
+	TaskStatus string `json:"task_status,omitempty"`
+	Title      string `json:"title"`
+	State      string `json:"state"`
+	Name       string `json:"name"`
+	// DocTitle is a page's title or a note's first heading; a paired tm
+	// too old to send it leaves the file by its name.
+	DocTitle string    `json:"doc_title,omitempty"`
+	Size     int64     `json:"size"`
+	Time     time.Time `json:"time"`
 }
 
 // PeerLibraryReadParams name a file of peer.pages.library by its

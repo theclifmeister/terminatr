@@ -3,6 +3,7 @@ package tui
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -24,11 +25,12 @@ import (
 // archived threads' too, grouped by task and thread, newest first, and a
 // group per linked project for the files it sent (§16.13). enter reads
 // one in the popup, o opens one in this computer's viewer, an image shows
-// in half-blocks (imagepreview.go); X deletes the selected file and D the
+// in half-blocks (imagepreview.go), p opens a page's published copy; X deletes the selected file and D the
 // files of its thread, each after y; / filters and t steps through the
 // kinds (libraryfilter.go). A group's heading says its task's status, kinds
-// and size, and a long group folds (libraryheads.go). A file shows by name
-// and size, never a path.
+// and size, and a long group folds (libraryheads.go). A file shows by its
+// own title, when it has one, with its name beside it (libFileLabel) and
+// its size, never a path.
 
 // libraryOrder are the library's files grouped by thread (or linked
 // project), the group with the newest file first and each group's files
@@ -264,7 +266,8 @@ func (pv *projectView) libraryLines(w int) ([]string, int, []int) {
 			l := "  " + r.word()
 			if r.isFile() {
 				size := fmt.Sprintf("%9s", sizeWords(r.f.Size))
-				l = "  " + fit(oneLine(r.f.Name), max(w-len(size)-4, 4)) + "  " + size
+				room := max(w-len(size)-4, 4)
+				l = "  " + fit(libFileLabel(r.f, room, i != pv.sel[tabLibrary]), room) + "  " + size
 			}
 			switch {
 			case i == pv.sel[tabLibrary]:
@@ -307,6 +310,8 @@ func (pv *projectView) libraryKey(m *dash, k tea.KeyPressMsg) tea.Cmd {
 		return m.openLibFile(pv, f)
 	case "o":
 		return m.openLibCopy(pv.slug, libFileID(f), f.Name)
+	case "p":
+		return m.openLibPublished(f)
 	case "X":
 		if f.Peer != "" {
 			m.confirm("Delete a file", "Delete "+oneLine(f.Name)+" ("+sizeWords(f.Size)+"), which "+f.Peer+" sent with "+f.Message+"? It can't be brought back.", func() tea.Cmd {
@@ -388,10 +393,13 @@ func scrollKey(scroll *int, k tea.KeyPressMsg, n int) bool {
 
 func (m *dash) openLibFile(pv *projectView, f thread.LibFile) tea.Cmd {
 	tv := &textView{title: oneLine(f.Name) + " · " + sizeWords(f.Size)}
+	if f.DocTitle != "" {
+		tv.title = oneLine(f.DocTitle) + " · " + tv.title
+	}
 	id := libFileID(f)
 	if f.Peer != "" {
 		// Another project's: data, shown as its cells, as text or not at all.
-		tv.title = oneLine(f.Name) + " · " + sizeWords(f.Size) + " · from " + f.Peer
+		tv.title += " · from " + f.Peer
 	}
 	tv.open = func(m *dash) tea.Cmd { return m.openLibCopy(pv.slug, id, f.Name) }
 	if previewable() && thumb.Supported(f.Name) {
@@ -416,6 +424,22 @@ func (m *dash) openLibFile(pv *projectView, f thread.LibFile) tea.Cmd {
 	}
 	m.push(tv)
 	return nil
+}
+
+// openLibPublished opens page f's published copy in this computer's
+// browser; a file with none says so.
+func (m *dash) openLibPublished(f thread.LibFile) tea.Cmd {
+	if f.Published == "" {
+		m.msg = oneLine(f.Name) + " has no published page"
+		return nil
+	}
+	url := f.Published
+	return m.act(func() actionMsg {
+		if err := openURL(url); err != nil {
+			return actionMsg{err: errors.New("the browser didn't start: " + err.Error())}
+		}
+		return actionMsg{msg: "opened the published page in this computer's browser"}
+	})
 }
 
 // openLinkFile shows the file that came with message msg of project

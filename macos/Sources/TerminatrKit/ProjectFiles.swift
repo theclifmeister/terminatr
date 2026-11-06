@@ -202,11 +202,11 @@ public enum LibraryPage {
         query.lowercased().split(whereSeparator: \.isWhitespace).map(String.init)
     }
 
-    /// Whether every word is in the file's name, task, title, thread,
-    /// repository or linked project.
+    /// Whether every word is in the file's name, its own title, or its
+    /// task, title, thread, repository or linked project.
     private static func matches(_ f: AppAPI.LibraryFile, _ words: [String]) -> Bool {
         if words.isEmpty { return true }
-        let hay = [f.name, f.task, f.title, f.thread, f.repo, f.peer].joined(separator: "\n").lowercased()
+        let hay = [f.name, f.docTitle, f.task, f.title, f.thread, f.repo, f.peer].joined(separator: "\n").lowercased()
         return words.allSatisfy(hay.contains)
     }
 
@@ -252,6 +252,13 @@ public enum LibraryPage {
     /// The filter field's words: the repository only where a file names one.
     public static func filterPrompt(_ files: [AppAPI.LibraryFile]) -> String {
         files.contains { !$0.repo.isEmpty } ? "Filter by name, task, thread or repo" : "Filter by name, task or thread"
+    }
+
+    /// Where a page is published (T1061), nil for none: an https address
+    /// alone, whatever the list said.
+    public static func published(_ f: AppAPI.LibraryFile) -> URL? {
+        guard let url = URL(string: f.published), url.scheme?.lowercased() == "https", url.host?.isEmpty == false else { return nil }
+        return url
     }
 
     /// What library.read names a file by: its thread, else the message a

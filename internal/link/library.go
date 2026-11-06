@@ -35,7 +35,7 @@ func LibraryFiles(p *project.Project) []thread.LibFile {
 				continue
 			}
 			out = append(out, thread.LibFile{Peer: other, Message: m.ID, Title: "from " + other, State: FileReceived,
-				Name: m.File, Size: fi.Size(), Time: fi.ModTime()})
+				Name: m.File, DocTitle: thread.FileDocTitle(filepath.Join(fileDir(p, other, m.ID), m.File), m.File), Size: fi.Size(), Time: fi.ModTime()})
 		}
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].Time.After(out[j].Time) })

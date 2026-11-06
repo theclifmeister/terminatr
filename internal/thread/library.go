@@ -46,12 +46,18 @@ type LibFile struct {
 	Repo string `json:"repo,omitempty"`
 	// State is the thread's: running, stopped, resolved or archived;
 	// received for a linked project's file.
-	State   string    `json:"state"`
-	Name    string    `json:"name"`
-	Size    int64     `json:"size"`
-	Time    time.Time `json:"time"`
-	Peer    string    `json:"peer,omitempty"`
-	Message string    `json:"message,omitempty"`
+	State string `json:"state"`
+	Name  string `json:"name"`
+	// DocTitle is the file's own title, a page's title or a note's first
+	// heading (DocTitle); "" for none, and the file shows by its name.
+	DocTitle string `json:"doc_title,omitempty"`
+	// Published is where the designs list says this page is published:
+	// only a page of a design task has it.
+	Published string    `json:"published,omitempty"`
+	Size      int64     `json:"size"`
+	Time      time.Time `json:"time"`
+	Peer      string    `json:"peer,omitempty"`
+	Message   string    `json:"message,omitempty"`
 }
 
 // Group is the Library tab's group of f: its thread, or the linked
@@ -73,6 +79,7 @@ func Library(p *project.Project) ([]LibFile, error) {
 		return nil, err
 	}
 	status := taskStatuses(p)
+	pages := publishedPages(p)
 	live := map[string]bool{}
 	for _, r := range recs {
 		live[r.ID] = true
@@ -89,7 +96,8 @@ func Library(p *project.Project) ([]LibFile, error) {
 				continue
 			}
 			f := LibFile{Thread: r.ID, Task: r.Task, TaskStatus: status[r.Task], Title: r.Title, State: r.State,
-				Name: e.Name(), Size: fi.Size(), Time: fi.ModTime()}
+				Name: e.Name(), DocTitle: FileDocTitle(Path(p, r.ID, "library", e.Name()), e.Name()),
+				Published: publishedOf(pages, r.Task, e.Name()), Size: fi.Size(), Time: fi.ModTime()}
 			if several {
 				f.Repo = repoName(r.Repo)
 			}
@@ -103,6 +111,7 @@ func Library(p *project.Project) ([]LibFile, error) {
 		}
 		for _, f := range archivedLibrary(p, a.ID) {
 			f.Task, f.TaskStatus, f.Title, f.State = a.Task, status[a.Task], a.Title, "archived"
+			f.Published = publishedOf(pages, a.Task, f.Name)
 			if !several {
 				f.Repo = ""
 			}
@@ -174,7 +183,7 @@ func archivedLibrary(p *project.Project, id string) []LibFile {
 	repo := ""
 	_ = walkArchive(ap, func(h *tar.Header, body io.Reader) error {
 		if name, ok := libraryName(id, h); ok {
-			out = append(out, LibFile{Thread: id, Name: name, Size: h.Size, Time: h.ModTime})
+			out = append(out, LibFile{Thread: id, Name: name, DocTitle: readDocTitle(name, body), Size: h.Size, Time: h.ModTime})
 		} else if path.Clean(h.Name) == id+"/thread.toml" {
 			var r Record
 			if _, err := toml.NewDecoder(io.LimitReader(body, maxArchivedFile)).Decode(&r); err == nil {

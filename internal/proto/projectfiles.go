@@ -104,7 +104,9 @@ type MemoryReadResult struct {
 // attached it (with the thread's Task, Title and State: running,
 // stopped, resolved or archived), or linked project Peer sent it with
 // Message (State received). Repo is the folder name of the thread's
-// repository in a project with several. It carries no path.
+// repository in a project with several. DocTitle is a page's title or a
+// note's first heading, cleaned; Published is where the designs list says a
+// page of its design task is published. It carries no path.
 type LibraryFile struct {
 	Thread     string    `json:"thread,omitempty"`
 	Task       string    `json:"task,omitempty"`
@@ -113,6 +115,8 @@ type LibraryFile struct {
 	Repo       string    `json:"repo,omitempty"`
 	State      string    `json:"state"`
 	Name       string    `json:"name"`
+	DocTitle   string    `json:"doc_title,omitempty"`
+	Published  string    `json:"published,omitempty"`
 	Size       int64     `json:"size"`
 	Time       time.Time `json:"time"`
 	Peer       string    `json:"peer,omitempty"`

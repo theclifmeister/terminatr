@@ -51,7 +51,7 @@ func libMatches(f thread.LibFile, words []string) bool {
 	if len(words) == 0 {
 		return true
 	}
-	hay := strings.ToLower(strings.Join([]string{f.Name, f.Task, f.Title, f.Thread, f.Repo, f.Peer}, "\n"))
+	hay := strings.ToLower(strings.Join([]string{f.Name, f.DocTitle, f.Task, f.Title, f.Thread, f.Repo, f.Peer}, "\n"))
 	for _, w := range words {
 		if !strings.Contains(hay, w) {
 			return false

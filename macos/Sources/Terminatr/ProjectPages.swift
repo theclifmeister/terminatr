@@ -208,7 +208,18 @@ struct LibraryPane: View {
                             .padding(.top, 10)
                             .padding(.bottom, 3)
                         ForEach(l.files, id: \.self) { f in
-                            PickRow(id: Self.key(f), selection: $picked, open: { look(f) }) { LibraryFileRow(f) }
+                            PickRow(id: Self.key(f), selection: $picked, open: { look(f) }) {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    LibraryFileRow(f)
+                                    if let url = LibraryPage.published(f) {
+                                        Button("Open published page") { NSWorkspace.shared.open(url) }
+                                            .buttonStyle(.link)
+                                            .foregroundStyle(theme.action)
+                                            .font(theme.sized(Flat.label))
+                                            .help(url.absoluteString)
+                                    }
+                                }
+                            }
                                 .contextMenu { actions(f) }
                         }
                         if l.more > 0 || l.fewer {
@@ -294,6 +305,10 @@ struct LibraryPane: View {
         .disabled(FileCaution.launches(f.name))
         .help(FileCaution.launches(f.name) ? "Open would run this file: Quick Look it or Save As…" : "")
         Button("Save As…") { Task { await saveAs(f) } }
+        if let url = LibraryPage.published(f) {
+            Divider()
+            Button("Open published page") { NSWorkspace.shared.open(url) }
+        }
     }
 
     static func key(_ f: AppAPI.LibraryFile) -> String { LibraryPage.id(f) + "/" + f.name }

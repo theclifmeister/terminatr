@@ -543,6 +543,9 @@ func (pv *projectView) box(m *dash) box {
 			keys = "enter open or fold the group · " + keys
 		case len(pv.libFiles()) > 0:
 			keys = libTabKeys
+			if f, ok := pv.selLib(); ok && f.Published != "" {
+				keys = "p published · " + keys
+			}
 		}
 	case tabDesigns:
 		body, sel, hits = pv.designLines(w)
