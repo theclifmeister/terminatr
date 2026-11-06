@@ -92,6 +92,7 @@ var coordinatorOnly = map[string]string{
 	"server/peertranscript.go OpenTranscript": "peers: same",
 	"server/peerworktree.go WorktreeRepos":    "peers: a director has no repo to read, and answers as a session that isn't there",
 	"server/peerworktree.go worktreeSession":  "peers: same",
+	"server/peerupload.go uploadSession":      "peers: only a shared project's coordinator and threads cross, as for a pane",
 	"server/remotepane.go find":               "peers: same",
 	"tui/networktree.go theirCoord":           "peers: same",
 	"tui/peerdash.go remoteCoord":             "peers: same",
