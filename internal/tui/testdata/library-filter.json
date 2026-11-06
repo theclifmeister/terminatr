@@ -25,6 +25,17 @@
       {"thread": "t-0001", "task": "T1", "title": "Mine", "name": "mine.md"},
       {"title": "from studio/acme", "peer": "studio/acme", "message": "M-1", "name": "brief.pdf"}
     ],
+    "seated": [
+      {"thread": "t-0001", "task": "T1", "title": "New", "name": "new.md"},
+      {"thread": "seat", "title": "Coordinator's files", "name": "site.html"},
+      {"thread": "t-0002", "task": "T2", "title": "Old", "name": "old.md"}
+    ],
+    "program": [
+      {"thread": "seat", "title": "Director's files", "name": "plan.md"},
+      {"thread": "t-0001", "task": "T1", "title": "Web work", "name": "web.png", "project": "web"},
+      {"thread": "seat", "title": "Coordinator's files", "name": "web-site.html", "project": "web"},
+      {"thread": "t-0001", "task": "T1", "title": "Far work", "name": "far.pdf", "project": "far", "server": "mini"}
+    ],
     "heads": [
       {"thread": "t-0001", "task": "T1", "task_status": "started", "title": "Several repos", "repo": "api", "state": "running", "name": "a.png", "size": 100},
       {"thread": "t-0001", "task": "T1", "task_status": "started", "title": "Several repos", "repo": "api", "state": "running", "name": "b.png", "size": 200},
@@ -50,6 +61,10 @@
       {"thread": "t-0001", "task": "T1", "title": "Backend", "repo": "api", "name": "x-after.png"},
       {"thread": "t-0002", "task": "T2", "title": "Frontend", "repo": "site", "name": "y-light.png"},
       {"thread": "t-0003", "task": "T3", "title": "Frontend too", "repo": "site", "name": "y-dark.png"}
+    ],
+    "stacks-seat": [
+      {"thread": "seat", "title": "Coordinator's files", "name": "site-dark.png"},
+      {"thread": "seat", "title": "Coordinator's files", "name": "site-light.png"}
     ],
     "stacks-linked": [
       {"title": "from studio/acme", "peer": "studio/acme", "message": "M-1", "name": "logo-dark.png"},
@@ -88,7 +103,16 @@
     {"library": "one", "query": "", "kind": "images", "names": ["one.png"], "chips": []},
     {"library": "notes", "query": "", "kind": "", "names": ["plan.md", "review.md", "more.txt"], "chips": []},
     {"library": "notes", "query": "", "kind": "notes", "names": ["plan.md", "review.md", "more.txt"], "chips": []},
-    {"library": "notes", "query": "", "kind": "images", "names": ["plan.md", "review.md", "more.txt"], "chips": []}
+    {"library": "notes", "query": "", "kind": "images", "names": ["plan.md", "review.md", "more.txt"], "chips": []},
+    {"library": "program", "query": "web", "kind": "", "names": ["web.png", "web-site.html"],
+     "chips": [["", 2], ["images", 1], ["pages", 1]]},
+    {"library": "program", "query": "mini", "kind": "", "names": ["far.pdf"], "chips": []},
+    {"library": "program", "query": "", "kind": "pages", "names": ["web-site.html", "far.pdf"],
+     "chips": [["", 4], ["images", 1], ["pages", 2], ["notes", 1]]}
+  ],
+  "order": [
+    {"library": "seated", "names": ["site.html", "new.md", "old.md"]},
+    {"library": "program", "names": ["plan.md", "web-site.html", "web.png", "far.pdf"]}
   ],
   "heads": [
     {"library": "heads", "group": "t-0001", "status": "started", "where": ["t-0001", "api"], "archived": false, "kinds": ["2 images", "1 note"], "bytes": 350},
@@ -97,6 +121,9 @@
     {"library": "heads", "group": "t-0004", "status": "", "where": ["t-0004"], "archived": false, "kinds": ["1 file"], "bytes": 1500000},
     {"library": "heads", "group": "@studio/acme", "status": "", "where": [], "archived": false, "kinds": ["1 page", "1 archive"], "bytes": 11},
     {"library": "plain", "group": "t-0002", "status": "", "where": ["t-0002"], "archived": false, "kinds": ["1 note"], "bytes": 0},
+    {"library": "seated", "group": "seat", "status": "", "where": [], "archived": false, "kinds": ["1 page"], "bytes": 0},
+    {"library": "program", "group": "/web/seat", "status": "", "where": [], "archived": false, "kinds": ["1 page"], "bytes": 0},
+    {"library": "program", "group": "mini/far/t-0001", "status": "", "where": ["t-0001"], "archived": false, "kinds": ["1 page"], "bytes": 0},
     {"library": "stacks-plain", "group": "t-0001", "status": "", "where": ["t-0001"], "archived": false, "kinds": ["2 images", "1 note"], "bytes": 305}
   ],
   "stacks": [
@@ -156,6 +183,8 @@
      "rows": [["logo.png", "logo-dark.png", "logo-light.png", "dark", "light"], ["notes.md"]]},
     {"why": "several repos: the same rule, by thread", "library": "stacks-repos",
      "rows": [["x.png", "x-before.png", "x-after.png", "before", "after"], ["y-light.png"], ["y-dark.png"]]},
+    {"why": "a coordinator's own files are one folder, as a thread's are", "library": "stacks-seat",
+     "rows": [["site.png", "site-dark.png", "site-light.png", "dark", "light"]]},
     {"why": "a linked project's files come from no thread", "library": "stacks-linked",
      "rows": [["logo-dark.png"], ["logo-light.png"]]}
   ],

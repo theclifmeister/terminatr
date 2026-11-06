@@ -7,7 +7,10 @@ import TerminatrUI
 /// The right panel's Files view (the file browser design, in the
 /// Inspector's calmer frame, T1016): the header at the main pane's height
 /// names what's shown; Worktree, the session's folder as a tree with git's
-/// marks, and Attached, what threads attached to their reports; a filter;
+/// marks, and Attached, what threads attached to their reports and the
+/// coordinator keeps, its own first; beside a director only Attached, with
+/// its own files and then its members' by project, and the Library's kinds;
+/// a filter;
 /// the picked file previewing under the tree; its actions in the footer.
 /// Read only. Arrows move, ← and → fold, return opens, space is Quick Look.
 struct FilesPanel: View {
@@ -27,11 +30,13 @@ struct FilesPanel: View {
             PanelHead { header }
                 .accessibilityElement(children: .combine)
                 .accessibilityAddTraits(.isHeader)
-            scopes
+            if !place.isProgram { scopes }
             filterField
             if model.scope == .worktree, place.session != nil { toggles }
+            if place.isProgram { programKinds }
             if let why = model.problem { note(why) }
             if model.scope == .attached, let why = model.libraryProblem { note(why, colour: theme.attention) }
+            if model.scope == .attached, let why = model.libraryNote { note(why, colour: theme.attention) }
             list
                 .frame(maxHeight: .infinity)
             if let f = model.picked {
@@ -178,7 +183,7 @@ struct FilesPanel: View {
                 .font(.system(size: 12))
                 .foregroundStyle(theme.faint)
                 .accessibilityHidden(true)
-            TextField("Filter by name", text: $model.filter)
+            TextField(place.isProgram ? LibraryPage.filterPrompt(model.library ?? []) : "Filter by name", text: $model.filter)
                 .textFieldStyle(.plain)
                 .font(theme.sized(12.5))
                 .focused($filterFocused)
@@ -203,6 +208,19 @@ struct FilesPanel: View {
         .overlay { RoundedRectangle(cornerRadius: 6).strokeBorder(filterFocused ? theme.focus : theme.line, lineWidth: 1).allowsHitTesting(false) }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+
+    /// The Library's kind chips, across the program's files.
+    @ViewBuilder
+    private var programKinds: some View {
+        @Bindable var model = model
+        let all = model.library ?? []
+        let chips = LibraryPage.chips(all, query: model.filter, kind: model.kind)
+        if !chips.isEmpty {
+            LibraryChips(chips, kind: Binding { LibraryPage.picked(all, model.kind) } set: { model.kind = $0 })
+                .padding(.horizontal, 12)
+                .padding(.bottom, 6)
+        }
     }
 
     private var toggles: some View {
@@ -331,49 +349,70 @@ struct FilesPanel: View {
 
     @ViewBuilder
     private var attached: some View {
-        let groups = LibraryPage.groups(model.attached)
+        let sections = LibraryPage.sections(model.attached)
         if model.library?.isEmpty == true {
-            Text("No files: a thread's report attaches them (tm report --attach).")
+            Text(place.isProgram ? "No files: the director keeps its own (tm library add), threads attach theirs."
+                 : place.thread == nil ? "No files: a thread's report attaches them (tm report --attach), the coordinator keeps its own (tm library add)."
+                 : "No files: a thread's report attaches them (tm report --attach).")
                 .font(theme.sized(12.5))
                 .foregroundStyle(theme.muted)
                 .padding(8)
-        } else if groups.isEmpty, model.library != nil {
+        } else if sections.isEmpty, model.library != nil {
             Text("Nothing matches.")
                 .font(theme.sized(12.5))
                 .foregroundStyle(theme.muted)
                 .padding(8)
         }
-        ForEach(groups) { g in
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(g.title)
+        ForEach(sections) { section in
+            if !section.project.isEmpty {
+                Text(section.title)
+                    .font(theme.sized(13, .medium))
                     .lineLimit(1)
                     .truncationMode(.tail)
-                Spacer(minLength: 0)
-                Text(g.detail)
-                    .lineLimit(1)
-                    .fixedSize()
+                    .padding(.horizontal, 8)
+                    .padding(.top, 12)
+                    .accessibilityAddTraits(.isHeader)
             }
-            .font(theme.sized(12))
-            .foregroundStyle(theme.muted)
-            .padding(.horizontal, 8)
-            .padding(.top, 9)
-            .padding(.bottom, 3)
-            .accessibilityElement(children: .combine)
-            .accessibilityAddTraits(.isHeader)
-            ForEach(g.files, id: \.self) { a in
-                let f = OpenedFile(.attached(a))
-                AttachedNode(file: a, on: model.cursor == f.id) {
-                    treeFocused = true
-                    model.moveCursor(to: f.id)
-                } twice: {
-                    openInPane(f)
+            ForEach(section.groups) { g in
+                if place.isProgram {
+                    // A director's list has the Library's heading.
+                    LibraryHeading(g)
+                        .padding(.horizontal, 8)
+                        .padding(.top, 9)
+                        .padding(.bottom, 3)
+                } else {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(g.title)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        Spacer(minLength: 0)
+                        Text(g.detail)
+                            .lineLimit(1)
+                            .fixedSize()
+                    }
+                    .font(theme.sized(12))
+                    .foregroundStyle(theme.muted)
+                    .padding(.horizontal, 8)
+                    .padding(.top, 9)
+                    .padding(.bottom, 3)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityAddTraits(.isHeader)
                 }
-                .contextMenu {
-                    openActions(f)
-                    Divider()
-                    mentionButton(f.source)
+                ForEach(g.files, id: \.self) { a in
+                    let f = OpenedFile(.attached(a))
+                    AttachedNode(file: a, on: model.cursor == f.id) {
+                        treeFocused = true
+                        model.moveCursor(to: f.id)
+                    } twice: {
+                        openInPane(f)
+                    }
+                    .contextMenu {
+                        openActions(f)
+                        Divider()
+                        mentionButton(f.source)
+                    }
+                    .id(f.id)
                 }
-                .id(f.id)
             }
         }
     }

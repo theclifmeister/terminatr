@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 58
+    public static let version = 59
 
     public struct AdoptRequestParams: Codable, Sendable, Hashable {
         public var id: String
@@ -1240,13 +1240,16 @@ public enum AppAPI {
 
     public struct Library: Codable, Sendable, Hashable {
         public var files: [LibraryFile]
+        public var note: String
 
-        public init(files: [LibraryFile] = []) {
+        public init(files: [LibraryFile] = [], note: String = "") {
             self.files = files
+            self.note = note
         }
 
         enum CodingKeys: String, CodingKey {
             case files
+            case note
         }
     }
 
@@ -1286,8 +1289,10 @@ public enum AppAPI {
         public var time: Date
         public var peer: String
         public var message: String
+        public var project: String
+        public var server: String
 
-        public init(thread: String = "", task: String = "", taskStatus: String = "", title: String, repo: String = "", state: String, name: String, size: Int, time: Date, peer: String = "", message: String = "") {
+        public init(thread: String = "", task: String = "", taskStatus: String = "", title: String, repo: String = "", state: String, name: String, size: Int, time: Date, peer: String = "", message: String = "", project: String = "", server: String = "") {
             self.thread = thread
             self.task = task
             self.taskStatus = taskStatus
@@ -1299,6 +1304,8 @@ public enum AppAPI {
             self.time = time
             self.peer = peer
             self.message = message
+            self.project = project
+            self.server = server
         }
 
         enum CodingKeys: String, CodingKey {
@@ -1313,17 +1320,48 @@ public enum AppAPI {
             case time
             case peer
             case message
+            case project
+            case server
+        }
+    }
+
+    public struct LibraryListParams: Codable, Sendable, Hashable {
+        public var project: String
+        public var program: LibraryProgram?
+
+        public init(project: String, program: LibraryProgram? = nil) {
+            self.project = project
+            self.program = program
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case project
+            case program
+        }
+    }
+
+    public struct LibraryProgram: Codable, Sendable, Hashable {
+        public var slug: String
+
+        public init(slug: String) {
+            self.slug = slug
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case slug
         }
     }
 
     public struct LibraryReadParams: Codable, Sendable, Hashable {
         public var project: String
+        public var program: LibraryProgram?
         public var id: String
         public var name: String
         public var offset: Int
 
-        public init(project: String, id: String, name: String, offset: Int = 0) {
+        public init(project: String, program: LibraryProgram? = nil, id: String, name: String, offset: Int = 0) {
             self.project = project
+            self.program = program
             self.id = id
             self.name = name
             self.offset = offset
@@ -1331,6 +1369,7 @@ public enum AppAPI {
 
         enum CodingKeys: String, CodingKey {
             case project
+            case program
             case id
             case name
             case offset
@@ -1360,17 +1399,20 @@ public enum AppAPI {
 
     public struct LibraryThumbnailParams: Codable, Sendable, Hashable {
         public var project: String
+        public var program: LibraryProgram?
         public var id: String
         public var name: String
 
-        public init(project: String, id: String, name: String) {
+        public init(project: String, program: LibraryProgram? = nil, id: String, name: String) {
             self.project = project
+            self.program = program
             self.id = id
             self.name = name
         }
 
         enum CodingKeys: String, CodingKey {
             case project
+            case program
             case id
             case name
         }
@@ -5033,7 +5075,7 @@ public enum AppAPI {
         public static let filesStamp = Call<FilesStampParams, FilesStamp>("files.stamp", write: false)
         public static let guardDecide = Call<GuardDecideParams, GuardDecided>("guard.decide", write: true)
         public static let guardRefusals = Call<NoParams, GuardRefusals>("guard.refusals", write: false)
-        public static let libraryList = Call<ProjectParams, Library>("library.list", write: false)
+        public static let libraryList = Call<LibraryListParams, Library>("library.list", write: false)
         public static let libraryRead = Call<LibraryReadParams, LibraryChunk>("library.read", write: false)
         public static let libraryThumbnail = Call<LibraryThumbnailParams, LibraryThumbnail>("library.thumbnail", write: false)
         public static let linkAct = Call<LinkActParams, LinkActResult>("link.act", write: true)
@@ -5693,6 +5735,7 @@ extension AppAPI.Library {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.files = try c.decodeIfPresent([AppAPI.LibraryFile].self, forKey: .files) ?? []
+        self.note = try c.decodeIfPresent(String.self, forKey: .note) ?? ""
     }
 }
 
@@ -5721,6 +5764,23 @@ extension AppAPI.LibraryFile {
         self.time = try c.decode(Date.self, forKey: .time)
         self.peer = try c.decodeIfPresent(String.self, forKey: .peer) ?? ""
         self.message = try c.decodeIfPresent(String.self, forKey: .message) ?? ""
+        self.project = try c.decodeIfPresent(String.self, forKey: .project) ?? ""
+        self.server = try c.decodeIfPresent(String.self, forKey: .server) ?? ""
+    }
+}
+
+extension AppAPI.LibraryListParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.program = try c.decodeIfPresent(AppAPI.LibraryProgram.self, forKey: .program)
+    }
+}
+
+extension AppAPI.LibraryProgram {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.slug = try c.decode(String.self, forKey: .slug)
     }
 }
 
@@ -5728,6 +5788,7 @@ extension AppAPI.LibraryReadParams {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.project = try c.decode(String.self, forKey: .project)
+        self.program = try c.decodeIfPresent(AppAPI.LibraryProgram.self, forKey: .program)
         self.id = try c.decode(String.self, forKey: .id)
         self.name = try c.decode(String.self, forKey: .name)
         self.offset = try c.decodeIfPresent(Int.self, forKey: .offset) ?? 0
@@ -5748,6 +5809,7 @@ extension AppAPI.LibraryThumbnailParams {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.project = try c.decode(String.self, forKey: .project)
+        self.program = try c.decodeIfPresent(AppAPI.LibraryProgram.self, forKey: .program)
         self.id = try c.decode(String.self, forKey: .id)
         self.name = try c.decode(String.self, forKey: .name)
     }

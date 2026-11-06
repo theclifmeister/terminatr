@@ -6,6 +6,7 @@ import (
 
 	"github.com/theclifmeister/terminatr/internal/home"
 	"github.com/theclifmeister/terminatr/internal/thumb"
+	"github.com/theclifmeister/terminatr/internal/vaultlink"
 )
 
 // sweepThumbs removes the library thumbnails of projects that no longer
@@ -20,6 +21,9 @@ func sweepThumbs(logf func(string, ...any)) {
 		return
 	}
 	n, err := thumb.Sweep(func(slug string) bool {
+		if slug == vaultlink.ProgramsDir {
+			return true // the programs' own libraries' (project.Folder.LinkSlug)
+		}
 		_, err := os.Stat(filepath.Join(root, slug, "PROJECT.md"))
 		return err == nil
 	})

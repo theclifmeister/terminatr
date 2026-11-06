@@ -924,7 +924,14 @@ final class AppModel {
             break
         }
         return FilesPlace.of(selection, sessionID: session, threadDone: done, task: task,
-                             readsWorktree: caps.contains("worktree-files"), hasLibrary: projectTabs.contains(.library))
+                             readsWorktree: caps.contains("worktree-files"), hasLibrary: projectTabs.contains(.library),
+                             readsProgramLibrary: readsProgramLibrary)
+    }
+
+    /// Whether this tm lists a program's library: a director's Files view.
+    var readsProgramLibrary: Bool {
+        if case .connected(let h) = phase { return Compatibility.readsProgramLibrary(h) }
+        return false
     }
 
     /// What the right panel shows for selection.
@@ -1043,7 +1050,23 @@ final class AppModel {
 
     /// The project's library, newest first (library.list).
     func library(_ project: String) async throws -> [AppAPI.LibraryFile] {
-        try await connected().call(AppAPI.Methods.libraryList, AppAPI.ProjectParams(project: project)).files
+        try await connected().call(AppAPI.Methods.libraryList, AppAPI.LibraryListParams(project: project)).files
+    }
+
+    /// Program slug's library: its director's own files, then its members'
+    /// (library.list's program form).
+    func programLibrary(_ slug: String) async throws -> AppAPI.Library {
+        try await connected().call(AppAPI.Methods.libraryList, AppAPI.LibraryListParams(project: "", program: AppAPI.LibraryProgram(slug: slug)))
+    }
+
+    /// The bytes of a file of program slug's library: a paired member's over
+    /// the link, a member's as any file of its project, the director's own by
+    /// the program.
+    func programLibraryData(_ slug: String, _ f: AppAPI.LibraryFile) async -> FileOutcome {
+        if !f.server.isEmpty { return await peerLibraryData(f.server, f.project, f) }
+        if !f.project.isEmpty { return await libraryData(f.project, f) }
+        guard let b = bridge else { return .unavailable("tm isn't connected") }
+        return await LibraryPage.read({ p in try await b.call(AppAPI.Methods.libraryRead, p) }, project: "", program: slug, file: f)
     }
 
     /// A library file's bytes (library.read, a chunk at a time).

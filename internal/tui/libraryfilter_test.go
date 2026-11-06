@@ -28,6 +28,12 @@ type libFixture struct {
 		Names   []string `json:"names"`
 		Chips   [][]any  `json:"chips"`
 	} `json:"cases"`
+	// Order is the order the Library lists a library's files in: a seat's
+	// own first, a program's projects as they came.
+	Order []struct {
+		Library string   `json:"library"`
+		Names   []string `json:"names"`
+	} `json:"order"`
 	Filter []struct {
 		Files int    `json:"files"`
 		Query string `json:"query"`
@@ -105,6 +111,15 @@ func TestLibraryFilterFixture(t *testing.T) {
 		}
 		if !slices.Equal(got, want) {
 			t.Errorf("%s: chips %v, want %v", id, got, want)
+		}
+	}
+	for _, c := range fx.Order {
+		names := []string{}
+		for _, f := range libraryOrder(fx.Libraries[c.Library]) {
+			names = append(names, f.Name)
+		}
+		if !slices.Equal(names, c.Names) {
+			t.Errorf("%s: order %v, want %v", c.Library, names, c.Names)
 		}
 	}
 	for _, c := range fx.Filter {

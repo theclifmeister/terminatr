@@ -68,7 +68,8 @@ func libEqualASCII(s, word string) bool {
 }
 
 // libSlots are the ways a file's name could be half of a pair: none unless
-// it's an image of a thread. A linked project's files come from no thread.
+// it's an image of a thread or of a seat's own files, each one folder. A linked
+// project's files come from no thread.
 func libSlots(f thread.LibFile) []libSlotOf {
 	i := strings.LastIndexByte(f.Name, '.')
 	if f.Peer != "" || i <= 0 || libKind(f.Name) != "images" {
