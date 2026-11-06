@@ -1431,6 +1431,22 @@ final class AppModel {
         let path: String
     }
     private(set) var noteShown: NoteShown?
+    /// The design a chapter of History asked the Designs tab to show.
+    private(set) var designShown: (project: String, name: String)?
+
+    /// Shows a project's design on its Designs tab, from a chapter.
+    func showDesign(_ project: String, _ name: String) {
+        designShown = (project, name)
+        projectTab = .designs
+    }
+
+    /// The design project's Designs tab should show, once.
+    func takeDesign(_ project: String) -> String? {
+        guard let d = designShown, d.project == project else { return nil }
+        designShown = nil
+        return d.name
+    }
+
 
     /// The note to show on project's Memory page, once: nil when none
     /// waits for it.

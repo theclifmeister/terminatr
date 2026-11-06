@@ -1363,6 +1363,66 @@ type History struct {
 	// each repo's with several, and the bars. Nil before it appears (10
 	// done across 7 days), and from an older tm.
 	Pulse *HistoryPulse `json:"pulse,omitempty"`
+	// Curve is the History view's chart (app API 76): nil before the first
+	// finish, from a paired server, and from an older tm. Chapters are the
+	// designs with a task to build, ChapterDone how many done tasks belong
+	// to one; none without designs.
+	Curve       *HistoryCurve    `json:"curve,omitempty"`
+	Chapters    []HistoryChapter `json:"chapters,omitempty"`
+	ChapterDone int              `json:"chapter_done,omitempty"`
+}
+
+// HistoryCurve is the History view's chart: points by Unit ("day", "week"
+// or "month"), its best span, and each repo's releases along the points.
+type HistoryCurve struct {
+	Unit  string `json:"unit"`
+	Span  string `json:"span"`
+	Range string `json:"range"`
+	// Releases says how many, each repo's with several; "" with none.
+	Releases string       `json:"releases,omitempty"`
+	Points   []CurvePoint `json:"points"`
+	Best     CurveBest    `json:"best"`
+	Ticks    []CurveTicks `json:"ticks,omitempty"`
+}
+
+// CurvePoint is one span of the curve, in the server's time zone: what
+// finished in it, all that finished by its end, and what it says of itself.
+type CurvePoint struct {
+	From  string `json:"from"`
+	To    string `json:"to"`
+	Label string `json:"label"`
+	Done  int    `json:"done"`
+	Total int    `json:"total"`
+	Tip   string `json:"tip"`
+}
+
+// CurveBest is the span most tasks finished in: how many, "best day",
+// "best week" or "best month", and when in words.
+type CurveBest struct {
+	Done int    `json:"done"`
+	Word string `json:"word"`
+	When string `json:"when"`
+}
+
+// CurveTicks is one repo's releases: its name, only in a project with
+// several, and the points, from 0, that hold one.
+type CurveTicks struct {
+	Repo   string `json:"repo,omitempty"`
+	Points []int  `json:"points"`
+}
+
+// HistoryChapter is a design as a part of the project's history: Flag is
+// the curve's point its first task finished in, from 1, or 0 for none;
+// Label, From and To say when its tasks finished, none before the first.
+type HistoryChapter struct {
+	Name  string `json:"name"`
+	Title string `json:"title"`
+	Label string `json:"label,omitempty"`
+	From  string `json:"from,omitempty"`
+	To    string `json:"to,omitempty"`
+	Done  int    `json:"done"`
+	Total int    `json:"total"`
+	Flag  int    `json:"flag,omitempty"`
 }
 
 // HistoryPulse is the Pulse; Unit is "day", "week" or "month".
@@ -1462,6 +1522,20 @@ func historyOf(r proto.History) History {
 			out.Pulse.Bars = append(out.Pulse.Bars, PulseBar{From: b.From, To: b.To, Label: b.Label, Done: b.Done, Released: b.Released, Tip: b.Tip})
 		}
 	}
+	if r.Curve != nil {
+		out.Curve = &HistoryCurve{Unit: r.Curve.Unit, Span: r.Curve.Span, Range: r.Curve.Range, Releases: r.Curve.Releases, Points: make([]CurvePoint, 0, len(r.Curve.Points)),
+			Best: CurveBest{Done: r.Curve.Best.Done, Word: r.Curve.Best.Word, When: r.Curve.Best.When}}
+		for _, c := range r.Curve.Points {
+			out.Curve.Points = append(out.Curve.Points, CurvePoint{From: c.From, To: c.To, Label: c.Label, Done: c.Done, Total: c.Total, Tip: c.Tip})
+		}
+		for _, t := range r.Curve.Ticks {
+			out.Curve.Ticks = append(out.Curve.Ticks, CurveTicks{Repo: t.Repo, Points: append([]int{}, t.Points...)})
+		}
+	}
+	for _, c := range r.Chapters {
+		out.Chapters = append(out.Chapters, HistoryChapter{Name: c.Name, Title: c.Title, Label: c.Label, From: c.From, To: c.To, Done: c.Done, Total: c.Total, Flag: c.Flag})
+	}
+	out.ChapterDone = r.ChapterDone
 	return out
 }
 

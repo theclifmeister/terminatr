@@ -141,6 +141,16 @@ func (m *dash) runBinding(msg bindingMsg) tea.Cmd {
 			return tea.Batch(m.openTask(pv, task), m.bindingDone(&b, true))
 		}
 		return tea.Batch(m.showTask(t.Project, task.ID), m.bindingDone(&b, true))
+	case "design.show":
+		// From the project's own popup (its Tasks tab mod's History), the
+		// design opens over it, as enter on the Designs tab does.
+		pv, ok := m.top().(*projectView)
+		if !ok || pv.slug != t.Project {
+			m.msg = "not available: open the project's popup"
+			return m.bindingDone(&b, false)
+		}
+		m.push(&designView{pv: pv, name: t.Design})
+		return m.bindingDone(&b, true)
 	case "task.delegate":
 		return m.delegate(t.Project, task, &b)
 	case "task.accept":
@@ -243,6 +253,11 @@ func (d dashActions) Asked(slug, ref string) string {
 }
 
 func (d dashActions) Note(slug, path string) bool { return d.m.src.HasNote(slug, path) }
+
+func (d dashActions) Design(slug, name string) bool {
+	builds, err := d.m.src.Designs(slug)
+	return err == nil && slices.ContainsFunc(builds, func(b project.DesignBuild) bool { return b.Name == name })
+}
 
 func (d dashActions) Session(id string) bool {
 	_, ok := d.m.session(id)

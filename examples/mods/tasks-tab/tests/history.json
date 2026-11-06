@@ -1,0 +1,56 @@
+{
+  "name": "h shows the History: the facts, the curve with days and ticks under it, and the Chapters, enter bound to tm's design.show; h goes back",
+  "answers": [
+    { "method": "tasks.list", "params": { "slug": "demo" }, "result": [] },
+    { "method": "history.get", "params": { "slug": "demo" },
+      "result": { "done": 3, "open": 2, "dropped": 0, "days": [], "timed": 12, "typical": "34 minutes", "chapter_done": 2,
+        "curve": { "unit": "day", "span": "2 days", "range": "5–6 Nov", "releases": "4 releases",
+          "points": [
+            { "from": "2026-11-05", "to": "2026-11-05", "label": "5 Nov", "done": 1, "total": 1, "tip": "Thu 5 Nov: 1 done, 1 in all" },
+            { "from": "2026-11-06", "to": "2026-11-06", "label": "6 Nov", "done": 2, "total": 3, "tip": "Fri 6 Nov: 2 done, 3 in all" }
+          ],
+          "best": { "done": 2, "word": "best day", "when": "6 Nov" },
+          "ticks": [ { "points": [1] } ] },
+        "chapters": [
+          { "name": "files", "title": "Files as a right panel", "label": "5–6 Nov", "from": "2026-11-05", "to": "2026-11-06", "done": 2, "total": 3, "flag": 1 }
+        ] } },
+    { "method": "tasks.done", "params": { "slug": "demo", "options": { "groups": true } },
+      "result": { "total": 3, "next": 0, "groups": [], "tasks": [] } }
+  ],
+  "events": [
+    { "name": "view.opened", "project": "demo",
+      "data": { "view": "tasks", "slot": "project.tab", "project": "demo", "width": 70, "height": 20 } },
+    { "name": "ui.key", "project": "demo", "data": { "view": "tasks", "key": "h", "target": { "project": "demo" } } },
+    { "name": "ui.key", "project": "demo", "data": { "view": "tasks", "key": "h", "target": { "project": "demo" } } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "ui.view.set", "params": { "view": "tasks",
+          "widget": { "kind": "stack", "children": [
+            { "kind": "table" }, { "kind": "text" },
+            { "kind": "keys", "keys": [ { "key": "b" }, { "key": "p" }, { "key": "h", "label": "history" } ] }
+          ] } } },
+      { "method": "ui.view.set", "params": { "view": "tasks",
+          "widget": { "kind": "stack", "children": [
+            { "kind": "text", "lines": [[{ "text": "HISTORY", "role": "head" }, { "text": "  5–6 Nov · 2 days" }]] },
+            { "kind": "text", "text": "3 done · 4 releases · 2 open" },
+            { "kind": "text", "text": "best day 2 on 6 Nov · half of all tasks take under 34 minutes from start to done" },
+            { "kind": "text" },
+            { "kind": "curve", "values": [1, 3], "labels": ["5 Nov", "6 Nov"], "under": [
+              { "label": "done", "word": "per day", "values": [1, 2] },
+              { "label": "rel", "dots": [false, true] }
+            ] },
+            { "kind": "text" },
+            { "kind": "table", "id": "chapters", "rows": [
+              { "id": "g:chapters", "head": true, "spans": [{ "text": "CHAPTERS" }, { "text": "  the designs: 2 of 3 done tasks belong to one" }] },
+              { "id": "c:files", "actions": [ { "id": "design.show", "target": { "project": "demo", "design": "files" } } ] }
+            ] },
+            { "kind": "keys", "keys": [ { "key": "h", "label": "back to the board" }, { "key": "enter" } ] }
+          ] } } },
+      { "method": "ui.view.set", "params": { "view": "tasks",
+          "widget": { "kind": "stack", "children": [
+            { "kind": "table" }, { "kind": "text" }, { "kind": "keys" }
+          ] } } }
+    ]
+  }
+}

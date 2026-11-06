@@ -75,6 +75,146 @@ public struct PulseBand: Equatable, Sendable {
     }
 }
 
+/// The History view as a page draws it (app API 76; design board-library, B6,
+/// B15 and B16): tm decides the points and their words. No page before the
+/// first finish, from a paired server or from an older tm, where nothing
+/// offers it. Without releases there is no tick row or release fact, and
+/// without designs no Chapters or flags.
+public struct HistoryPage: Equatable, Sendable {
+    /// A fact's value and what it is.
+    public struct Fact: Equatable, Sendable {
+        public let value: String
+        public let word: String
+    }
+
+    /// A flag on the curve: a chapter's short name, where its first task
+    /// finished, and whether it stands on the higher of two lines, so
+    /// neighbours' names don't touch.
+    public struct Flag: Equatable, Sendable {
+        public let name: String
+        public let title: String
+        public let point: Int
+        public let high: Bool
+    }
+
+    /// A row of ticks: the repo it stands for, "" for one with no name, and
+    /// the points that hold a release.
+    public struct TickRow: Equatable, Sendable {
+        public let repo: String
+        public let points: Set<Int>
+    }
+
+    public let curve: AppAPI.HistoryCurve
+    public let chapters: [AppAPI.HistoryChapter]
+    public let facts: [Fact]
+    /// "the designs; 160 of 957 done tasks belong to one".
+    public let chapterWords: String
+
+    /// The most repos with a tick row each; beyond that, a menu.
+    public static let tickRows = 3
+
+    public init?(_ history: AppAPI.History?) {
+        guard let history, let curve = history.curve, !curve.points.isEmpty else { return nil }
+        self.curve = curve
+        chapters = history.chapters
+        chapterWords = "the designs; \(history.chapterDone) of \(history.done) done tasks belong to one"
+        var facts = [Fact(value: "\(history.done)", word: "done")]
+        for r in history.releases {
+            let word = r.count == 1 ? "release" : "releases"
+            facts.append(Fact(value: "\(r.count)", word: history.releases.count > 1 ? "\(r.repo) \(word)" : word))
+        }
+        facts.append(Fact(value: curve.span, word: "of work"))
+        if !history.typical.isEmpty { facts.append(Fact(value: history.typical, word: "median, start to done")) }
+        if curve.best.done > 0 { facts.append(Fact(value: "\(curve.best.done)", word: "\(curve.best.word), \(curve.best.when)")) }
+        self.facts = facts
+    }
+
+    /// Whether the repos are too many for a tick row each.
+    public var filtersRepos: Bool { curve.ticks.count > Self.tickRows }
+
+    /// The tick rows: one for each repo up to three, then one, any repo's or
+    /// with a filter the one it names. None without releases.
+    public func tickRows(repo: String) -> [TickRow] {
+        guard filtersRepos else { return curve.ticks.map { TickRow(repo: $0.repo, points: Set($0.points)) } }
+        if let one = curve.ticks.first(where: { $0.repo == repo }) { return [TickRow(repo: one.repo, points: Set(one.points))] }
+        return [TickRow(repo: "", points: Set(curve.ticks.flatMap(\.points)))]
+    }
+
+    /// The values the axis of the curve has lines at, round ones under top.
+    public var gridLines: [Int] {
+        let top = curve.points.last?.total ?? 0
+        guard top > 0 else { return [0] }
+        let magnitude = pow(10, floor(log10(Double(top))))
+        let step = [0.1, 0.2, 0.25, 0.5, 1, 2, 2.5, 5, 10].map { $0 * magnitude }.first { Double(top) / $0 <= 4 } ?? magnitude
+        let whole = max(Int(step.rounded()), 1)
+        return Array(stride(from: 0, to: top, by: whole))
+    }
+
+    /// The tallest span's count, what the bars are scaled to.
+    public var topDone: Int { curve.points.map(\.done).max() ?? 0 }
+
+    /// The most points that are all named on the axis.
+    public static let everyPoint = 8
+
+    /// The points named on the axis, by index: all of a short curve's, else a
+    /// week's Monday by day, a month or so by week, a half year by month, fewer
+    /// where they'd touch.
+    public func axis(width: Double, labelWidth: Double = 52) -> [Int] {
+        let n = curve.points.count
+        let base = n <= Self.everyPoint ? 1 : curve.unit == "day" ? 7 : curve.unit == "week" ? 4 : 6
+        var every = base
+        while n > 1, Double(every) * width / Double(n - 1) < labelWidth, every < n { every += base }
+        return Array(stride(from: 0, to: n, by: every))
+    }
+
+    /// A chapter's short name for its flag: its title up to a colon, cut.
+    public static func flagName(_ title: String) -> String {
+        let short = title.split(separator: ":", maxSplits: 1).first.map(String.init) ?? title
+        return short.count > 24 ? String(short.prefix(23)) + "…" : short
+    }
+
+    /// How far above its point a flag's name stands, on either line.
+    public static func rise(high: Bool) -> Double { high ? 31 : 15 }
+
+    /// The flags that fit a curve this wide and high, those with the most tasks
+    /// done first: right-aligned on their point, on the lower line where the
+    /// name touches none so far, else the higher, else not at all. Names sit at
+    /// the curve's height there, so that is what they must clear. Empty without
+    /// designs.
+    public func flags(width: Double, height: Double = 190, charWidth: Double = 6.2, most: Int = 8) -> [Flag] {
+        let n = curve.points.count
+        let top = Double(max(curve.points.last?.total ?? 1, 1))
+        func x(_ point: Int) -> Double { n > 1 ? Double(point) * width / Double(n - 1) : width / 2 }
+        func y(_ point: Int) -> Double { height * (1 - Double(curve.points[point].total) / top) }
+        var taken: [(xs: ClosedRange<Double>, y: Double)] = []
+        var out: [Flag] = []
+        let order = chapters.filter { $0.flag > 0 && $0.flag <= n }.sorted { $0.done != $1.done ? $0.done > $1.done : $0.to > $1.to }
+        for c in order where out.count < most {
+            let name = Self.flagName(c.title)
+            let at = x(c.flag - 1)
+            let wide = Double(name.count) * charWidth + 8
+            let rightward = at - wide < 0 // near the left edge
+            let start = rightward ? at : at - wide
+            let xs = (start - 4)...(start + wide + 4)
+            let high = [false, true].first { high in
+                let ny = y(c.flag - 1) - Self.rise(high: high)
+                // The curve only rises: leftward it stays below, rightward it can cross the name.
+                if rightward, y(min(Int((start + wide) / max(width, 1) * Double(n - 1)) + 1, n - 1)) < ny + 7 { return false }
+                return !taken.contains { $0.xs.overlaps(xs) && abs($0.y - ny) < 14 }
+            }
+            guard let high else { continue }
+            taken.append((xs, y(c.flag - 1) - Self.rise(high: high)))
+            out.append(Flag(name: name, title: c.title, point: c.flag - 1, high: high))
+        }
+        return out.sorted { $0.point < $1.point }
+    }
+
+    /// How far along a chapter is, from 0 to 1.
+    public static func progress(_ chapter: AppAPI.HistoryChapter) -> Double {
+        chapter.total > 0 ? Double(chapter.done) / Double(chapter.total) : 0
+    }
+}
+
 /// The Release Tags sheet: which of a project's tags count (release.tags,
 /// app API 65), as the TUI's Release tags row sets them.
 public struct ReleaseTagsForm: Equatable, Sendable {

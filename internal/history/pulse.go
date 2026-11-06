@@ -23,37 +23,55 @@ const (
 )
 
 // PulseOf is the Pulse of h as of now, in now's time zone: nil before it
-// appears. A bar stands for every day, week or month from the first with
-// work to the one holding today, so a span with no work is a gap. named
-// says the project has several repos, whose releases are then each named
+// appears. named says the project has several repos, whose releases are then each named
 // and never summed. Only releases in the span count for a dot.
 func PulseOf(h proto.History, named bool, now time.Time) *proto.HistoryPulse {
 	today := now.Format(time.DateOnly)
 	if h.Done < pulseDone || len(h.Days) == 0 || h.Days[0].Day > today {
 		return nil
 	}
-	first := h.Days[0].Day
-	span := daysBetween(first, today) + 1
-	if span < pulseDays {
+	if daysBetween(h.Days[0].Day, today)+1 < pulseDays {
 		return nil
 	}
+	s := spansOf(h, named, now)
+	p := &proto.HistoryPulse{Unit: s.unit, Span: s.words, Releases: pulseReleaseWords(h.Releases, named), Bars: s.bars}
+	if last := &p.Bars[len(p.Bars)-1]; last.To >= today {
+		last.Label = "today"
+	}
+	return p
+}
+
+// spans are a project's bars, from the first with work to the one holding
+// today, and what each repo released in each.
+type spans struct {
+	unit, words string
+	bars        []proto.PulseBar
+	released    [][]int // by bar, by repo
+}
+
+// spansOf is the spans of h, which has a day with work and none after now.
+// A bar stands for every day, week or month, so a span with no work is a gap.
+func spansOf(h proto.History, named bool, now time.Time) spans {
+	today := now.Format(time.DateOnly)
+	first := h.Days[0].Day
+	span := daysBetween(first, today) + 1
 	done := make(map[string]int, len(h.Days))
 	for _, d := range h.Days {
 		done[d.Day] = d.Done
 	}
 	released := releaseDays(h.Releases, now.Location())
 
-	p := &proto.HistoryPulse{Span: spanWords(span), Releases: pulseReleaseWords(h.Releases, named)}
+	s := spans{words: spanWords(span)}
 	switch {
 	case span <= pulseDayBars:
-		p.Unit = proto.PulseDay
+		s.unit = proto.PulseDay
 	case span <= pulseWeekBars:
-		p.Unit, first = proto.PulseWeek, mondayOf(first)
+		s.unit, first = proto.PulseWeek, mondayOf(first)
 	default:
-		p.Unit, first = proto.PulseMonth, first[:len("2006-01")]+"-01"
+		s.unit, first = proto.PulseMonth, first[:len("2006-01")]+"-01"
 	}
-	for from := first; from <= today; from = nextDay(endOf(p.Unit, from)) {
-		bar := proto.PulseBar{From: from, To: endOf(p.Unit, from), Label: barLabel(p.Unit, from)}
+	for from := first; from <= today; from = nextDay(endOf(s.unit, from)) {
+		bar := proto.PulseBar{From: from, To: endOf(s.unit, from), Label: barLabel(s.unit, from)}
 		counts := make([]int, len(h.Releases))
 		for d := bar.From; d <= bar.To && d <= today; d = nextDay(d) {
 			bar.Done += done[d]
@@ -64,13 +82,11 @@ func PulseOf(h proto.History, named bool, now time.Time) *proto.HistoryPulse {
 		for _, n := range counts {
 			bar.Released = bar.Released || n > 0
 		}
-		bar.Tip = barTip(p.Unit, bar, h.Releases, counts, named)
-		if bar.To >= today {
-			bar.Label = "today"
-		}
-		p.Bars = append(p.Bars, bar)
+		bar.Tip = barTip(s.unit, bar, h.Releases, counts, named)
+		s.bars = append(s.bars, bar)
+		s.released = append(s.released, counts)
 	}
-	return p
+	return s
 }
 
 // releaseDays counts each repo's releases by day, its index in repos.

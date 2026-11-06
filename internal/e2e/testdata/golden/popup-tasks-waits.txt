@@ -34,7 +34,7 @@
       │                                                                                                          │
       │ DROPPED ──────────────────────────────────────────────────────────────────────────────────────────────── │
       │ … 1 done, 1 dropped (b shows them)                                                                       │
-      │ b done · p must only                                                                                     │
+      │ b done · p must only · h history                                                                         │
       │                                                                                                          │
       │                                                                                                          │
       │                                                                                                          │

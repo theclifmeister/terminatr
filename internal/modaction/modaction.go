@@ -37,13 +37,15 @@ type Target struct {
 	// Path is a memory note of the project, memory/<name>.md (mod API
 	// 1.9).
 	Path string `json:"path,omitempty"`
+	// Design is a design of the project, by name (mod API 1.28).
+	Design string `json:"design,omitempty"`
 }
 
 // TargetOf is the target of a binding's fields, as a widget row or a
 // notification button carries them.
 func TargetOf(m map[string]string) Target {
 	return Target{Project: m["project"], Task: m["task"], Thread: m["thread"], Session: m["session"],
-		Question: m["question"], Option: m["option"], Path: m["path"]}
+		Question: m["question"], Option: m["option"], Path: m["path"], Design: m["design"]}
 }
 
 // The kinds of inbox item a task action drops: KindDelegate,
@@ -70,6 +72,9 @@ const (
 	// OnNote is project and path: one of the project's memory notes,
 	// memory/<name>.md (mod API 1.9).
 	OnNote = "note"
+	// OnDesign is project and design: one of the project's designs, by
+	// name (mod API 1.28).
+	OnDesign = "design"
 )
 
 // Action is one bindable action.
@@ -131,6 +136,8 @@ var Actions = []Action{
 		Precondition: "the project exists; the human names the note and writes it in their editor (tm memory new)"},
 	{ID: "memory.rm", Label: "delete", Key: "X", On: OnNote, Confirm: true,
 		Precondition: "the note is in the project's memory/ folder (tm memory rm)"},
+	{ID: "design.show", Label: "show", Key: "enter", On: OnDesign,
+		Precondition: "the design is the project's, archived or not (mod API 1.28)"},
 }
 
 // Lookup is action id, ok false for one that isn't bindable.
@@ -162,6 +169,8 @@ type State interface {
 	// Note says whether slug has memory note path (memory/<name>.md), a
 	// regular file in its memory/ folder.
 	Note(slug, path string) bool
+	// Design says whether slug has design name, archived or not.
+	Design(slug, name string) bool
 }
 
 // MenuQuestion is one question of a session's open question menu, as a
@@ -206,6 +215,12 @@ func Why(id string, st State, t Target) string {
 		}
 		return ""
 	}
+	if a.On == OnDesign {
+		if !st.Design(t.Project, t.Design) {
+			return t.Project + " has no design " + t.Design
+		}
+		return ""
+	}
 	if a.On != OnTask {
 		return ""
 	}
@@ -241,7 +256,14 @@ func TargetWhy(a Action, t Target) string {
 	if a.On != OnNote && t.Path != "" {
 		return a.ID + " takes no path"
 	}
+	if a.On != OnDesign && t.Design != "" {
+		return a.ID + " takes no design"
+	}
 	switch a.On {
+	case OnDesign:
+		if t.Project == "" || t.Design == "" || t.Task != "" || t.Session != "" || t.Thread != "" {
+			return a.ID + " takes a target of {project, design}"
+		}
 	case OnSession:
 		if t.Session == "" || t.Project != "" || t.Task != "" || t.Thread != "" {
 			return a.ID + " takes a target of {session}"

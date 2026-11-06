@@ -122,6 +122,7 @@ func tasksTabTree(slug string, b *tasks.Board, items []project.Item, doneAll boo
 		keys.Keys = []widget.Key{{Key: "b", Label: map[bool]string{true: "hide done", false: "done"}[doneAll]}}
 	}
 	keys.Keys = append(keys.Keys, widget.Key{Key: "p", Label: "must only"})
+	keys.Keys = append(keys.Keys, widget.Key{Key: "h", Label: "history"})
 	return &widget.Widget{Kind: widget.KindStack, Children: append(children, keys)}
 }
 

@@ -147,6 +147,7 @@ struct DesignsSection: View {
     var body: some View {
         // A stack, not a Group: a Group with nothing in it has nothing to
         // run its task on, so the designs were never read (T876).
+        ScrollViewReader { reader in
         VStack(alignment: .leading, spacing: 7) {
             let listing = Designs.listing(designs, error: error)
             let shown = designs.map { Designs.shown($0, all: all) } ?? []
@@ -175,6 +176,7 @@ struct DesignsSection: View {
                                 DesignCard(project: source.slug, design: d, server: source.peer.map(PeerPages.server), open: Binding(
                                     get: { open.contains(d.name) },
                                     set: { if $0 { open.insert(d.name) } else { open.remove(d.name) } }))
+                                .id(d.name)
                             }
                         }
                     }
@@ -194,11 +196,19 @@ struct DesignsSection: View {
                 designs = read
                 error = nil
                 notShared = false
+                // A chapter of History asked for this one: open, wherever it is.
+                if let name = app.takeDesign(source.slug) {
+                    open.insert(name)
+                    if !Designs.shown(read, all: false).contains(where: { $0.name == name }) { all = true }
+                    await Task.yield()
+                    reader.scrollTo(name, anchor: .top)
+                }
             case .failed(let why):
                 error = why
             case .notShared:
                 notShared = true
             }
+        }
         }
     }
 }

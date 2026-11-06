@@ -10,6 +10,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -185,6 +186,15 @@ func menuOf(q *proto.Question) []modaction.MenuQuestion {
 func (l *liveActions) Note(slug, path string) bool {
 	p, err := project.Open(slug)
 	return err == nil && p.HasNote(path)
+}
+
+func (l *liveActions) Design(slug, name string) bool {
+	p, err := project.Open(slug)
+	if err != nil {
+		return false
+	}
+	builds, err := p.BoardDesigns()
+	return err == nil && slices.ContainsFunc(builds, func(b project.DesignBuild) bool { return b.Name == name })
 }
 
 func (l *liveActions) Session(id string) bool {

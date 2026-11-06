@@ -28,6 +28,11 @@
 // The Pulse (history.get) tops the list once tm says it appears, and [ and ]
 // filter it to one of its bars: the tasks that finished then, nothing else,
 // which the filter's words then narrow.
+// h shows the project's History in the tab's place (mod API 1.28): the curve
+// of all tasks done, days and each repo's releases under it, the facts, and
+// the designs as Chapters, enter opening one. It is tm's numbers, so no
+// releases means no tick row and no word of them, and no designs no
+// Chapters. A tick row per repo, up to three; beyond that g steps through them.
 import type { TM } from "./types/tm";
 declare const $: TM;
 
@@ -86,6 +91,10 @@ interface Tab {
   historyAt: string;
   pick: string;
   picked: Fold;
+  // Whether History shows in the tab's place, and the one repo whose ticks it
+  // shows, "" for any, where there are too many for a row each.
+  past: boolean;
+  tickRepo: string;
 }
 
 // Fold is the rows read of a group that opened.
@@ -376,10 +385,114 @@ function pickedRows(project: string, t: Tab, bar: TM.PulseBar): TM.Value[] {
   return rows;
 }
 
+// TICK_ROWS is the most repos that get a tick row each.
+const TICK_ROWS = 3;
+
+// tickRows are the rows of each repo's releases along the curve: "rel" with
+// one repo, a row each up to TICK_ROWS, then one row, any repo's, or with g
+// one repo's. None without releases.
+function tickRows(t: Tab, c: TM.HistoryCurve): TM.Value[] {
+  const ticks = c.ticks ?? [];
+  const dots = (points: number[]) => c.points.map((_, i) => points.indexOf(i) >= 0);
+  if (ticks.length === 0) return [];
+  if (ticks.length <= TICK_ROWS) return ticks.map((r) => ({ label: r.repo || "rel", dots: dots(r.points) }));
+  const one = ticks.find((r) => r.repo === t.tickRepo);
+  if (one) return [{ label: one.repo ?? "", dots: dots(one.points), word: "only this repo" }];
+  const any: number[] = [];
+  for (const r of ticks) any.push(...r.points);
+  return [{ label: "rel", dots: dots(any), word: "any repo" }];
+}
+
+// nextTickRepo is what g shows next: any repo, then each in turn.
+function nextTickRepo(t: Tab): string {
+  const names = ["", ...(t.history?.curve?.ticks ?? []).map((r) => r.repo ?? "")];
+  return names[(names.indexOf(t.tickRepo) + 1) % names.length];
+}
+
+// axisLabels names a point now and then, as the widget has no idea of weeks:
+// all of a short curve's, else each week's Monday by day, each month or so by
+// week, each half year by month.
+function axisLabels(c: TM.HistoryCurve): string[] {
+  const every = c.points.length <= 8 ? 1 : c.unit === "day" ? 7 : c.unit === "week" ? 4 : 6;
+  return c.points.map((p, i) => (i % every === 0 ? p.label : ""));
+}
+
+// BAR is how wide a chapter's progress is.
+const BAR = 12;
+
+// chapterBar is a chapter's progress, full only when all its tasks are done.
+function chapterBar(c: TM.HistoryChapter): TM.Span[] {
+  let on = Math.round((c.done / c.total) * BAR);
+  if (c.done > 0) on = Math.max(on, 1);
+  if (c.done < c.total) on = Math.min(on, BAR - 1);
+  const out: TM.Span[] = [];
+  for (let i = 0; i < BAR; i++) out.push(i < on ? { icon: "bar.on", role: "accent" } : { icon: "bar.off", role: "faint" });
+  return out;
+}
+
+// historyTree is the History view: what tm has and nothing about what it
+// hasn't, so a young project just has a short curve.
+function historyTree(project: string, t: Tab): TM.Widget {
+  const keys: { key: string; label: string }[] = [{ key: "h", label: "back to the board" }];
+  const h = t.history;
+  if (!h) {
+    return { kind: "stack", children: [{ kind: "text", text: "The project's numbers can't be read.", role: "faint" }, { kind: "keys", id: "keys", keys }] };
+  }
+  const c = h.curve;
+  const children: TM.Value[] = [
+    { kind: "text", lines: [[{ text: "HISTORY", role: "head" }, ...(c ? [{ text: `  ${c.range} · ${c.span}`, role: "faint" as TM.Role }] : [])]] },
+  ];
+  const counts = [`${h.done} done`, ...(c?.releases ? [c.releases] : []), `${h.open} open`];
+  children.push({ kind: "text", text: counts.join(" · ") });
+  const notes: string[] = [];
+  if (c && c.best.done > 0) notes.push(`${c.best.word} ${c.best.done} on ${c.best.when}`);
+  if (h.typical) notes.push(`half of all tasks take under ${h.typical} from start to done`);
+  if (notes.length > 0) children.push({ kind: "text", text: notes.join(" · "), role: "faint" });
+  children.push({ kind: "text", lines: [[]] });
+  if (c) {
+    children.push({
+      kind: "curve",
+      values: c.points.map((p) => p.total),
+      labels: axisLabels(c),
+      under: [{ label: "done", word: `per ${c.unit}`, values: c.points.map((p) => p.done) }, ...tickRows(t, c)],
+    });
+    children.push({ kind: "text", lines: [[]] });
+  } else {
+    children.push({ kind: "text", text: "Nothing finished yet.", role: "faint" });
+    children.push({ kind: "text", lines: [[]] });
+  }
+  const chapters = h.chapters ?? [];
+  if (chapters.length > 0) {
+    const words = h.done > 0 ? `  the designs: ${h.chapter_done ?? 0} of ${h.done} done tasks belong to one` : "  the designs";
+    children.push({
+      kind: "table",
+      id: "chapters",
+      columns: [{ title: "" }, { title: "" }, { title: "", width: BAR }, { title: "", right: true }],
+      rows: [
+        { id: "g:chapters", head: true, spans: [{ text: "CHAPTERS", role: "head" }, { text: words, role: "faint" }] },
+        ...chapters.map((d) => ({
+          id: "c:" + d.name,
+          find: d.title,
+          cells: [[{ text: d.title }], [{ text: d.label ?? "", role: "faint" as TM.Role }], chapterBar(d), [{ text: `${d.done}/${d.total}` }]] as TM.Value,
+          actions: [{ id: "design.show", target: { project, design: d.name } }] as TM.Value,
+        })),
+      ],
+    });
+  }
+  if (chapters.length > 0) keys.push({ key: "enter", label: "opens a chapter" });
+  if (c && (c.ticks ?? []).length > TICK_ROWS) {
+    const after = nextTickRepo(t);
+    keys.push({ key: "g", label: after === "" ? "any repo" : `${after} only` });
+  }
+  children.push({ kind: "keys", id: "keys", keys });
+  return { kind: "stack", children };
+}
+
 function tree(project: string, t: Tab): TM.Widget {
   if (t.error) {
     return { kind: "text", text: `error: ${t.error}`, role: "bad" };
   }
+  if (t.past) return historyTree(project, t);
   const bar = pickedBar(t);
   const pulse = band(t);
   const rows: TM.Value[] = bar ? pickedRows(project, t, bar) : [];
@@ -452,6 +565,7 @@ function tree(project: string, t: Tab): TM.Widget {
     keys.push({ key: "[", label: bar ? "earlier" : `filter by ${unit}` });
     if (bar) keys.push({ key: "]", label: "later" });
   }
+  if (t.history) keys.push({ key: "h", label: "history" });
   children.push({ kind: "keys", id: "keys", keys, actions: [{ id: "task.new", target: { project } }] });
   return { kind: "stack", children };
 }
@@ -652,10 +766,14 @@ async function refresh(project: string | undefined): Promise<void> {
 // done or dropped, those are listed, so its row is there for the cursor.
 $.on("view.opened", async (e) => {
   if (e.view !== VIEW || !e.project) return;
-  const t: Tab = tabs.get(e.project) ?? { tasks: [], doneAll: false, prio: "", error: "", groups: [], total: 0, rows: new Map(), toggled: new Set(), reveal: "", repos: [], repo: "", query: "", found: null, history: null, historyAt: "", pick: "", picked: { tasks: [], next: 0 } };
+  const t: Tab = tabs.get(e.project) ?? { tasks: [], doneAll: false, prio: "", error: "", groups: [], total: 0, rows: new Map(), toggled: new Set(), reveal: "", repos: [], repo: "", query: "", found: null, history: null, historyAt: "", pick: "", picked: { tasks: [], next: 0 }, past: false, tickRepo: "" };
   tabs.set(e.project, t);
-  // A task shown from elsewhere needs its row, whatever day is picked.
-  if (e.task) t.pick = "";
+  // A task shown from elsewhere needs its row, whatever day is picked or
+  // whether History shows.
+  if (e.task) {
+    t.pick = "";
+    t.past = false;
+  }
   await load(e.project, t);
   if (e.task && t.tasks.some((x) => x.id === e.task && closed(groupOf(x.status)))) {
     t.doneAll = true;
@@ -682,6 +800,19 @@ $.on("ui.key", async (e) => {
   if (e.view !== VIEW || !project) return;
   const t = tabs.get(project);
   if (!t) return;
+  if (e.key === "h") {
+    t.past = !t.past;
+    await load(project, t);
+    await publish(project, t);
+    return;
+  }
+  if (t.past) {
+    if (e.key === "g") {
+      t.tickRepo = nextTickRepo(t);
+      await publish(project, t);
+    }
+    return;
+  }
   if (e.key === "enter") {
     if (await press(project, t, e.row ?? "")) await publish(project, t);
     return;

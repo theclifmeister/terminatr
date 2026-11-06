@@ -22,7 +22,7 @@
             { "kind": "band", "values": [4, 10], "dots": null,
               "beside": [[{ "text": "14 done in 5 months, by week · typical 2 days" }]] },
             { "kind": "text" }, { "kind": "table" }, { "kind": "text" },
-            { "kind": "keys", "keys": [ { "key": "b" }, { "key": "p" }, { "key": "[", "label": "filter by week" } ] }
+            { "kind": "keys", "keys": [ { "key": "b" }, { "key": "p" }, { "key": "[", "label": "filter by week" }, { "key": "h" } ] }
           ] } } }
     ]
   }

@@ -1,0 +1,35 @@
+{
+  "name": "a plain folder with no designs: no tick row, no word of releases and no Chapters; the curve, days and facts stand alone",
+  "answers": [
+    { "method": "tasks.list", "params": { "slug": "demo" }, "result": [] },
+    { "method": "history.get", "params": { "slug": "demo" },
+      "result": { "done": 3, "open": 0, "dropped": 0, "days": [], "timed": 0,
+        "curve": { "unit": "month", "span": "3 years", "range": "10 Mar 2024 – 6 Nov",
+          "points": [
+            { "from": "2024-03-01", "to": "2024-03-31", "label": "Mar 2024", "done": 3, "total": 3, "tip": "March 2024: 3 done, 3 in all" }
+          ],
+          "best": { "done": 3, "word": "best month", "when": "March 2024" } } } },
+    { "method": "tasks.done", "params": { "slug": "demo", "options": { "groups": true } },
+      "result": { "total": 3, "next": 0, "groups": [], "tasks": [] } }
+  ],
+  "events": [
+    { "name": "view.opened", "project": "demo",
+      "data": { "view": "tasks", "slot": "project.tab", "project": "demo", "width": 70, "height": 20 } },
+    { "name": "ui.key", "project": "demo", "data": { "view": "tasks", "key": "h", "target": { "project": "demo" } } }
+  ],
+  "expect": {
+    "calls": [
+      { "method": "ui.view.set" },
+      { "method": "ui.view.set", "params": { "view": "tasks",
+          "widget": { "kind": "stack", "children": [
+            { "kind": "text" },
+            { "kind": "text", "text": "3 done · 0 open" },
+            { "kind": "text", "text": "best month 3 on March 2024" },
+            { "kind": "text" },
+            { "kind": "curve", "values": [3], "under": [ { "label": "done", "word": "per month" } ] },
+            { "kind": "text" },
+            { "kind": "keys", "keys": [ { "key": "h" } ] }
+          ] } } }
+    ]
+  }
+}

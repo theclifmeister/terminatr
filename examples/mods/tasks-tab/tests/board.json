@@ -58,7 +58,7 @@
               { "id": "g:done", "head": true, "spans": [{ "text": "DONE", "role": "head" }] }
             ] },
             { "kind": "text", "text": "… 2 done (b shows them)", "role": "faint" },
-            { "kind": "keys", "id": "keys", "keys": [{ "key": "b", "label": "done" }, { "key": "p", "label": "must only" }],
+            { "kind": "keys", "id": "keys", "keys": [{ "key": "b", "label": "done" }, { "key": "p", "label": "must only" }, { "key": "h", "label": "history" } ],
               "actions": [{ "id": "task.new", "target": { "project": "demo" } }] }
           ] } } }
     ]

@@ -6,7 +6,7 @@ import Foundation
 /// The terminatr app API (docs/SPEC.md §3.8): what tm app bridge answers.
 public enum AppAPI {
     /// The app API version this app was generated against.
-    public static let version = 69
+    public static let version = 76
 
     public struct AdoptRequestParams: Codable, Sendable, Hashable {
         public var id: String
@@ -287,6 +287,66 @@ public enum AppAPI {
         enum CodingKeys: String, CodingKey {
             case project
             case program
+        }
+    }
+
+    public struct CurveBest: Codable, Sendable, Hashable {
+        public var done: Int
+        public var word: String
+        public var when: String
+
+        public init(done: Int, word: String, when: String) {
+            self.done = done
+            self.word = word
+            self.when = when
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case done
+            case word
+            case when
+        }
+    }
+
+    public struct CurvePoint: Codable, Sendable, Hashable {
+        public var from: String
+        public var to: String
+        public var label: String
+        public var done: Int
+        public var total: Int
+        public var tip: String
+
+        public init(from: String, to: String, label: String, done: Int, total: Int, tip: String) {
+            self.from = from
+            self.to = to
+            self.label = label
+            self.done = done
+            self.total = total
+            self.tip = tip
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case from
+            case to
+            case label
+            case done
+            case total
+            case tip
+        }
+    }
+
+    public struct CurveTicks: Codable, Sendable, Hashable {
+        public var repo: String
+        public var points: [Int]
+
+        public init(repo: String = "", points: [Int] = []) {
+            self.repo = repo
+            self.points = points
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case repo
+            case points
         }
     }
 
@@ -1281,8 +1341,11 @@ public enum AppAPI {
         public var truncated: Bool
         public var releases: [HistoryRepo]
         public var pulse: HistoryPulse?
+        public var curve: HistoryCurve?
+        public var chapters: [HistoryChapter]
+        public var chapterDone: Int
 
-        public init(firstRecord: String = "", done: Int, open: Int, dropped: Int, days: [HistoryDay] = [], bestDay: HistoryDay? = nil, timed: Int, typicalSeconds: Int = 0, typical: String = "", truncated: Bool = false, releases: [HistoryRepo] = [], pulse: HistoryPulse? = nil) {
+        public init(firstRecord: String = "", done: Int, open: Int, dropped: Int, days: [HistoryDay] = [], bestDay: HistoryDay? = nil, timed: Int, typicalSeconds: Int = 0, typical: String = "", truncated: Bool = false, releases: [HistoryRepo] = [], pulse: HistoryPulse? = nil, curve: HistoryCurve? = nil, chapters: [HistoryChapter] = [], chapterDone: Int = 0) {
             self.firstRecord = firstRecord
             self.done = done
             self.open = open
@@ -1295,6 +1358,9 @@ public enum AppAPI {
             self.truncated = truncated
             self.releases = releases
             self.pulse = pulse
+            self.curve = curve
+            self.chapters = chapters
+            self.chapterDone = chapterDone
         }
 
         enum CodingKeys: String, CodingKey {
@@ -1310,6 +1376,72 @@ public enum AppAPI {
             case truncated
             case releases
             case pulse
+            case curve
+            case chapters
+            case chapterDone = "chapter_done"
+        }
+    }
+
+    public struct HistoryChapter: Codable, Sendable, Hashable {
+        public var name: String
+        public var title: String
+        public var label: String
+        public var from: String
+        public var to: String
+        public var done: Int
+        public var total: Int
+        public var flag: Int
+
+        public init(name: String, title: String, label: String = "", from: String = "", to: String = "", done: Int, total: Int, flag: Int = 0) {
+            self.name = name
+            self.title = title
+            self.label = label
+            self.from = from
+            self.to = to
+            self.done = done
+            self.total = total
+            self.flag = flag
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case name
+            case title
+            case label
+            case from
+            case to
+            case done
+            case total
+            case flag
+        }
+    }
+
+    public struct HistoryCurve: Codable, Sendable, Hashable {
+        public var unit: String
+        public var span: String
+        public var range: String
+        public var releases: String
+        public var points: [CurvePoint]
+        public var best: CurveBest
+        public var ticks: [CurveTicks]
+
+        public init(unit: String, span: String, range: String, releases: String = "", points: [CurvePoint] = [], best: CurveBest, ticks: [CurveTicks] = []) {
+            self.unit = unit
+            self.span = span
+            self.range = range
+            self.releases = releases
+            self.points = points
+            self.best = best
+            self.ticks = ticks
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case unit
+            case span
+            case range
+            case releases
+            case points
+            case best
+            case ticks
         }
     }
 
@@ -5626,6 +5758,35 @@ extension AppAPI.CoordinatorClearParams {
     }
 }
 
+extension AppAPI.CurveBest {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.done = try c.decode(Int.self, forKey: .done)
+        self.word = try c.decode(String.self, forKey: .word)
+        self.when = try c.decode(String.self, forKey: .when)
+    }
+}
+
+extension AppAPI.CurvePoint {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.from = try c.decode(String.self, forKey: .from)
+        self.to = try c.decode(String.self, forKey: .to)
+        self.label = try c.decode(String.self, forKey: .label)
+        self.done = try c.decode(Int.self, forKey: .done)
+        self.total = try c.decode(Int.self, forKey: .total)
+        self.tip = try c.decode(String.self, forKey: .tip)
+    }
+}
+
+extension AppAPI.CurveTicks {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.repo = try c.decodeIfPresent(String.self, forKey: .repo) ?? ""
+        self.points = try c.decodeIfPresent([Int].self, forKey: .points) ?? []
+    }
+}
+
 extension AppAPI.Design {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -6091,6 +6252,36 @@ extension AppAPI.History {
         self.truncated = try c.decodeIfPresent(Bool.self, forKey: .truncated) ?? false
         self.releases = try c.decodeIfPresent([AppAPI.HistoryRepo].self, forKey: .releases) ?? []
         self.pulse = try c.decodeIfPresent(AppAPI.HistoryPulse.self, forKey: .pulse)
+        self.curve = try c.decodeIfPresent(AppAPI.HistoryCurve.self, forKey: .curve)
+        self.chapters = try c.decodeIfPresent([AppAPI.HistoryChapter].self, forKey: .chapters) ?? []
+        self.chapterDone = try c.decodeIfPresent(Int.self, forKey: .chapterDone) ?? 0
+    }
+}
+
+extension AppAPI.HistoryChapter {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.name = try c.decode(String.self, forKey: .name)
+        self.title = try c.decode(String.self, forKey: .title)
+        self.label = try c.decodeIfPresent(String.self, forKey: .label) ?? ""
+        self.from = try c.decodeIfPresent(String.self, forKey: .from) ?? ""
+        self.to = try c.decodeIfPresent(String.self, forKey: .to) ?? ""
+        self.done = try c.decode(Int.self, forKey: .done)
+        self.total = try c.decode(Int.self, forKey: .total)
+        self.flag = try c.decodeIfPresent(Int.self, forKey: .flag) ?? 0
+    }
+}
+
+extension AppAPI.HistoryCurve {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.unit = try c.decode(String.self, forKey: .unit)
+        self.span = try c.decode(String.self, forKey: .span)
+        self.range = try c.decode(String.self, forKey: .range)
+        self.releases = try c.decodeIfPresent(String.self, forKey: .releases) ?? ""
+        self.points = try c.decodeIfPresent([AppAPI.CurvePoint].self, forKey: .points) ?? []
+        self.best = try c.decode(AppAPI.CurveBest.self, forKey: .best)
+        self.ticks = try c.decodeIfPresent([AppAPI.CurveTicks].self, forKey: .ticks) ?? []
     }
 }
 

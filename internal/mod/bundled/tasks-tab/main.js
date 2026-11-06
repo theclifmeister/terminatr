@@ -256,11 +256,105 @@
     if (t.picked.next > 0) rows.push({ id: "m:pick", find: t.query, spans: [{ text: `  … ${bar.done - t.picked.tasks.length} more`, role: "faint" }] });
     return rows;
   }
+  var TICK_ROWS = 3;
+  function tickRows(t, c) {
+    var _a, _b;
+    const ticks = (_a = c.ticks) != null ? _a : [];
+    const dots = (points) => c.points.map((_, i) => points.indexOf(i) >= 0);
+    if (ticks.length === 0) return [];
+    if (ticks.length <= TICK_ROWS) return ticks.map((r) => ({ label: r.repo || "rel", dots: dots(r.points) }));
+    const one = ticks.find((r) => r.repo === t.tickRepo);
+    if (one) return [{ label: (_b = one.repo) != null ? _b : "", dots: dots(one.points), word: "only this repo" }];
+    const any = [];
+    for (const r of ticks) any.push(...r.points);
+    return [{ label: "rel", dots: dots(any), word: "any repo" }];
+  }
+  function nextTickRepo(t) {
+    var _a, _b, _c;
+    const names = ["", ...((_c = (_b = (_a = t.history) == null ? void 0 : _a.curve) == null ? void 0 : _b.ticks) != null ? _c : []).map((r) => {
+      var _a2;
+      return (_a2 = r.repo) != null ? _a2 : "";
+    })];
+    return names[(names.indexOf(t.tickRepo) + 1) % names.length];
+  }
+  function axisLabels(c) {
+    const every = c.points.length <= 8 ? 1 : c.unit === "day" ? 7 : c.unit === "week" ? 4 : 6;
+    return c.points.map((p, i) => i % every === 0 ? p.label : "");
+  }
+  var BAR = 12;
+  function chapterBar(c) {
+    let on = Math.round(c.done / c.total * BAR);
+    if (c.done > 0) on = Math.max(on, 1);
+    if (c.done < c.total) on = Math.min(on, BAR - 1);
+    const out = [];
+    for (let i = 0; i < BAR; i++) out.push(i < on ? { icon: "bar.on", role: "accent" } : { icon: "bar.off", role: "faint" });
+    return out;
+  }
+  function historyTree(project, t) {
+    var _a, _b, _c;
+    const keys = [{ key: "h", label: "back to the board" }];
+    const h = t.history;
+    if (!h) {
+      return { kind: "stack", children: [{ kind: "text", text: "The project's numbers can't be read.", role: "faint" }, { kind: "keys", id: "keys", keys }] };
+    }
+    const c = h.curve;
+    const children = [
+      { kind: "text", lines: [[{ text: "HISTORY", role: "head" }, ...c ? [{ text: `  ${c.range} · ${c.span}`, role: "faint" }] : []]] }
+    ];
+    const counts = [`${h.done} done`, ...(c == null ? void 0 : c.releases) ? [c.releases] : [], `${h.open} open`];
+    children.push({ kind: "text", text: counts.join(" · ") });
+    const notes = [];
+    if (c && c.best.done > 0) notes.push(`${c.best.word} ${c.best.done} on ${c.best.when}`);
+    if (h.typical) notes.push(`half of all tasks take under ${h.typical} from start to done`);
+    if (notes.length > 0) children.push({ kind: "text", text: notes.join(" · "), role: "faint" });
+    children.push({ kind: "text", lines: [[]] });
+    if (c) {
+      children.push({
+        kind: "curve",
+        values: c.points.map((p) => p.total),
+        labels: axisLabels(c),
+        under: [{ label: "done", word: `per ${c.unit}`, values: c.points.map((p) => p.done) }, ...tickRows(t, c)]
+      });
+      children.push({ kind: "text", lines: [[]] });
+    } else {
+      children.push({ kind: "text", text: "Nothing finished yet.", role: "faint" });
+      children.push({ kind: "text", lines: [[]] });
+    }
+    const chapters = (_a = h.chapters) != null ? _a : [];
+    if (chapters.length > 0) {
+      const words = h.done > 0 ? `  the designs: ${(_b = h.chapter_done) != null ? _b : 0} of ${h.done} done tasks belong to one` : "  the designs";
+      children.push({
+        kind: "table",
+        id: "chapters",
+        columns: [{ title: "" }, { title: "" }, { title: "", width: BAR }, { title: "", right: true }],
+        rows: [
+          { id: "g:chapters", head: true, spans: [{ text: "CHAPTERS", role: "head" }, { text: words, role: "faint" }] },
+          ...chapters.map((d) => {
+            var _a2;
+            return {
+              id: "c:" + d.name,
+              find: d.title,
+              cells: [[{ text: d.title }], [{ text: (_a2 = d.label) != null ? _a2 : "", role: "faint" }], chapterBar(d), [{ text: `${d.done}/${d.total}` }]],
+              actions: [{ id: "design.show", target: { project, design: d.name } }]
+            };
+          })
+        ]
+      });
+    }
+    if (chapters.length > 0) keys.push({ key: "enter", label: "opens a chapter" });
+    if (c && ((_c = c.ticks) != null ? _c : []).length > TICK_ROWS) {
+      const after = nextTickRepo(t);
+      keys.push({ key: "g", label: after === "" ? "any repo" : `${after} only` });
+    }
+    children.push({ kind: "keys", id: "keys", keys });
+    return { kind: "stack", children };
+  }
   function tree(project, t) {
     var _a, _b, _c;
     if (t.error) {
       return { kind: "text", text: `error: ${t.error}`, role: "bad" };
     }
+    if (t.past) return historyTree(project, t);
     const bar = pickedBar(t);
     const pulse = band(t);
     const rows = bar ? pickedRows(project, t, bar) : [];
@@ -322,6 +416,7 @@
       keys.push({ key: "[", label: bar ? "earlier" : `filter by ${unit}` });
       if (bar) keys.push({ key: "]", label: "later" });
     }
+    if (t.history) keys.push({ key: "h", label: "history" });
     children.push({ kind: "keys", id: "keys", keys, actions: [{ id: "task.new", target: { project } }] });
     return { kind: "stack", children };
   }
@@ -490,9 +585,12 @@
   $.on("view.opened", async (e) => {
     var _a;
     if (e.view !== VIEW || !e.project) return;
-    const t = (_a = tabs.get(e.project)) != null ? _a : { tasks: [], doneAll: false, prio: "", error: "", groups: [], total: 0, rows: /* @__PURE__ */ new Map(), toggled: /* @__PURE__ */ new Set(), reveal: "", repos: [], repo: "", query: "", found: null, history: null, historyAt: "", pick: "", picked: { tasks: [], next: 0 } };
+    const t = (_a = tabs.get(e.project)) != null ? _a : { tasks: [], doneAll: false, prio: "", error: "", groups: [], total: 0, rows: /* @__PURE__ */ new Map(), toggled: /* @__PURE__ */ new Set(), reveal: "", repos: [], repo: "", query: "", found: null, history: null, historyAt: "", pick: "", picked: { tasks: [], next: 0 }, past: false, tickRepo: "" };
     tabs.set(e.project, t);
-    if (e.task) t.pick = "";
+    if (e.task) {
+      t.pick = "";
+      t.past = false;
+    }
     await load(e.project, t);
     if (e.task && t.tasks.some((x) => x.id === e.task && closed(groupOf(x.status)))) {
       t.doneAll = true;
@@ -514,6 +612,19 @@
     if (e.view !== VIEW || !project) return;
     const t = tabs.get(project);
     if (!t) return;
+    if (e.key === "h") {
+      t.past = !t.past;
+      await load(project, t);
+      await publish(project, t);
+      return;
+    }
+    if (t.past) {
+      if (e.key === "g") {
+        t.tickRepo = nextTickRepo(t);
+        await publish(project, t);
+      }
+      return;
+    }
     if (e.key === "enter") {
       if (await press(project, t, (_b = e.row) != null ? _b : "")) await publish(project, t);
       return;

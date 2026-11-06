@@ -253,6 +253,7 @@ type Target struct {
 	Question string `json:"question,omitempty"`
 	Option   string `json:"option,omitempty"`
 	Path     string `json:"path,omitempty"`
+	Design   string `json:"design,omitempty"`
 }
 
 // Input is ui.click and ui.key: the human clicked, or pressed Key on, one
