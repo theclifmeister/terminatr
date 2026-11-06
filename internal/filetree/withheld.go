@@ -61,8 +61,11 @@ func withheldName(name string) bool {
 		"settings.local.json", "service-account.json", "application_default_credentials.json", "token.json", "auth.json":
 		return true
 	}
-	if strings.HasPrefix(n, "id_") {
-		return true
+	// An ssh key by its stem, with whatever follows: a backup, the -sk forms.
+	for _, stem := range []string{"id_rsa", "id_dsa", "id_ecdsa", "id_ed25519"} {
+		if strings.HasPrefix(n, stem) {
+			return true
+		}
 	}
 	for _, end := range []string{".tfstate", ".tfstate.backup", ".tfvars", ".tfvars.json", ".p8", ".ppk", ".env"} {
 		if strings.HasSuffix(n, end) {

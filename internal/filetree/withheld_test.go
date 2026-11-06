@@ -63,7 +63,9 @@ func TestWithheldNames(t *testing.T) {
 		"key.p8": {false, true}, "key.ppk": {false, true}, ".vault-token": {false, true}, ".boto": {false, true}, ".s3cfg": {false, true},
 		"_netrc": {false, true}, ".mcp.json": {false, true}, "settings.local.json": {false, true}, "service-account.json": {false, true},
 		"application_default_credentials.json": {false, true}, "token.json": {false, true}, "auth.json": {false, true}, ".azure": {false, true},
-		".gcloud": {false, true}, "id_rsa.pub": {false, true}, "id_work": {false, true}, "prod.env": {false, true}, "Prod.ENV.": {false, true},
+		".gcloud": {false, true}, "id_rsa.pub": {false, true}, "id_rsa.old": {false, true}, "id_rsa.bak": {false, true}, "id_dsa.old": {false, true},
+		"id_ecdsa_sk": {false, true}, "id_ecdsa-sk": {false, true}, "id_ed25519_sk": {false, true}, "ID_ED25519_SK.old": {false, true},
+		"id_generator.go": {false, false}, "id_work": {false, false}, "prod.env": {false, true}, "Prod.ENV.": {false, true},
 		"settings.json": {false, false}, "authors.json": {false, false}, "secretary.go": {false, false}, "idle.go": {false, false}, "my.env.example": {false, false},
 	} {
 		if got := SecretName(name); got != want[0] {
