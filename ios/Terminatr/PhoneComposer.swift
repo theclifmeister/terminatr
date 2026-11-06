@@ -53,11 +53,6 @@ struct PhoneComposer: View {
     /// The pasteboard has a file the keyboard doesn't offer
     /// (PasteFiles.offered).
     @State private var pasteable = PasteFiles.offered()
-    /// What the composer has below it: the home indicator's, or the keyboard's.
-    @State private var below: CGFloat = 0
-
-    /// 30 from the screen's foot over a home indicator (`.pcomp`), else 10.
-    private var foot: CGFloat { (21...40).contains(below) ? 30 - below : Spacing.row }
 
     var body: some View {
         let tray = attaches ? model.tray(ref) : nil
@@ -75,8 +70,9 @@ struct PhoneComposer: View {
         }
         .padding(.horizontal, 12)
         .padding(.top, 11)
-        .padding(.bottom, foot)
-        .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { below = $0 }
+        // A fixed foot: never sized from the composer's own measured safe
+        // area, whose change re-ran this body in layout (T1026).
+        .padding(.bottom, Spacing.row)
         .background { theme.chrome.ignoresSafeArea(edges: .bottom) }
         .overlay(alignment: .top) { theme.line.frame(height: 1) }
         .animation(reduceMotion ? nil : .snappy(duration: 0.25), value: open)
