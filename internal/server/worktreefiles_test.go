@@ -120,6 +120,19 @@ func TestFilesScope(t *testing.T) {
 			t.Errorf("read %s: %v, want %s", path, perr, want)
 		}
 	}
+	got, perr = s.filesDiff(proto.FilesDiffParams{Session: "s-t", Path: "new.txt"})
+	if d, ok := got.(proto.FilesDiffResult); perr != nil || !ok || d.Status != proto.FileAdded || d.Added != 1 || d.Base == "" {
+		t.Errorf("diff: %+v %v", got, perr)
+	}
+	got, perr = s.filesDiff(proto.FilesDiffParams{Session: "s-c", Path: "README.md"})
+	if d, ok := got.(proto.FilesDiffResult); perr != nil || !ok || d.Status != "" {
+		t.Errorf("the coordinator's, unchanged: %+v %v", got, perr)
+	}
+	for path, want := range map[string]string{"../x": proto.ErrInvalidPath, ".git/config": proto.ErrInvalidPath, "nope": proto.ErrFileGone} {
+		if _, perr := s.filesDiff(proto.FilesDiffParams{Session: "s-t", Path: path}); code(perr) != want {
+			t.Errorf("diff %s: %v, want %s", path, perr, want)
+		}
+	}
 	a, perr := s.filesStamp(proto.FilesStampParams{Session: "s-t", Folders: []string{""}})
 	if perr != nil {
 		t.Fatal(perr)

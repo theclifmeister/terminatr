@@ -6,16 +6,19 @@ import TerminatrUI
 /// A file's text, read only: selectable, unwrapped, with its line numbers.
 /// AppKit's, for a file of a megabyte. New text for the same file keeps the
 /// scroll: a file that changes while it's read doesn't lose the reader's
-/// place.
+/// place. With marks, each added and removed line has its colour across the
+/// pane and its sign beside its number, and a file opens at its first change.
 struct CodeView: NSViewRepresentable {
     @Environment(\.theme) private var theme
     let id: String
     let text: String
+    let marks: FileMarks?
     let points: CGFloat
 
     final class Coordinator {
         var id = ""
         var text: String?
+        var marks: FileMarks?
         var look = ""
     }
 
@@ -23,13 +26,13 @@ struct CodeView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> NSScrollView {
         let storage = NSTextStorage()
-        let layout = NSLayoutManager()
+        let layout = TintedLayout()
         layout.allowsNonContiguousLayout = true
         storage.addLayoutManager(layout)
         let box = NSTextContainer(size: NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude))
         box.widthTracksTextView = false
         layout.addTextContainer(box)
-        let v = NSTextView(frame: .zero, textContainer: box)
+        let v = CodeText(frame: .zero, textContainer: box)
         v.isEditable = false
         v.isSelectable = true
         v.isRichText = false
@@ -58,7 +61,7 @@ struct CodeView: NSViewRepresentable {
         let size = points * theme.scale
         let look = "\(theme.name.rawValue) \(theme.contrast) \(size)"
         let sameFile = c.id == id
-        guard c.text != text || !sameFile || c.look != look else { return }
+        guard c.text != text || c.marks != marks || !sameFile || c.look != look else { return }
         let keep = s.contentView.bounds.origin
         let font = NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
         let lines = NSMutableParagraphStyle()
@@ -69,24 +72,71 @@ struct CodeView: NSViewRepresentable {
         v.textStorage?.setAttributedString(NSAttributedString(string: text, attributes: [.font: font, .foregroundColor: NSColor(theme.ink), .paragraphStyle: lines]))
         v.insertionPointColor = NSColor(theme.ink)
         v.selectedTextAttributes = [.backgroundColor: NSColor(theme.selection)]
-        ruler.update(text: text, font: NSFont.monospacedDigitSystemFont(ofSize: size - 1, weight: .regular), ink: NSColor(theme.faint))
+        let added = NSColor(theme.good), removed = NSColor(theme.attention)
+        (v.layoutManager as? TintedLayout)?.update(text: text, marks: marks, added: added, removed: removed)
+        ruler.update(text: text, marks: marks, added: added, removed: removed, font: NSFont.monospacedDigitSystemFont(ofSize: size - 1, weight: .regular), ink: NSColor(theme.faint))
         v.sizeToFit()
         if sameFile {
             s.contentView.scroll(to: keep)
+        } else if let first = marks?.firstChange {
+            let row = ceil(size * 1.5)
+            let top = CGFloat(max(first - 3, 0)) * row + (first > 3 ? v.textContainerInset.height : 0)
+            s.contentView.scroll(to: NSPoint(x: 0, y: min(top, max(v.frame.height - s.contentSize.height, 0))))
         } else {
             s.contentView.scroll(to: .zero)
         }
         s.reflectScrolledClipView(s.contentView)
-        (c.id, c.text, c.look) = (id, text, look)
+        (c.id, c.text, c.marks, c.look) = (id, text, marks, look)
     }
 }
 
-/// The line numbers beside a CodeView.
+/// A CodeView's text: never narrower than what shows of it, so a changed
+/// line's colour crosses the pane.
+private final class CodeText: NSTextView {
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(NSSize(width: max(newSize.width, enclosingScrollView?.contentSize.width ?? 0), height: newSize.height))
+    }
+}
+
+/// How much of a changed line's colour shows, as the design's mock.
+private let tint: CGFloat = 0.13
+
+/// Draws the added and removed lines' colour under their text and selection.
+private final class TintedLayout: NSLayoutManager {
+    private var starts = [0]
+    private var kinds: [FileMarks.Kind] = []
+    private var added = NSColor.clear
+    private var removed = NSColor.clear
+
+    func update(text: String, marks: FileMarks?, added: NSColor, removed: NSColor) {
+        starts = marks == nil ? [0] : FileText.lineStarts(text)
+        kinds = marks?.kinds ?? []
+        self.added = added.withAlphaComponent(tint)
+        self.removed = removed.withAlphaComponent(tint)
+    }
+
+    override func drawBackground(forGlyphRange glyphs: NSRange, at origin: NSPoint) {
+        if !kinds.isEmpty, let view = firstTextView {
+            enumerateLineFragments(forGlyphRange: glyphs) { rect, _, _, range, _ in
+                let row = FileText.line(at: self.characterIndexForGlyph(at: range.location), in: self.starts) - 1
+                guard row < self.kinds.count, self.kinds[row] != .same else { return }
+                (self.kinds[row] == .added ? self.added : self.removed).setFill()
+                NSRect(x: 0, y: rect.minY + origin.y, width: view.bounds.width, height: rect.height).fill(using: .sourceOver)
+            }
+        }
+        super.drawBackground(forGlyphRange: glyphs, at: origin)
+    }
+}
+
+/// The line numbers beside a CodeView, with a changed line's sign and colour.
 private final class LineNumbers: NSRulerView {
     private weak var text: NSTextView?
     private var starts = [0]
     private var numberFont = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
     private var ink = NSColor.secondaryLabelColor
+    private var marks: FileMarks?
+    private var added = NSColor.clear
+    private var removed = NSColor.clear
 
     init(scrollView: NSScrollView, text: NSTextView) {
         self.text = text
@@ -94,6 +144,7 @@ private final class LineNumbers: NSRulerView {
         clientView = text
         scrollView.contentView.postsBoundsChangedNotifications = true
         NotificationCenter.default.addObserver(self, selector: #selector(moved), name: NSView.boundsDidChangeNotification, object: scrollView.contentView)
+        NotificationCenter.default.addObserver(self, selector: #selector(resized), name: NSView.frameDidChangeNotification, object: scrollView.contentView)
     }
 
     @available(*, unavailable)
@@ -101,11 +152,16 @@ private final class LineNumbers: NSRulerView {
 
     @objc private func moved() { needsDisplay = true }
 
-    func update(text s: String, font: NSFont, ink: NSColor) {
+    /// The pane's new width: the text fits it again.
+    @objc private func resized() { text?.sizeToFit() }
+
+    func update(text s: String, marks: FileMarks?, added: NSColor, removed: NSColor, font: NSFont, ink: NSColor) {
         starts = FileText.lineStarts(s)
+        (self.marks, self.added, self.removed) = (marks, added, removed)
         (numberFont, self.ink) = (font, ink)
-        let digits = max(String(starts.count).count, 2)
-        ruleThickness = ceil(CGFloat(digits) * ("0" as NSString).size(withAttributes: [.font: font]).width) + 16
+        let digits = max(String(marks?.numbers.max() ?? starts.count).count, 2)
+        let digit = ("0" as NSString).size(withAttributes: [.font: font]).width
+        ruleThickness = ceil(CGFloat(digits) * digit) + 16 + (marks == nil ? 0 : ceil(digit) + 4)
         needsDisplay = true
     }
 
@@ -123,10 +179,18 @@ private final class LineNumbers: NSRulerView {
         let glyphs = layout.glyphRange(forBoundingRect: visible.offsetBy(dx: -origin.x, dy: -origin.y), in: box)
         let attrs: [NSAttributedString.Key: Any] = [.font: numberFont, .foregroundColor: ink]
         // On the line's own baseline.
-        let draw = { [ruleThickness, numberFont] (n: Int, baseline: CGFloat) in
-            let word = String(n) as NSString
-            let size = word.size(withAttributes: attrs)
+        let draw = { [ruleThickness, numberFont, marks, added, removed] (n: Int, baseline: CGFloat, fragment: NSRect) in
             let y = baseline + origin.y - visible.minY - numberFont.ascender
+            let kind = marks.flatMap { n <= $0.kinds.count ? $0.kinds[n - 1] : nil } ?? .same
+            if kind != .same {
+                let colour = kind == .added ? added : removed
+                colour.withAlphaComponent(tint).setFill()
+                NSRect(x: 0, y: fragment.minY + origin.y - visible.minY, width: ruleThickness, height: fragment.height).fill(using: .sourceOver)
+                let sign = (kind == .added ? "+" : "−") as NSString
+                sign.draw(at: NSPoint(x: 5, y: y), withAttributes: [.font: numberFont, .foregroundColor: colour])
+            }
+            let word = String(marks.flatMap { n <= $0.numbers.count ? $0.numbers[n - 1] : nil } ?? n) as NSString
+            let size = word.size(withAttributes: attrs)
             word.draw(at: NSPoint(x: ruleThickness - size.width - 8, y: y), withAttributes: attrs)
         }
         var i = glyphs.location
@@ -139,7 +203,7 @@ private final class LineNumbers: NSRulerView {
             // An empty line's newline has no baseline of its own: the
             // last line of text's offset gives it one.
             if range.length > 1 { offset = layout.location(forGlyphAt: i).y }
-            if n != last { draw(n, fragment.minY + (offset ?? fragment.height + numberFont.descender)) }
+            if n != last { draw(n, fragment.minY + (offset ?? fragment.height + numberFont.descender), fragment) }
             last = n
             i = NSMaxRange(range)
         }

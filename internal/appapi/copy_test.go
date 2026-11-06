@@ -378,6 +378,7 @@ func TestCopies(t *testing.T) {
 	check("files.list", homeOf(filesListOf), nil)
 	check("files.read", homeOf(filesChunkOf), nil)
 	check("files.stamp", homeOf(filesStampOf), nil)
+	check("files.diff", homeOf(filesDiffOf), nil)
 	// The session refused it is the bridge's to tell; an answered
 	// refusal isn't listed.
 	check("guard.refusals", homeOf(guardRefusalOf), []string{".Session", ".Decision"})
@@ -431,6 +432,11 @@ func TestParamsCopies(t *testing.T) {
 	p, err = m.toServer(json.RawMessage(`{"session":"s-1","path":"pic.png","offset":9,"ignored":true,"binary":true}`))
 	if want := (proto.FilesReadParams{Session: "s-1", Path: "pic.png", Offset: 9, Ignored: true, Binary: true}); err != nil || p != want {
 		t.Errorf("files.read params %+v %v", p, err)
+	}
+	m, _ = Lookup(proto.MethodFilesDiff)
+	p, err = m.toServer(json.RawMessage(`{"session":"s-1","path":"a.go","ignored":true}`))
+	if want := (proto.FilesDiffParams{Session: "s-1", Path: "a.go", Ignored: true}); err != nil || p != want {
+		t.Errorf("files.diff params %+v %v", p, err)
 	}
 	// The console a pane's takeover counts is the server's to name.
 	m, _ = Lookup(proto.MethodPaneVT)
@@ -629,7 +635,7 @@ func TestAllowlist(t *testing.T) {
 		proto.MethodLinkAct, proto.MethodPeerShareAnswer, proto.MethodPeerNeedAct, MethodGuardRefusals, MethodGuardDecide, proto.MethodTranscriptPage,
 		proto.MethodProjectPin, proto.MethodProjectNew, proto.MethodSessionAdoptRequest, proto.MethodSessionRemote, proto.MethodLinkSend,
 		proto.MethodMemoryList, proto.MethodMemoryRead, proto.MethodLibraryList, proto.MethodLibraryRead, proto.MethodDesignList, proto.MethodSearchQuery, proto.MethodSearchTimeline, proto.MethodSearchShow, proto.MethodAppReportAdd,
-		proto.MethodFilesList, proto.MethodFilesRead, proto.MethodFilesStamp,
+		proto.MethodFilesList, proto.MethodFilesRead, proto.MethodFilesStamp, proto.MethodFilesDiff,
 		proto.MethodPeerPagesRead, proto.MethodPeerLibraryList, proto.MethodPeerLibraryRead, proto.MethodPeerDesignList,
 		MethodDeviceNonce, MethodDeviceBye, MethodDeviceList, MethodDevicePair, MethodDevicePairWait, MethodDevicePairAnswer, MethodDeviceAccess,
 		MethodDeviceName, MethodDeviceRemove, proto.MethodModsList, proto.MethodModsSet, proto.MethodModsSetting,
@@ -652,7 +658,7 @@ func TestAllowlist(t *testing.T) {
 			}
 		}
 	}
-	for _, name := range []string{proto.MethodFilesList, proto.MethodFilesRead, proto.MethodFilesStamp} {
+	for _, name := range []string{proto.MethodFilesList, proto.MethodFilesRead, proto.MethodFilesStamp, proto.MethodFilesDiff} {
 		if m, _ := Lookup(name); !m.MacOnly() || m.Write {
 			t.Errorf("%s: mac-only %v, write %v", name, m.MacOnly(), m.Write)
 		}

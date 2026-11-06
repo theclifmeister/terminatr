@@ -189,6 +189,13 @@ type textView struct {
 	wrapped []string
 	wrapW   int
 	wrapOf  string
+
+	// diff is body with a file's changes laid over it (filesdiff.go), nil
+	// for plain text. changeAt is the first change's wrapped line, and seek
+	// says the viewer hasn't opened there yet.
+	diff     []diffLine
+	changeAt int
+	seek     bool
 }
 
 // scrollKey scrolls *scroll for key k over n lines; it says whether k
@@ -292,7 +299,10 @@ func (tv *textView) wrapBody(w int) []string {
 		return tv.wrapped
 	}
 	out := []string{}
-	if tv.body != "" {
+	switch {
+	case tv.diff != nil:
+		out, tv.changeAt = diffRows(tv.diff, w)
+	case tv.body != "":
 		out = hardLines(tv.body, w)
 	}
 	tv.wrapped, tv.wrapW, tv.wrapOf = out, w, tv.body
@@ -326,6 +336,10 @@ func (tv *textView) wheel(m *dash, d int) { tv.key(m, arrow(d)) }
 
 func (tv *textView) render(m *dash) string {
 	lines := tv.lines(m.inner(viewWidth))
+	if tv.seek {
+		tv.seek = false
+		tv.scroll = clampScroll(tv.changeAt-diffLeadIn, len(lines))
+	}
 	b := box{title: tv.title, body: lines, sel: -1, scroll: tv.scroll, keys: "↑ ↓ scroll · esc back"}
 	if tv.bottom {
 		// From the end: as many lines as the box shows.
