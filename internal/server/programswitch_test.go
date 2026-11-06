@@ -35,7 +35,7 @@ func switchFixture(t *testing.T) *Server {
 var todaysCaps = []string{proto.CapPaneVT, proto.CapTranscript, proto.CapPaneVTRemote, proto.CapSessionFile, proto.CapTranscriptRemote,
 	proto.CapLinkAct, proto.CapTranscriptTail, proto.CapSideActs, proto.CapProjectFiles, proto.CapNeedAct, proto.CapDesigns,
 	proto.CapSessionsWatch, proto.CapPeerPages, proto.CapPeerDesigns, proto.CapProjectMods, proto.CapAnswerPicks, proto.CapSearch,
-	proto.CapTaskPriority, proto.CapAppReports, proto.CapWorktreeFiles, proto.CapPeerWorktrees, proto.CapLibraryThumbnails, proto.CapHistory, proto.CapPeerHistory}
+	proto.CapTaskPriority, proto.CapAppReports, proto.CapWorktreeFiles, proto.CapPeerWorktrees, proto.CapLibraryThumbnails, proto.CapHistory, proto.CapReleaseTags, proto.CapPeerHistory}
 
 // TestHelloCapsPrograms: the hello lists the programs capability only
 // while programs are on; off, with programs on disk and in config.toml,

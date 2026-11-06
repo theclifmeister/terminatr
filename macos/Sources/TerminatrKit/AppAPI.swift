@@ -1225,8 +1225,9 @@ public enum AppAPI {
         public var typicalSeconds: Int
         public var typical: String
         public var truncated: Bool
+        public var releases: [HistoryRepo]
 
-        public init(firstRecord: String = "", done: Int, open: Int, dropped: Int, days: [HistoryDay] = [], bestDay: HistoryDay? = nil, timed: Int, typicalSeconds: Int = 0, typical: String = "", truncated: Bool = false) {
+        public init(firstRecord: String = "", done: Int, open: Int, dropped: Int, days: [HistoryDay] = [], bestDay: HistoryDay? = nil, timed: Int, typicalSeconds: Int = 0, typical: String = "", truncated: Bool = false, releases: [HistoryRepo] = []) {
             self.firstRecord = firstRecord
             self.done = done
             self.open = open
@@ -1237,6 +1238,7 @@ public enum AppAPI {
             self.typicalSeconds = typicalSeconds
             self.typical = typical
             self.truncated = truncated
+            self.releases = releases
         }
 
         enum CodingKeys: String, CodingKey {
@@ -1250,6 +1252,7 @@ public enum AppAPI {
             case typicalSeconds = "typical_seconds"
             case typical
             case truncated
+            case releases
         }
     }
 
@@ -1265,6 +1268,63 @@ public enum AppAPI {
         enum CodingKeys: String, CodingKey {
             case day
             case done
+        }
+    }
+
+    public struct HistoryPart: Codable, Sendable, Hashable {
+        public var part: String
+        public var count: Int
+
+        public init(part: String = "", count: Int) {
+            self.part = part
+            self.count = count
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case part
+            case count
+        }
+    }
+
+    public struct HistoryRelease: Codable, Sendable, Hashable {
+        public var tag: String
+        public var part: String
+        public var version: String
+        public var at: String
+
+        public init(tag: String, part: String = "", version: String, at: String) {
+            self.tag = tag
+            self.part = part
+            self.version = version
+            self.at = at
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case tag
+            case part
+            case version
+            case at
+        }
+    }
+
+    public struct HistoryRepo: Codable, Sendable, Hashable {
+        public var repo: String
+        public var count: Int
+        public var parts: [HistoryPart]
+        public var releases: [HistoryRelease]
+
+        public init(repo: String, count: Int, parts: [HistoryPart] = [], releases: [HistoryRelease] = []) {
+            self.repo = repo
+            self.count = count
+            self.parts = parts
+            self.releases = releases
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case repo
+            case count
+            case parts
+            case releases
         }
     }
 
@@ -3689,6 +3749,48 @@ public enum AppAPI {
         }
     }
 
+    public struct ReleaseTags: Codable, Sendable, Hashable {
+        public var project: String
+        public var mode: String
+        public var patterns: [String]
+        public var own: Bool
+        public var allProjects: String
+
+        public init(project: String, mode: String, patterns: [String] = [], own: Bool = false, allProjects: String) {
+            self.project = project
+            self.mode = mode
+            self.patterns = patterns
+            self.own = own
+            self.allProjects = allProjects
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case project
+            case mode
+            case patterns
+            case own
+            case allProjects = "all_projects"
+        }
+    }
+
+    public struct ReleaseTagsSetParams: Codable, Sendable, Hashable {
+        public var project: String
+        public var mode: String
+        public var patterns: [String]
+
+        public init(project: String, mode: String, patterns: [String] = []) {
+            self.project = project
+            self.mode = mode
+            self.patterns = patterns
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case project
+            case mode
+            case patterns
+        }
+    }
+
     public struct Remote: Codable, Sendable, Hashable {
         public var remoteControl: Bool
         public var how: String
@@ -5235,6 +5337,8 @@ public enum AppAPI {
         public static let projectPin = Call<ProjectPinParams, ProjectPinned>("project.pin", write: true)
         public static let projectsWatch = Subscription<ProjectsWatchParams, Projects, Projects>("projects.watch", events: ["projects.changed"])
         public static let questionsOpen = Call<ProjectParams, QuestionsOpen>("questions.open", write: true)
+        public static let releaseTags = Call<ProjectParams, ReleaseTags>("release.tags", write: false)
+        public static let releaseTagsSet = Call<ReleaseTagsSetParams, ReleaseTags>("release.tags.set", write: true)
         public static let searchQuery = Call<SearchQueryParams, SearchResult>("search.query", write: false)
         public static let searchShow = Call<SearchShowParams, SearchShown>("search.show", write: false)
         public static let searchTimeline = Call<SearchTimelineParams, SearchTimeline>("search.timeline", write: false)
@@ -5844,6 +5948,7 @@ extension AppAPI.History {
         self.typicalSeconds = try c.decodeIfPresent(Int.self, forKey: .typicalSeconds) ?? 0
         self.typical = try c.decodeIfPresent(String.self, forKey: .typical) ?? ""
         self.truncated = try c.decodeIfPresent(Bool.self, forKey: .truncated) ?? false
+        self.releases = try c.decodeIfPresent([AppAPI.HistoryRepo].self, forKey: .releases) ?? []
     }
 }
 
@@ -5852,6 +5957,34 @@ extension AppAPI.HistoryDay {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.day = try c.decode(String.self, forKey: .day)
         self.done = try c.decode(Int.self, forKey: .done)
+    }
+}
+
+extension AppAPI.HistoryPart {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.part = try c.decodeIfPresent(String.self, forKey: .part) ?? ""
+        self.count = try c.decode(Int.self, forKey: .count)
+    }
+}
+
+extension AppAPI.HistoryRelease {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.tag = try c.decode(String.self, forKey: .tag)
+        self.part = try c.decodeIfPresent(String.self, forKey: .part) ?? ""
+        self.version = try c.decode(String.self, forKey: .version)
+        self.at = try c.decode(String.self, forKey: .at)
+    }
+}
+
+extension AppAPI.HistoryRepo {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.repo = try c.decode(String.self, forKey: .repo)
+        self.count = try c.decode(Int.self, forKey: .count)
+        self.parts = try c.decodeIfPresent([AppAPI.HistoryPart].self, forKey: .parts) ?? []
+        self.releases = try c.decodeIfPresent([AppAPI.HistoryRelease].self, forKey: .releases) ?? []
     }
 }
 
@@ -6965,6 +7098,26 @@ extension AppAPI.Recommendation {
         self.other = try c.decodeIfPresent(String.self, forKey: .other) ?? ""
         self.why = try c.decode(String.self, forKey: .why)
         self.at = try c.decode(Date.self, forKey: .at)
+    }
+}
+
+extension AppAPI.ReleaseTags {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.mode = try c.decode(String.self, forKey: .mode)
+        self.patterns = try c.decodeIfPresent([String].self, forKey: .patterns) ?? []
+        self.own = try c.decodeIfPresent(Bool.self, forKey: .own) ?? false
+        self.allProjects = try c.decode(String.self, forKey: .allProjects)
+    }
+}
+
+extension AppAPI.ReleaseTagsSetParams {
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.project = try c.decode(String.self, forKey: .project)
+        self.mode = try c.decode(String.self, forKey: .mode)
+        self.patterns = try c.decodeIfPresent([String].self, forKey: .patterns) ?? []
     }
 }
 

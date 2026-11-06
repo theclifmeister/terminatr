@@ -193,6 +193,7 @@ func (sr safetyRows) sharedRows() []setting {
 		sr.modelsRow(),
 		sr.coordModelRow(),
 		sr.branchRow(),
+		sr.releaseTagsRow(),
 		sr.linkLimitsRow(),
 	}
 }
@@ -319,6 +320,30 @@ func (sr safetyRows) branchRow() setting {
 						return nil
 					}
 					return sr.set(m, "branch_name", t, "new threads "+sr.ofWho+" get branches like "+sr.branchPreview(t))
+				}})
+			return nil
+		}}
+}
+
+func (sr safetyRows) releaseTagsRow() setting {
+	word := func(s config.Safety) string { return config.ReleaseTagsWords(s.ReleaseTags) }
+	return setting{label: "Release tags", help: "Which tags count as releases, in any repo of the project. By default, version tags: v1.2.3, 1.4.0, release-1.2, a part's api/v1.2 or pkg@1.3.0, and no pre-releases, nightlies or moving tags. Patterns replace that rule (prod-*, where * is any text); none turns releases off. Only tags since the project's first record count. Enter edits it; an empty one is the rule.",
+		keys: []string{"release_tags"}, word: word,
+		value: func(m *dash) string { return word(sr.safety(m)) },
+		change: func(m *dash) tea.Cmd {
+			text := strings.Join(sr.safety(m).ReleaseTags, " ")
+			m.push(&inputView{title: "Release tags " + sr.forWho, keep: true, lineEdit: newLine(text),
+				label: "Patterns, * for any text, or none (empty is version tags):", placeholder: config.ReleaseTagsWords(nil),
+				submit: func(t string) tea.Cmd {
+					tags := config.ParseReleaseTags(t)
+					if err := config.CheckReleaseTags(tags); err != nil {
+						m.msg = "release tags " + err.Error() + ": they stay as they are"
+						return nil
+					}
+					if tags == nil {
+						tags = []string{}
+					}
+					return sr.set(m, "release_tags", tags, "releases "+sr.ofWho+": "+config.ReleaseTagsWords(tags))
 				}})
 			return nil
 		}}

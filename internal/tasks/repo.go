@@ -14,6 +14,23 @@ const NoRepo = "none"
 // its folder's name.
 func RepoName(dir string) string { return filepath.Base(filepath.Clean(dir)) }
 
+// RepoLabels names each of repos for people: its folder, with its parent
+// when two have the same folder name.
+func RepoLabels(repos []string) []string {
+	named := map[string]int{}
+	for _, r := range repos {
+		named[RepoName(r)]++
+	}
+	out := make([]string, len(repos))
+	for i, r := range repos {
+		out[i] = RepoName(r)
+		if named[out[i]] > 1 {
+			out[i] = filepath.ToSlash(filepath.Join(filepath.Base(filepath.Dir(r)), out[i]))
+		}
+	}
+	return out
+}
+
 // FindRepo is the repo among repos that name names: one's path, or the
 // name of one folder (RepoName); "" for NoRepo. Anything else is
 // refused, unknown-repo, as is a name two repos share, ambiguous-repo.

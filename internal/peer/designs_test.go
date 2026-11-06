@@ -123,3 +123,12 @@ func TestCleanHistory(t *testing.T) {
 		t.Error("days is null")
 	}
 }
+
+// TestCleanHistoryDropsReleases: tag and repo names never cross, whatever
+// a paired server's answer holds.
+func TestCleanHistoryDropsReleases(t *testing.T) {
+	in := proto.History{Days: []proto.HistoryDay{}, Releases: []proto.HistoryRepo{{Repo: "secret", Count: 1, Releases: []proto.HistoryRelease{{Tag: "v1.0.0", Version: "1.0.0"}}}}}
+	if got := cleanHistory(in); got.Releases != nil {
+		t.Errorf("releases crossed: %+v", got.Releases)
+	}
+}

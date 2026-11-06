@@ -195,6 +195,7 @@ var settingRows = []settingRow{
 	def("link_file_mb", "link file size", everywhere, func(r *rawSafety) *int { return r.LinkFileMB }, func(s *Safety) *int { return &s.LinkFileMB }, between(1, MaxLinkFileMB)),
 	def("link_file_kbps", "link file pace", everywhere, func(r *rawSafety) *int { return r.LinkFileKbps }, func(s *Safety) *int { return &s.LinkFileKbps }, between(MinLinkFileKbps, MaxLinkFileKbps)),
 	def("branch_name", "branch names", everywhere, func(r *rawSafety) *string { return r.BranchName }, func(s *Safety) *string { return &s.BranchName }, CheckBranchName),
+	def("release_tags", "release tags", everywhere, func(r *rawSafety) *[]string { return (*[]string)(r.ReleaseTags) }, func(s *Safety) *[]string { return &s.ReleaseTags }, CheckReleaseTags),
 	def("guard", "guard", everywhere, func(r *rawSafety) *bool { return r.Guard }, func(s *Safety) *bool { return &s.Guard }, nil),
 	def("guard_off", "guard off", everywhere, func(r *rawSafety) *[]string { return r.GuardOff }, func(s *Safety) *[]string { return &s.GuardOff }, checkGuardOff),
 	def("guard_mode", "guard mode", everywhere, func(r *rawSafety) *string { return r.GuardMode }, func(s *Safety) *string { return &s.GuardMode }, oneOf(GuardModes...)),

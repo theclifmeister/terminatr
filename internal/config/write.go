@@ -120,6 +120,9 @@ func setSafety(table, key string, value any) error {
 	if err := CheckSetting(key, value); err != nil {
 		return err
 	}
+	if l, ok := value.([]string); ok && key == "release_tags" && ReleaseTagsAreOff(l) {
+		value = ReleaseTagsOff // as the file says it
+	}
 	if key == "coordinator_agent" && table == DefaultsTable {
 		// [defaults] coordinator_agent replaces the older top-level
 		// default_agent: it goes in the same write.
