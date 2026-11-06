@@ -103,6 +103,14 @@ private struct LibraryFixture: Decodable {
     let filter: [Filter]
     let heads: [Head]
     let fold: [Fold]
+    let stacks: [Stack]
+
+    struct Stack: Decodable {
+        let why: String
+        var names: [String]?
+        var library: String?
+        let rows: [[String]]
+    }
 
     struct Head: Decodable {
         let library: String
@@ -198,10 +206,10 @@ private struct LibraryFixture: Decodable {
     let fs = (0..<37).map { lib("t-0001", "\($0).png", 37 - $0) }
     let g = try #require(LibraryPage.groups(fs).first)
     let shut = g.listed(open: false, query: "")
-    #expect(shut.files.map(\.name) == (0..<6).map { "\($0).png" } && shut.more == 31 && !shut.fewer)
+    #expect(shut.rows.map(\.title) == (0..<6).map { "\($0).png" } && shut.more == 31 && !shut.fewer)
     let open = g.listed(open: true, query: "")
-    #expect(open.files.count == 37 && open.more == 0 && open.fewer)
-    #expect(g.listed(open: false, query: "1").files.count == 37)
+    #expect(open.rows.count == 37 && open.more == 0 && open.fewer)
+    #expect(g.listed(open: false, query: "1").rows.count == 37)
     #expect(g.kinds == ["37 images"])
 }
 
@@ -347,4 +355,40 @@ private actor Thumbs {
     #expect(peer == nil)
     let names = await t.names
     #expect(names == ["corrupt.png", "corrupt.png"])
+}
+
+/// The stack rule (T1057), on the table the TUI's test reads too.
+@Test func libraryStacksAsTheTUI() throws {
+    let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .appendingPathComponent("../../../internal/tui/testdata/library-filter.json").standardized
+    let fx = try JSONDecoder().decode(LibraryFixture.self, from: Data(contentsOf: url))
+    #expect(fx.stacks.count >= 25)
+    for c in fx.stacks {
+        var files = (c.library.flatMap { fx.libraries[$0] } ?? []).map(\.file)
+        files += (c.names ?? []).map { lib("t-0001", $0, 1) }
+        let rows = LibraryPage.groups(files).flatMap(\.rows).map { r in
+            r.isStack ? [r.title, r.files[0].name, r.files[1].name, r.words[0], r.words[1]] : [r.files[0].name]
+        }
+        #expect(rows == c.rows, "\(c.why)")
+    }
+}
+
+@Test func libraryStackFoldsByRowsAndCountsFiles() {
+    let files = (0..<7).flatMap { i in ["dark", "light"].map { lib("t-0001", "s\(i)-\($0).png", 1) } }
+    let g = LibraryPage.groups(files)[0]
+    let l = g.listed(open: false, query: "")
+    #expect(l.rows.count == 6 && l.more == 1)
+    #expect(g.kinds == ["14 images"])
+    // A filter that leaves one of the two lists it as itself.
+    let one = LibraryPage.groups(LibraryPage.shown(files, query: "s0-light", kind: nil))[0]
+    #expect(one.rows.map(\.isStack) == [false])
+}
+
+@Test func libraryBeforeIsOnTheLeft() throws {
+    let r = try #require(LibraryPage.rows([lib("t-0001", "x-after.png", 2), lib("t-0001", "x-before.png", 1)]).first)
+    #expect(r.opensSideBySide)
+    #expect(r.sideBySide.map(\.word) == ["before", "after"])
+    #expect(r.sideBySide.map(\.file.name) == ["x-before.png", "x-after.png"])
+    let d = try #require(LibraryPage.rows([lib("t-0001", "x-dark.png", 2), lib("t-0001", "x-light.png", 1)]).first)
+    #expect(!d.opensSideBySide)
 }
