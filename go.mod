@@ -1,10 +1,10 @@
 module github.com/theclifmeister/terminatr
 
-go 1.26.0
+go 1.26.7
 
 require (
 	charm.land/bubbletea/v2 v2.1.1
-	charm.land/lipgloss/v2 v2.0.6
+	charm.land/lipgloss/v2 v2.1.0
 	github.com/BurntSushi/toml v1.6.0
 	github.com/charmbracelet/colorprofile v0.4.3
 	github.com/charmbracelet/ultraviolet v0.0.0-20261008173134-6b8d4baf91b4
@@ -16,9 +16,9 @@ require (
 	github.com/rivo/uniseg v0.4.7
 	go.mitchellh.com/libghostty v0.0.0-20261021212106-df1957cbff56
 	go.yaml.in/yaml/v3 v3.0.6
-	golang.org/x/crypto v0.58.0
-	golang.org/x/sys v0.49.0
-	golang.org/x/term v0.47.0
+	golang.org/x/crypto v0.59.0
+	golang.org/x/sys v0.50.0
+	golang.org/x/term v0.48.0
 )
 
 require (
@@ -35,6 +35,6 @@ require (
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/xo/terminfo v1.0.0 // indirect
 	golang.org/x/net v0.62.0
-	golang.org/x/sync v0.24.0 // indirect
-	golang.org/x/text v0.43.0
+	golang.org/x/sync v0.25.0 // indirect
+	golang.org/x/text v0.44.0
 )
